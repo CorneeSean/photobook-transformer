@@ -1,0 +1,8 @@
+.venv/
+__pycache__/
+*.pyc
+.env
+
+# Album definitions are code; everything else under an album dir is generated.
+data/albums/*/*
+!data/albums/*/album.yml

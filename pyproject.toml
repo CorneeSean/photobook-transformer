@@ -1,0 +1,59 @@
+[project]
+name = "album"
+version = "0.1.0"
+description = "Batch pipeline that turns a raw photo dump into a curated, enhanced, captioned, print-ready photo book."
+readme = "README.md"
+requires-python = ">=3.14"
+dependencies = []
+
+[project.scripts]
+album = "album.cli:main"
+
+[build-system]
+requires = ["uv_build>=0.11.26,<0.12.0"]
+build-backend = "uv_build"
+
+[dependency-groups]
+dev = [
+    "basedpyright>=1.39.9",
+    "poethepoet>=0.48.0",
+    "pre-commit>=4.6.0",
+    "pytest>=9.1.1",
+    "ruff>=0.15.21",
+]
+
+[tool.ruff]
+target-version = "py314"
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]
+
+[tool.basedpyright]
+include = ["src", "tests"]
+pythonVersion = "3.14"
+typeCheckingMode = "standard"
+reportMissingTypeStubs = false
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.poe.tasks]
+lint = "ruff check ."
+format = "ruff format ."
+typecheck = "basedpyright"
+test = "pytest"
+up = "docker compose up"
+down = "docker compose down"
+migrate = "alembic upgrade head"
+run = "album run"
+
+[tool.poe.tasks.check]
+# pytest exits 5 when it collects zero tests; that's an expected state before
+# the first test file lands, so tolerate it here without masking real failures.
+sequence = [
+    { cmd = "ruff check ." },
+    { cmd = "ruff format --check ." },
+    { cmd = "basedpyright" },
+    { shell = "pytest || [ \"$?\" = \"5\" ]" },
+]
