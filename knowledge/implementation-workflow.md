@@ -30,6 +30,13 @@ review chain, squash, merge) around it.
   must be green *immediately before each review*; any change made in response to a
   review round re-runs the checks to green (and re-runs the sub-agent review
   before returning to the user).
+- **`main` is commit-protected, full stop — including bookkeeping.** The
+  `no-commit-to-branch` hook blocks *any* direct commit to `main`, not just code
+  changes. This means the [progress tracker](/progress.md) and [`log.md`](/log.md)
+  updates for a step **cannot be done after that step's merge** without opening a
+  second branch just to land a docs commit. Do the tracker/log update **on the
+  step branch, before the fast-forward merge** (see step 9 below) — the fast
+  forward carries it to `main` in the same motion as the code.
 
 ## The loop for one step
 
@@ -60,12 +67,20 @@ review chain, squash, merge) around it.
 8. **Finalize.** With user approval in hand and `uv run poe check` green (and
    manual verification done, if any): **squash** the branch's subcommits into one
    commit using the [commit format](/working-agreement.md)
-   (`<stage>: <what changed>`, verification in the body).
-9. **Merge.** Merge the step branch into `main` via **fast-forward** (linear
-   history, no merge commit — which also keeps the `no-commit-to-branch`
-   pre-commit hook satisfied), then delete the branch. Never force-push `main`.
-10. **Record.** Update the [progress tracker](/progress.md): status `done`, the
-    merge commit hash, and the date. Add a dated entry to [`log.md`](/log.md).
+   (`<stage>: <what changed>`, verification in the body). Note its hash
+   (`git rev-parse --short HEAD`) — for a fast-forward merge this *is* the hash
+   the commit will have on `main`.
+9. **Record — still on the step branch, before merging.** Update the
+   [progress tracker](/progress.md) (status `done`, the hash just noted, the
+   date) and add a dated entry to [`log.md`](/log.md), as one small commit on
+   top of the squashed step commit. Doing this now, rather than after the merge,
+   is required: `main` is commit-protected (see hard rules above), so there is
+   no direct way to land a tracker update on `main` once the step branch is gone
+   short of opening a whole second branch for it.
+10. **Merge.** Merge the step branch into `main` via **fast-forward** (linear
+    history, no merge commit — which also keeps the `no-commit-to-branch`
+    pre-commit hook satisfied), then delete the branch. Never force-push `main`.
+    `main` now has both the step commit and the tracker/log commit.
 11. **Next.** Return to step 1 for the following build step.
 
 If a step cannot be completed cleanly, **stop and surface the problem** (mark it
@@ -98,5 +113,7 @@ A step is `done` only when **all** are true:
 - [ ] The user has explicitly approved.
 - [ ] Subcommits squashed into one `<stage>: <what changed>` commit with the
       verification in the body.
+- [ ] [Progress tracker](/progress.md) and [`log.md`](/log.md) updated **on the
+      step branch**, in a commit on top of the squashed step commit (not after
+      merging — `main` can't take a direct commit).
 - [ ] Branch merged into `main`, branch deleted.
-- [ ] [Progress tracker](/progress.md) and [`log.md`](/log.md) updated.

@@ -50,8 +50,10 @@ re-runs what precedes it. In short:
 6. **Then ask the user to review;** on requested changes, fix, **re-run `poe
    check`**, **re-run the sub-agent review**, then return to the user — until
    approved.
-7. **Squash** subcommits into one `<stage>: <what changed>` commit, **fast-forward
-   merge** to `main`, delete the branch, and update the tracker + `log.md`.
+7. **Squash** subcommits into one `<stage>: <what changed>` commit, **then update
+   the tracker + `log.md`** in a commit on top of that (still on the step branch
+   — `main` is commit-protected, so this can't happen after the merge), **then
+   fast-forward merge** to `main` and delete the branch.
 
 Commit to `main` **only** when checks are green, the sub-agent is satisfied, and
 the user has approved — in that order.
