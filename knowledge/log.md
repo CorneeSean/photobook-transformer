@@ -28,3 +28,14 @@
 * **Decision**: Added local `pre-commit` hooks at scaffold — `no-commit-to-branch`
   to protect `main`, plus ruff and basedpyright — with the full pytest suite left
   to `uv run poe check` and CI.
+* **Build step 0 done** (commit `11d290f`): scaffolded the `uv` project (Python
+  3.14, `album` console entry point), ruff/basedpyright/pytest + poethepoet
+  tasks in `pyproject.toml`, the minimal package skeleton (`db/`, `immich/`,
+  `agents/`, `stages/` sub-packages and a `cli.py` stub — `config.py`,
+  `definition.py`, `flow.py` deliberately deferred to steps 3 and 14),
+  `.gitignore`, `.pre-commit-config.yaml` (installed), and `README.md`.
+  Verified `uv run poe check` green and a direct commit to `main` is rejected
+  by the `no-commit-to-branch` hook. Sub-agent review caught and fixed a
+  `.gitignore` pattern that failed to exclude files nested under
+  `data/albums/<slug>/` and a leftover `uv init` template stub in
+  `src/album/__init__.py`.

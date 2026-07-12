@@ -18,7 +18,7 @@ order, one at a time.
 
 | # | Step | Branch | Status | Commit | Notes |
 |---|------|--------|--------|--------|-------|
-| 0 | Scaffold | — | todo | — | |
+| 0 | Scaffold | step-00-scaffold (merged, deleted) | done | 11d290f | `config.py`/`definition.py`/`flow.py` deliberately not created — deferred to steps 3 and 14 |
 | 1 | Containers | — | todo | — | |
 | 2 | Data model + migrations | — | todo | — | |
 | 3 | Album definition loading | — | todo | — | |
