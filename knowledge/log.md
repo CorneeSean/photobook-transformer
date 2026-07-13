@@ -2,6 +2,20 @@
 
 ## 2026-07-13
 
+* **Build step 2 done** (commit `68ed96f`): added `src/album/db/models.py`
+  (`Album`/`Segment`/`Photo` SQLAlchemy 2.0 ORM, mirroring
+  [data-model.md](/data-model.md) exactly) and the first alembic migration,
+  which runs `CREATE EXTENSION IF NOT EXISTS vector` before creating the
+  `pgvector` `clip_embedding` column. Test-first: an in-memory SQLite fixture
+  (`tests/conftest.py`) with an album that has segments and a segment-less
+  album, both created and related correctly (`tests/test_models.py`).
+  Verified the migration's upgrade/downgrade/upgrade round-trip against a
+  real Postgres (`pgvector/pgvector:pg16`). Sub-agent review (8 angles, 2
+  rounds) caught and fixed one real issue: `uv run poe migrate`/
+  `makemigration` never loaded `.env` when run outside Docker, so a
+  customized `DATABASE_URL` silently fell back to `alembic.ini`'s
+  placeholder — fixed via poethepoet's `envfile = ".env"`.
+
 * **Build step 1 done** (commit `240fbe0`): added the multi-stage `Dockerfile`
   (uv sync builder → runtime with `darktable-cli`) and `docker-compose.yml`
   (our `app` + our own `pgvector/pgvector` Postgres, kept separate from
