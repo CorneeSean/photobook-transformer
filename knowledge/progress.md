@@ -26,7 +26,7 @@ order, one at a time.
 | 5 | `sync` stage | step-04-05-immich-client-sync (merged, deleted) | done | 8172dfa | delivered with step 4; live "run for real" skipped (no reachable Immich stack) per user |
 | 6 | `quality` stage | step-06-quality (merged, deleted) | done | a6c4b9e | real OpenCV blur; aesthetic scorer + CLIP embedder injected (protocols) — real LAION/open_clip impls deferred (heavy) |
 | 7 | `cluster` stage | step-07-cluster (merged, deleted) | done | 2a39df5 | temporal + spatial(DBSCAN) scenes; no-segments & no-GPS fallbacks tested (genericity guard) |
-| 8 | `select` stage (MMR) + `db/similarity.py` | — | todo | — | |
+| 8 | `select` stage (MMR) + `db/similarity.py` | step-08-select (merged, deleted) | done | 4fec4a1 | real pgvector query verified against a Postgres testcontainer |
 | 9 | Agent (`analysis.py`) | — | todo | — | |
 | 10 | `enhance` stage | — | todo | — | |
 | 11 | `render` stage | — | todo | — | manual verification |
@@ -49,3 +49,12 @@ order, one at a time.
 - **Deferred live checks:** steps 4–5 fixtures/sync were built without a reachable
   Immich stack; re-verify against a live instance + the honeymoon album on the
   first real sync (see [Immich API notes](/immich-api.md)).
+- **Toolchain landmine (step 8):** in this dev sandbox, `testcontainers`' Ryuk
+  reaper container fails to start (`error while creating mount source path
+  '/host_mnt/.../docker.sock'` — Docker Desktop socket-mount restriction under
+  this sandbox). Run Postgres-testcontainer tests with
+  `TESTCONTAINERS_RYUK_DISABLED=true` (e.g.
+  `TESTCONTAINERS_RYUK_DISABLED=true uv run poe check`). Also note
+  `testcontainers`' `PostgresContainer` defaults to a `psycopg2` connection URL;
+  this project uses psycopg3 (`psycopg[binary]`), so pass `driver="psycopg"`
+  explicitly (see `tests/test_similarity.py`).

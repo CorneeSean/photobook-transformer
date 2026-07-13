@@ -2,6 +2,45 @@
 
 ## 2026-07-13
 
+* **Build step 8 done** (commit `4fec4a1`, `select` stage): added
+  `src/album/stages/select.py` and `src/album/db/similarity.py`. `select`
+  implements diversity-aware best-of-scene via MMR: within each scene
+  (`Photo.scene_id`, from `cluster`), candidates are ranked by
+  `aesthetic_score` and greedily picked, skipping any candidate that's an
+  Immich-flagged duplicate (`duplicate_group_id`) of an already-picked photo,
+  or whose CLIP cosine similarity to an already-picked photo exceeds a 0.9
+  threshold. Unclustered photos (`scene_id IS NULL`) are never selected.
+  Idempotent (resets `selected` for the album up front). The `pgvector`
+  cosine-distance query sits behind a `SimilaritySearch` protocol
+  (`db/similarity.py`), so MMR selection logic is unit-tested on in-memory
+  SQLite with similarity stubbed; the real `PgVectorSimilarity` query is
+  covered separately against a **Postgres testcontainer**
+  (`pgvector/pgvector:pg17`) — the first use of `testcontainers-python` in
+  this repo, added as a dev dependency. Test-first (16 new tests): highest
+  score wins, near-duplicates skipped, Immich duplicates skipped, an
+  all-similar scene yields exactly one selection, a diverse scene yields
+  several, multi-scene independence, idempotency, album scoping.
+    * **Sub-agent review (8 parallel finder angles) caught a real, confirmed
+      bug:** `Photo.clip_embedding` is nullable by design (the `Embedder` is
+      optional in `quality`, and per-photo failures there leave it unset), but
+      `select()` called into the real similarity query unconditionally —
+      crashing the whole album's selection with an unhandled `ValueError`
+      (candidate missing an embedding) or `TypeError` (an already-picked photo
+      missing one, so pgvector's `cosine_distance` returned SQL `NULL` and
+      Python's `min()` choked on it). Fixed by changing `SimilaritySearch.
+      max_similarity`'s signature to take the candidate's embedding directly
+      (already in memory on the loaded `Photo`, cutting a redundant DB round
+      trip too) instead of re-fetching it by id, and by filtering `NULL`
+      embeddings out of the real query's "already-picked" side — both paths
+      now return `-1.0` ("nothing to compare against") rather than raising.
+      Re-reviewed clean after the fix (4 new regression tests added, 2 per
+      test file).
+    * **Toolchain landmine:** in this dev sandbox, `testcontainers`' Ryuk
+      reaper container can't start (Docker socket mount denied) — tests need
+      `TESTCONTAINERS_RYUK_DISABLED=true`; `PostgresContainer` also defaults
+      to a `psycopg2` URL, so `driver="psycopg"` must be passed explicitly
+      (this project is on psycopg3). Recorded in progress.md.
+
 * **Build step 7 done** (commit `2a39df5`, `cluster` stage): added
   `src/album/stages/cluster.py` — assigns each photo a `segment_id` (matching its
   UTC timestamp against the album's ordered, non-overlapping segments) and a
