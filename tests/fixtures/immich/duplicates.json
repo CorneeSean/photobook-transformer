@@ -1,0 +1,20 @@
+[
+  {
+    "duplicateId": "dup-group-7",
+    "suggestedKeepAssetIds": ["a2222222-2222-4222-8222-222222222222"],
+    "assets": [
+      {
+        "id": "a2222222-2222-4222-8222-222222222222",
+        "originalFileName": "IMG_0002.jpg",
+        "localDateTime": "2026-05-03T09:00:00.000Z",
+        "duplicateId": "dup-group-7"
+      },
+      {
+        "id": "a3333333-3333-4333-8333-333333333333",
+        "originalFileName": "IMG_0002_copy.jpg",
+        "localDateTime": "2026-05-03T09:00:01.000Z",
+        "duplicateId": "dup-group-7"
+      }
+    ]
+  }
+]
