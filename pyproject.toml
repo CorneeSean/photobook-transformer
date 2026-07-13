@@ -4,7 +4,12 @@ version = "0.1.0"
 description = "Batch pipeline that turns a raw photo dump into a curated, enhanced, captioned, print-ready photo book."
 readme = "README.md"
 requires-python = ">=3.14"
-dependencies = []
+dependencies = [
+    "alembic>=1.18.5",
+    "pgvector>=0.5.0",
+    "psycopg[binary]>=3.3.4",
+    "sqlalchemy>=2.0.51",
+]
 
 [project.scripts]
 album = "album.cli:main"
@@ -38,6 +43,13 @@ reportMissingTypeStubs = false
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 
+[tool.poe]
+# So `uv run poe migrate`/`makemigration` pick up DATABASE_URL (and any other
+# .env vars) when run standalone, outside docker compose (which sources .env
+# itself via env_file:). Missing .env (e.g. a fresh checkout) is a no-op, not
+# an error.
+envfile = ".env"
+
 [tool.poe.tasks]
 lint = "ruff check ."
 format = "ruff format ."
@@ -46,6 +58,7 @@ test = "pytest"
 up = "docker compose up --build"
 down = "docker compose down"
 migrate = "alembic upgrade head"
+makemigration = "alembic revision --autogenerate"
 run = "album run"
 
 [tool.poe.tasks.check]

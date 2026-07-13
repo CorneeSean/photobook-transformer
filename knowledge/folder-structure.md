@@ -77,6 +77,7 @@ photo-album-pipeline/
     │   ├── albums/               # album.yml samples: with segments, without, wedding
     │   ├── images/               # small known-blurry / known-overexposed samples
     │   └── immich/               # recorded API responses
+    ├── test_models.py            # Album/Segment/Photo creation + relationships, in-memory SQLite
     ├── test_definition.py        # album.yml parsing/validation
     ├── test_cluster.py           # incl. the no-segments and no-GPS fallback paths
     ├── test_select.py            # MMR logic, with similarity stubbed
