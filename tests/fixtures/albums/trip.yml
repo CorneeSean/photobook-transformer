@@ -1,0 +1,17 @@
+slug: honeymoon-2026
+title: Our Honeymoon
+immich_album_id: 8f2c3a
+timezone: Europe/Podgorica
+meta:
+  occasion: honeymoon
+  names: [Alex, Sam]
+
+segments:
+  - label: "Day 1"
+    place: "Dubrovnik"
+    start_at: 2026-05-02T00:00:00+02:00
+    end_at:   2026-05-02T23:59:59+02:00
+  - label: "Day 2"
+    place: "Lisbon"
+    start_at: 2026-05-03T00:00:00+02:00
+    end_at:   2026-05-03T23:59:59+02:00

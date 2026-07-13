@@ -1,0 +1,8 @@
+slug: malformed-test
+title: Malformed Test
+timezone: Europe/London
+
+segments:
+  - label: "Bad Segment"
+    start_at: 2026-08-15T13:00:00+01:00
+    end_at:   2026-08-15T09:00:00+01:00

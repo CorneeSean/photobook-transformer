@@ -1,0 +1,10 @@
+# Europe/London clocks spring forward 01:00 GMT -> 02:00 BST on 2026-03-29, so
+# 01:30 local time on that date never occurs.
+slug: dst-gap
+title: DST Gap
+timezone: Europe/London
+
+segments:
+  - label: "Day 1"
+    start_at: 2026-03-29T01:30:00
+    end_at:   2026-03-29T03:30:00

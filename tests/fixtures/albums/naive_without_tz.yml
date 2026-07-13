@@ -1,0 +1,7 @@
+slug: naive-no-tz
+title: Naive No Timezone
+
+segments:
+  - label: "Day 1"
+    start_at: 2026-05-02T00:00:00
+    end_at:   2026-05-02T23:59:59

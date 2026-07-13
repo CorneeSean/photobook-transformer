@@ -1,8 +1,8 @@
-import os
 from logging.config import fileConfig
 
 from sqlalchemy import engine_from_config, pool
 
+from album.config import get_settings
 from album.db.models import Base
 from alembic import context
 
@@ -17,11 +17,9 @@ if config.config_file_name is not None:
 
 target_metadata = Base.metadata
 
-# DATABASE_URL overrides alembic.ini's sqlalchemy.url when set (docker-compose
-# and CI always set it; config.py becomes the single source of this once step 3
-# lands, but alembic needs a URL before that exists).
-if database_url := os.environ.get("DATABASE_URL"):
-    config.set_main_option("sqlalchemy.url", database_url)
+# DATABASE_URL (via config.py, the only place that reads env vars) overrides
+# alembic.ini's sqlalchemy.url.
+config.set_main_option("sqlalchemy.url", get_settings().database_url)
 
 # other values from the config, defined by the needs of env.py,
 # can be acquired:

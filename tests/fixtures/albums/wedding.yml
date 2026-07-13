@@ -1,0 +1,13 @@
+slug: smith-wedding
+title: Anna & Tom
+timezone: Europe/London
+
+segments:
+  - label: "Getting ready"
+    place: "The Old Rectory"
+    start_at: 2026-08-15T09:00:00+01:00
+    end_at:   2026-08-15T13:00:00+01:00
+  - label: "Ceremony"
+    place: "St. Mary's"
+    start_at: 2026-08-15T13:00:00+01:00
+    end_at:   2026-08-15T14:30:00+01:00
