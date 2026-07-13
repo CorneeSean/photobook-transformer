@@ -1,5 +1,23 @@
 # Directory Update Log
 
+## 2026-07-13
+
+* **Build step 1 done** (commit `240fbe0`): added the multi-stage `Dockerfile`
+  (uv sync builder → runtime with `darktable-cli`) and `docker-compose.yml`
+  (our `app` + our own `pgvector/pgvector` Postgres, kept separate from
+  Immich's + a Prefect 3 server). **Decision**: at the user's request, Immich's
+  stack is vendored into its own `docker-compose.immich.yml` (kept close to
+  Immich's official release compose) rather than inlined, and pulled into
+  `docker-compose.yml` via Compose's `include:` element — a new Immich release
+  is close to a drop-in file swap. Added `.env.example` and `.dockerignore`.
+  Verified `docker compose up --build` brings all services healthy, Immich's
+  and Prefect's web UIs both respond `200`, `darktable-cli --version` runs
+  inside the app image, and `CREATE EXTENSION vector;` succeeds on our own
+  Postgres. Sub-agent review (3 parallel angles) caught and fixed: `db`'s host
+  port is now overridable via `APP_DB_HOST_PORT` (avoids colliding with an
+  existing local Postgres), `poe up` now passes `--build` so a changed
+  Dockerfile/source isn't served stale, and two doc/comment accuracy issues.
+
 ## 2026-07-12
 
 * **Creation**: Transformed `PROJECT_BRIEF.md` into this OKF v0.1 knowledge
