@@ -6,3 +6,6 @@ __pycache__/
 # Album definitions are code; everything else under an album dir is generated.
 data/albums/*/*
 !data/albums/*/album.yml
+
+# Immich's bind-mounted storage (UPLOAD_LOCATION / DB_DATA_LOCATION).
+data/immich/

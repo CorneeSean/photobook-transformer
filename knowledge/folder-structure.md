@@ -13,9 +13,10 @@ photo-album-pipeline/
 ├── .gitignore
 ├── .dockerignore
 ├── .pre-commit-config.yaml   # no-commit-to-branch (protect main) + ruff + basedpyright
-├── .env.example              # ANTHROPIC_API_KEY, IMMICH_API_KEY, LULU_*, DATABASE_URL
+├── .env.example              # our Postgres + Immich compose vars, ANTHROPIC_API_KEY, IMMICH_API_KEY, LULU_*, DATABASE_URL
 ├── Dockerfile                # multi-stage: uv sync → runtime w/ darktable-cli
-├── docker-compose.yml        # app + our Postgres + Immich stack + Prefect server
+├── docker-compose.yml        # app + our Postgres + Prefect server; `include:`s the next file
+├── docker-compose.immich.yml # Immich's stack, vendored from their official release compose
 ├── pyproject.toml            # uv deps; ruff + basedpyright + pytest + poe tasks live here
 ├── uv.lock
 ├── alembic.ini
@@ -107,7 +108,9 @@ photo-album-pipeline/
   persisted output rather than each calling the model, so a selected photo costs
   exactly one vision round-trip.
 - **`config.py` is the only place that reads env vars.**
-- **`docker-compose.yml`** references Immich's official compose services rather
-  than reimplementing them; adds the app service built from the local
-  `Dockerfile`; adds a Prefect server. `darktable-cli` must be in the app image,
+- **`docker-compose.yml`** holds our own services (`app`, `db`, `prefect-server`)
+  and pulls in Immich's stack via the top-level `include:` element rather than
+  reimplementing it inline. `docker-compose.immich.yml` is a near-drop-in copy of
+  Immich's official release compose, kept in its own file so a new Immich release
+  can be dropped in with minimal edits. `darktable-cli` must be in the app image,
   since `stages/render.py` shells out to it.
