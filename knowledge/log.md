@@ -2,6 +2,34 @@
 
 ## 2026-07-13
 
+* **Build step 3 done** (commit `84260ef`): added `src/album/config.py` — the
+  first (and only) module that reads env vars, a pydantic-settings `Settings`
+  with `env_nested_delimiter="__"` configured up front so grouped settings
+  added in later steps (e.g. a future `LULU__CLIENT_KEY`) don't need this file
+  touched again — and `src/album/definition.py`
+  (`load_album_definition(path) -> Album`), which parses
+  [`album.yml`](/album-definition.md) via Pydantic (`AlbumYAML`/
+  `SegmentYAML`) into unpersisted `Album`/`Segment` ORM rows, normalizing
+  every segment time to UTC: an explicit offset wins, otherwise
+  `Album.timezone` is used, otherwise it raises. `alembic/env.py` now reads
+  `DATABASE_URL` via `config.py` instead of `os.environ` directly, closing
+  out the comment left at step 2. Test-first (`tests/test_definition.py`,
+  `tests/test_config.py`, 13 new tests): trip-shaped, wedding-shaped, and
+  segment-less fixtures all load correctly; an offset-based and an
+  equivalent album-timezone-based fixture land on the same UTC instant;
+  missing-timezone, overlapping, and malformed-range fixtures raise
+  `ValidationError`. Sub-agent review (8 finder angles) caught and fixed two
+  live-reproducible bugs: an unknown IANA timezone name leaked a raw
+  `zoneinfo.ZoneInfoNotFoundError` instead of a clean `ValidationError`, and
+  a naive local time landing in a DST spring-forward gap (e.g. `01:30` on
+  the day UK clocks jump `01:00`→`02:00`) was silently converted using an
+  inconsistent UTC offset instead of raising — both now have regression
+  fixtures and raise clearly. The review also flagged that `alembic/env.py`
+  now hard-requires a resolvable `DATABASE_URL` (previously it fell back
+  silently to `alembic.ini`'s static URL); kept as intentional, per the
+  step-2 comment anticipating exactly this, and clarified with a comment
+  in `alembic.ini`.
+
 * **Build step 2 done** (commit `68ed96f`): added `src/album/db/models.py`
   (`Album`/`Segment`/`Photo` SQLAlchemy 2.0 ORM, mirroring
   [data-model.md](/data-model.md) exactly) and the first alembic migration,

@@ -21,7 +21,7 @@ order, one at a time.
 | 0 | Scaffold | step-00-scaffold (merged, deleted) | done | 11d290f | `config.py`/`definition.py`/`flow.py` deliberately not created — deferred to steps 3 and 14 |
 | 1 | Containers | step-01-containers (merged, deleted) | done | 240fbe0 | vendored Immich's stack as its own file, pulled in via Compose `include:` |
 | 2 | Data model + migrations | step-02-data-model (merged, deleted) | done | 68ed96f | |
-| 3 | Album definition loading | — | todo | — | |
+| 3 | Album definition loading | step-03-album-definition (merged, deleted) | done | 84260ef | |
 | 4 | Immich client | — | todo | — | resolves Open Q1 |
 | 5 | `sync` stage | — | todo | — | |
 | 6 | `quality` stage | — | todo | — | |
