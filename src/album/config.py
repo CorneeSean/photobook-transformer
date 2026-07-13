@@ -22,6 +22,11 @@ class Settings(BaseSettings):
     immich_base_url: str = "http://localhost:2283/api"
     immich_api_key: str = ""
 
+    # Claude, via PydanticAI (used by src/album/agents/analysis.py from step 9
+    # onward). Defaulted so importing the agent module never requires a key —
+    # only building the real (non-test) model does.
+    anthropic_api_key: str = ""
+
 
 @cache
 def get_settings() -> Settings:
