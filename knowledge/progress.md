@@ -22,8 +22,8 @@ order, one at a time.
 | 1 | Containers | step-01-containers (merged, deleted) | done | 240fbe0 | vendored Immich's stack as its own file, pulled in via Compose `include:` |
 | 2 | Data model + migrations | step-02-data-model (merged, deleted) | done | 68ed96f | |
 | 3 | Album definition loading | step-03-album-definition (merged, deleted) | done | 84260ef | |
-| 4 | Immich client | — | todo | — | resolves Open Q1 |
-| 5 | `sync` stage | — | todo | — | |
+| 4 | Immich client | step-04-05-immich-client-sync (merged, deleted) | done | 8172dfa | delivered with step 5 (one branch/review) per user; resolves Open Q1 (no CLIP embeddings); live fixture recording skipped — see log |
+| 5 | `sync` stage | step-04-05-immich-client-sync (merged, deleted) | done | 8172dfa | delivered with step 4; live "run for real" skipped (no reachable Immich stack) per user |
 | 6 | `quality` stage | — | todo | — | |
 | 7 | `cluster` stage | — | todo | — | |
 | 8 | `select` stage (MMR) + `db/similarity.py` | — | todo | — | |
@@ -38,4 +38,14 @@ order, one at a time.
 
 ## Notes / blockers
 
-_(none yet)_
+- **Process change (from step 4 onward, per user):** deliver each step with the
+  full workflow *except* the human-review gate — after `uv run poe check` is green
+  and the sub-agent review is clean, squash and fast-forward-merge autonomously
+  rather than waiting for user approval.
+- **Toolchain landmine:** `ruff` 0.15.21's formatter, under `target-version =
+  "py314"`, rewrites `except (A, B):` into invalid paren-less syntax (no fixed
+  release yet). Avoid parenthesized multi-type `except` clauses — use separate
+  clauses or `# fmt: skip`. See [log](/log.md) 2026-07-13.
+- **Deferred live checks:** steps 4–5 fixtures/sync were built without a reachable
+  Immich stack; re-verify against a live instance + the honeymoon album on the
+  first real sync (see [Immich API notes](/immich-api.md)).

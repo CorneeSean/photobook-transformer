@@ -11,10 +11,12 @@ timestamp: 2026-07-12
 Resolve early; record answers back into this bundle (and note them in
 [`log.md`](/log.md)).
 
-1. **Does Immich's API expose CLIP embeddings**, or only duplicate groups and
-   search results? Determines whether we compute our own via `open_clip`. Blocks
-   [`quality`](/stages/quality.md), [`cluster`](/stages/cluster.md),
-   [`select`](/stages/select.md). → *Resolve in [build step 4](/build-order.md).*
+1. ~~**Does Immich's API expose CLIP embeddings**, or only duplicate groups and
+   search results?~~ **RESOLVED (step 4, 2026-07-13): No.** The public REST API
+   (OpenAPI v3.0.2) exposes no embeddings — only duplicate groups
+   (`GET /duplicates`, `AssetResponseDto.duplicateId`) and smart-search *results*.
+   So [`quality`](/stages/quality.md) computes the `clip_embedding` itself via
+   `open_clip`. See [Immich API notes](/immich-api.md).
 
 2. **Confirm the honeymoon photos genuinely lack GPS** — check a few originals
    never shared through messaging apps (which strip EXIF). If some have it, the
@@ -28,7 +30,11 @@ Resolve early; record answers back into this bundle (and note them in
    (`OffsetTimeOriginal`) or only a bare timestamp; if only the latter, the album
    `timezone` is the fallback, which is wrong for an album that itself spans zones
    mid-segment. Confirm in [build step 5](/build-order.md) against real honeymoon
-   assets.
+   assets. *Partial answer (step 4): Immich **does** expose `exifInfo.timeZone`
+   (IANA) + `dateTimeOriginal`, which [`sync`](/stages/sync.md) now uses before
+   falling back to `Album.timezone` — see [Immich API notes](/immich-api.md). The
+   mid-segment zone-span edge and these fields' reliability on real assets still
+   need a live check.*
 
 4. **Lulu's trim size / bleed / spine-width spec** — drives Jinja2 template
    dimensions, so pin it down before building [`assemble`](/stages/assemble.md).

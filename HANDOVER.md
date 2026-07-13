@@ -1,8 +1,12 @@
 # Handover — start here
 
 Photo Album Pipeline: a resumable batch pipeline that turns a raw photo dump into
-a printed, curated photo book. **Right now the repo is docs only — no code yet.**
-`main` holds the planning docs; the next job is to write the first code.
+a printed, curated photo book. **Steps 0–5 are done and merged to `main`; the
+next job is step 6 (the `quality` stage).** `main` is clean and `uv run poe check`
+is green. Always take the lowest-numbered `todo` in
+[`knowledge/progress.md`](./knowledge/progress.md) as the next step, and read its
+**Notes / blockers** section first (it records the active process change and a
+`ruff`/py314 toolchain landmine).
 
 ## How to start the conversation
 
@@ -25,19 +29,44 @@ Paste this to a fresh agent:
 5. [`knowledge/build-order.md`](./knowledge/build-order.md) — the step to do, plus
    the concept docs it links (that's the step's context).
 
+## Where things stand
+
+Merged and `done` (see [`knowledge/progress.md`](./knowledge/progress.md) and
+[`knowledge/log.md`](./knowledge/log.md) for detail):
+
+- **0 Scaffold** (`11d290f`) — `uv` project, ruff/basedpyright/pytest + poe tasks,
+  `album` entry point, package skeleton, pre-commit (`no-commit-to-branch`).
+- **1 Containers** (`240fbe0`) — `Dockerfile` + `docker-compose.yml` (our app +
+  our own `pgvector` Postgres + Prefect), Immich vendored in
+  `docker-compose.immich.yml` via Compose `include:`.
+- **2 Data model + migrations** (`68ed96f`) — `src/album/db/models.py`
+  (`Album`/`Segment`/`Photo`) + first alembic migration
+  (`CREATE EXTENSION IF NOT EXISTS vector` before the `Vector(768)` column).
+- **3 Album definition loading** (`84260ef`) — `src/album/config.py`
+  (pydantic-settings, the only env reader) + `src/album/definition.py`
+  (`album.yml` → `Album`/`Segment` rows, all times normalized to UTC).
+- **4 + 5 Immich client + `sync`** (`8172dfa`, delivered together) —
+  `src/album/immich/client.py` (typed `httpx` wrapper) + `src/album/stages/sync.py`
+  (idempotent Immich→DB boundary, UTC normalization) + `db/session.py`. Resolved
+  open question #1 (Immich exposes **no** CLIP embeddings; see
+  [Immich API notes](./knowledge/immich-api.md)). Live verification deferred.
+
 ## Next step
 
-**Step 0 — Scaffold** (status `todo`). On a `step-00-scaffold` branch: `uv init`
-(Python 3.14); configure ruff, basedpyright, pytest, and `poethepoet` tasks in
-`pyproject.toml`; add the `album` console entry point; create the folder
-structure; add `.pre-commit-config.yaml` (`no-commit-to-branch` + ruff +
-basedpyright) and `pre-commit install`; write `README.md`. Done when `uv run poe
-check` runs green and a direct commit to `main` is rejected by the hook — then
-squash, get sub-agent + user review, and fast-forward merge.
+Take the lowest-numbered `todo` in [`knowledge/progress.md`](./knowledge/progress.md)
+— currently **step 6 (`quality`)** — and read that step's entry in
+[build-order.md](./knowledge/build-order.md) plus the concept docs it links.
+**Read the progress tracker's "Notes / blockers" first**: it records the active
+process change and the `ruff`/py314 toolchain landmine.
 
 ## Golden rules
 
 - **Never work on or commit to `main`.** One step per branch.
-- **Order is fixed:** checks green → sub-agent review → user review → commit;
-  re-run checks after every change round.
-- Update `knowledge/progress.md` and `knowledge/log.md` as steps move.
+- **Order is fixed:** checks green → sub-agent (automated) review → commit. The
+  human-review gate is skipped per the user's standing instruction; merge
+  autonomously once checks + sub-agent review are clean. Re-run checks after every
+  change round — **including immediately before the commit** (a `ruff`/py314 bug
+  can silently reintroduce invalid syntax; see log 2026-07-13).
+- Update `knowledge/progress.md` and `knowledge/log.md` **on the step branch,
+  before the fast-forward merge** — `main` is commit-protected, so a post-merge
+  docs commit can't land without a second branch.

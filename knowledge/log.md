@@ -2,6 +2,46 @@
 
 ## 2026-07-13
 
+* **Build steps 4 + 5 done** (delivered together on one branch/review at the
+  user's request; `sync` stage + Immich client): added
+  `src/album/immich/client.py` — a thin, typed `httpx` wrapper over the Immich
+  REST API (`ImmichClient` + `ImmichAsset`/`ImmichExif`/`ImmichDuplicate` pydantic
+  models) covering album-asset listing (paginated `POST /search/metadata`), asset
+  EXIF (`GET /assets/{id}`), duplicate groups (`GET /duplicates`), and thumbnail
+  fetch — and `src/album/stages/sync.py` (`sync(album_id, session, client)`),
+  the idempotent Immich→DB boundary: upserts `Photo` rows keyed on Immich asset id,
+  scoped to `album_id`, normalizing each capture time to UTC (aware
+  `dateTimeOriginal` wins → else `exifInfo.timeZone` → else `Album.timezone` →
+  else flagged ambiguous with the timestamp left NULL). Added `db/session.py`
+  (lazy engine/session factory from `DATABASE_URL`) and two `config.py` settings
+  (`immich_base_url`, `immich_api_key`, defaulted so DB-only flows don't need
+  them). Test-first (14 new tests): client tests use `respx` against
+  schema-accurate fixtures under `tests/fixtures/immich/`; `sync` tests run on
+  in-memory SQLite with a fake `AssetSource`, covering idempotency, `album_id`
+  scoping, the three timezone resolution paths, and the ambiguous-flag path.
+  Added `httpx` + `respx` deps.
+    * **Open question #1 resolved:** the Immich REST API (OpenAPI v3.0.2) exposes
+      **no CLIP embeddings** — grep of the spec finds zero `embedding` fields.
+      `quality` will compute its own via `open_clip`. Recorded in the new
+      [Immich API notes](/immich-api.md); also captured a partial answer to
+      open question #3 (Immich *does* surface `exifInfo.timeZone`).
+    * **Manual/live verification intentionally skipped** (per user): the live
+      Immich stack was unreachable (port 2283 refused, `IMMICH_API_KEY` empty),
+      so fixtures are derived from the OpenAPI contract rather than a live
+      capture, and step 5's "run for real against the honeymoon album" was not
+      performed. Both are flagged in `immich-api.md` to re-verify on the first
+      real sync.
+    * **Sub-agent review (2 angles) caught a genuine blocker:** the committed
+      `sync.py` contained `except ZoneInfoNotFoundError, ValueError:` (a hard
+      `SyntaxError`). Root cause is a **`ruff` 0.15.21 formatter bug**: under
+      `target-version = "py314"` (which this repo uses) `ruff format` rewrites a
+      valid `except (A, B):` into the invalid paren-less form, and there is no
+      fixed release yet (0.15.21 is latest). This creates a catch-22 —
+      `ruff format --check` demands the broken form while Python/basedpyright/
+      pytest reject it — so **avoid parenthesized multi-type `except` clauses**
+      (use separate `except` clauses, or `# fmt: skip`) until ruff ships a fix.
+      `sync._resolve_zone` was rewritten to two separate `except` clauses.
+
 * **Build step 3 done** (commit `84260ef`): added `src/album/config.py` — the
   first (and only) module that reads env vars, a pydantic-settings `Settings`
   with `env_nested_delimiter="__"` configured up front so grouped settings
