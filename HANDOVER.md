@@ -1,9 +1,9 @@
 # Handover — start here
 
 Photo Album Pipeline: a resumable batch pipeline that turns a raw photo dump into
-a printed, curated photo book. **Steps 0–6 are done and merged to `main`; the
-next job is step 7 (the `cluster` stage).** `main` is clean and `uv run poe check`
-is green. Always take the lowest-numbered `todo` in
+a printed, curated photo book. **Steps 0–7 are done and merged to `main`; the
+next job is step 8 (the `select` stage + `db/similarity.py`).** `main` is clean
+and `uv run poe check` is green. Always take the lowest-numbered `todo` in
 [`knowledge/progress.md`](./knowledge/progress.md) as the next step, and read its
 **Notes / blockers** section first (it records the active process change and a
 `ruff`/py314 toolchain landmine).
@@ -53,6 +53,9 @@ Merged and `done` (see [`knowledge/progress.md`](./knowledge/progress.md) and
 - **6 `quality`** (`a6c4b9e`) — `src/album/stages/quality.py`: real OpenCV blur +
   injected `AestheticScorer`/`Embedder` protocols (real LAION/open_clip impls
   deferred as heavy; wire at step 14).
+- **7 `cluster`** (`2a39df5`) — `src/album/stages/cluster.py`: segment assignment +
+  temporal/spatial(DBSCAN) scene detection, with the no-segments & no-GPS
+  fallbacks that make the pipeline generic.
 
 ## Next step
 

@@ -2,6 +2,26 @@
 
 ## 2026-07-13
 
+* **Build step 7 done** (commit `2a39df5`, `cluster` stage): added
+  `src/album/stages/cluster.py` — assigns each photo a `segment_id` (matching its
+  UTC timestamp against the album's ordered, non-overlapping segments) and a
+  `scene_id`. Scene detection is **temporal** (a time gap over ~90 min starts a
+  new scene) by default, and takes the **spatial** path (scikit-learn DBSCAN over
+  lat/lon, haversine, `min_samples=1`) when every photo in a group has GPS — a new
+  scene begins when the time gap breaks *or* the spatial cluster changes between
+  time-adjacent photos. **Genericity guard, tested:** an album with no segments
+  falls back to one implicit segment; one with no GPS falls back to pure time-gap
+  scenes. Photos outside every segment are flagged in `ClusterResult.out_of_range`
+  (not dropped); NULL-timestamp photos are flagged in `.undated` and left
+  unassigned. Pure logic, no Prefect, idempotent (resets `segment_id`/`scene_id`
+  up front). Added scikit-learn (+ scipy). Test-first (10 tests): the GPS test
+  genuinely forces the spatial path (four photos <30 min apart at Lisbon vs Porto
+  → two scenes, would fail if spatial detection were removed). Sub-agent review
+  confirmed no functional bug; applied its two suggestions — `.order_by(Photo.id)`
+  so the result lists are deterministic on Postgres, and a documented
+  inclusive-both-ends / first-match segment-boundary convention — plus two added
+  tests (spatial+temporal revisit, mixed-GPS temporal fallback).
+
 * **Build step 6 done** (commit `a6c4b9e`, `quality` stage): added
   `src/album/stages/quality.py` — scores each photo's blur and aesthetics,
   scoped by `album_id`, writing back to the `Photo` row. **Blur** is real:

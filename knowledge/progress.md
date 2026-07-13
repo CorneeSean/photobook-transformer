@@ -25,7 +25,7 @@ order, one at a time.
 | 4 | Immich client | step-04-05-immich-client-sync (merged, deleted) | done | 8172dfa | delivered with step 5 (one branch/review) per user; resolves Open Q1 (no CLIP embeddings); live fixture recording skipped — see log |
 | 5 | `sync` stage | step-04-05-immich-client-sync (merged, deleted) | done | 8172dfa | delivered with step 4; live "run for real" skipped (no reachable Immich stack) per user |
 | 6 | `quality` stage | step-06-quality (merged, deleted) | done | a6c4b9e | real OpenCV blur; aesthetic scorer + CLIP embedder injected (protocols) — real LAION/open_clip impls deferred (heavy) |
-| 7 | `cluster` stage | — | todo | — | |
+| 7 | `cluster` stage | step-07-cluster (merged, deleted) | done | 2a39df5 | temporal + spatial(DBSCAN) scenes; no-segments & no-GPS fallbacks tested (genericity guard) |
 | 8 | `select` stage (MMR) + `db/similarity.py` | — | todo | — | |
 | 9 | Agent (`analysis.py`) | — | todo | — | |
 | 10 | `enhance` stage | — | todo | — | |
