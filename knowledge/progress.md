@@ -27,7 +27,7 @@ order, one at a time.
 | 6 | `quality` stage | step-06-quality (merged, deleted) | done | a6c4b9e | real OpenCV blur; aesthetic scorer + CLIP embedder injected (protocols) — real LAION/open_clip impls deferred (heavy) |
 | 7 | `cluster` stage | step-07-cluster (merged, deleted) | done | 2a39df5 | temporal + spatial(DBSCAN) scenes; no-segments & no-GPS fallbacks tested (genericity guard) |
 | 8 | `select` stage (MMR) + `db/similarity.py` | step-08-select (merged, deleted) | done | 4fec4a1 | real pgvector query verified against a Postgres testcontainer |
-| 9 | Agent (`analysis.py`) | — | todo | — | |
+| 9 | Agent (`analysis.py`) | step-09-agent (merged, deleted) | done | 38a4057 | real-Claude sanity check deferred (no `ANTHROPIC_API_KEY`); tested via `TestModel` only |
 | 10 | `enhance` stage | — | todo | — | |
 | 11 | `render` stage | — | todo | — | manual verification |
 | 12 | `caption` stage | — | todo | — | |
@@ -58,3 +58,18 @@ order, one at a time.
   `testcontainers`' `PostgresContainer` defaults to a `psycopg2` connection URL;
   this project uses psycopg3 (`psycopg[binary]`), so pass `driver="psycopg"`
   explicitly (see `tests/test_similarity.py`).
+- **Environment flakiness (step 9):** during step 9, Docker Desktop became fully
+  unresponsive in this sandbox (even `docker ps`/`docker system df` hung for
+  minutes with no output — beyond the Ryuk landmine above), so
+  `tests/test_similarity.py` (the pgvector testcontainer test from step 8) could
+  not be re-verified for that step's final check; `uv run pytest
+  --ignore=tests/test_similarity.py` plus lint/typecheck were used instead, and
+  all 70 non-container tests passed. Nothing in step 9 touches `db/similarity.py`
+  or Docker. **Re-run the full `uv run poe check` once Docker is confirmed
+  responsive**, to close this out.
+- **Deferred live-Claude check (step 9):** `ANTHROPIC_API_KEY` isn't set in this
+  environment's `.env`, so the agent (`agents/analysis.py`) is tested only via
+  PydanticAI's `TestModel` — the build order's "wire in real Claude calls and
+  sanity-check ~20 photos" manual step wasn't performed. Same deferral pattern
+  as steps 4–5's live-Immich check. Do this once a key is available, ideally
+  alongside step 10/12 (`enhance`/`caption`), the first real callers.

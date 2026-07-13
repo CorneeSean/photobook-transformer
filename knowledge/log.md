@@ -2,6 +2,49 @@
 
 ## 2026-07-13
 
+* **Build step 9 done** (commit `38a4057`, agent `analysis.py`): added
+  `src/album/agents/analysis.py` — the single combined PydanticAI vision agent
+  from architecture.md's "one combined vision call": one request per selected
+  photo produces both bounded tone-correction deltas (`exposure_ev`,
+  `temp_shift_k`, `shadows`, `highlights`, all `Field(ge=, le=)`) and a
+  caption, in one `AnalysisResult`. `PhotoContext` carries whatever grounding
+  the album has (segment label/place, `Album.meta`) — all optional; a photo
+  with none of it still gets a caption via `format_context`'s generic
+  fallback. Deliberately DB-free/side-effect-free — no `Session`, no
+  `album_id`, no persistence or idempotency check, left to the calling stages
+  (`enhance` step 10, `caption` step 12), mirroring `immich/client.py` (pure
+  API wrapper) vs. `stages/sync.py` (owns the DB). The `Agent` is built
+  without a bound model so importing the module never requires
+  `ANTHROPIC_API_KEY`; `analyze_photo()` defaults to a real Claude model built
+  from `config.py`'s new `anthropic_api_key` setting, or accepts an injected
+  `TestModel` for tests. Added `pydantic-ai-slim[anthropic]`. Test-first (10
+  tests) via `TestModel` — no real Claude calls: bounds/empty-caption
+  rejection (parametrized), a valid end-to-end result, the no-segment-context
+  path, and `format_context`'s interpolation.
+    * **Sub-agent review (8 parallel finder angles) caught a real bug,
+      confirmed independently by 3 angles:** `_default_model()` built a fresh
+      `AnthropicProvider` (and its own `httpx.AsyncClient`/connection pool) on
+      *every* `analyze_photo()` call, never closed — a real leak across a
+      300-500-photo album run, and it threw away HTTP connection reuse each
+      time too. Fixed by caching it with `@cache`, the same pattern
+      `db/session.py`'s `get_engine()` already uses. Also fixed:
+      `AnalysisResult.caption` had no `min_length`, so an empty string passed
+      validation despite the class docstring's claim that malformed responses
+      are rejected. Parametrized the four near-identical bounds-rejection
+      tests per a simplification finding.
+    * **Deferred (no `ANTHROPIC_API_KEY`):** the build order's "wire in real
+      Claude calls and sanity-check ~20 photos" manual step — same deferral
+      pattern as steps 4-5's live-Immich check. To do once a key is
+      available.
+    * **Environment flakiness:** Docker Desktop went fully unresponsive in
+      this sandbox mid-step (beyond the step-8 Ryuk landmine — even
+      `docker ps` hung for minutes), so `tests/test_similarity.py` (step 8's
+      pgvector testcontainer test, untouched by this step) couldn't be
+      re-verified as part of this step's final check; `pytest
+      --ignore=tests/test_similarity.py` plus lint/typecheck were used
+      instead (70/70 passed). Re-run the full `uv run poe check` once Docker
+      is confirmed responsive.
+
 * **Build step 8 done** (commit `4fec4a1`, `select` stage): added
   `src/album/stages/select.py` and `src/album/db/similarity.py`. `select`
   implements diversity-aware best-of-scene via MMR: within each scene
