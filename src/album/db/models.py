@@ -37,6 +37,12 @@ class Album(Base):
     # e.g. {"occasion": "honeymoon", "names": ["Alex", "Sam"]}
     meta: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
 
+    # --- populated by `assemble` ---
+    # Path to the rendered print-ready PDF (e.g. "data/albums/<slug>/assembled.pdf").
+    # Integration contract with `fulfill`, which reads this to submit the print
+    # order — the name and semantics are agreed across both stages; don't rename.
+    assembled_pdf_path: Mapped[str | None] = mapped_column(default=None)
+
     photos: Mapped[list[Photo]] = relationship(back_populates="album")
     segments: Mapped[list[Segment]] = relationship(
         back_populates="album", order_by="Segment.position"

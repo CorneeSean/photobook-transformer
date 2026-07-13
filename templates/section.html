@@ -1,0 +1,9 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="page">
+  <div class="safe-area" style="display: flex; flex-direction: column; justify-content: center; align-items: center; text-align: center;">
+    <div class="section-title">{{ label }}</div>
+    {% if place %}<div class="section-place">{{ place }}</div>{% endif %}
+  </div>
+</div>
+{% endblock %}

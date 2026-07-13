@@ -36,8 +36,23 @@ Resolve early; record answers back into this bundle (and note them in
    mid-segment zone-span edge and these fields' reliability on real assets still
    need a live check.*
 
-4. **Lulu's trim size / bleed / spine-width spec** — drives Jinja2 template
-   dimensions, so pin it down before building [`assemble`](/stages/assemble.md).
+4. ~~**Lulu's trim size / bleed / spine-width spec**~~ **RESOLVED (step 13,
+   2026-07-14):** Per Lulu's Print API docs (Book Creation Guide, PDF Creation
+   Settings, and the "How is spine width calculated?" article), we pin
+   [`assemble`](/stages/assemble.md) to Lulu's **Square 8.5×8.5in** trim —
+   a standard photo-book size in their catalog. Bleed is a flat **0.125in on
+   every edge** (so the rendered PDF page is 8.75×8.75in — trim + bleed on
+   each side), with a minimum 0.25in safety margin for interior content (0.5in
+   used here for headroom) and a 0.2in inner gutter margin. Spine width for
+   softcover perfect binding is `(page_count / 444) + 0.06in`, where **444 is
+   Lulu's PPI (pages-per-inch) constant for their standard interior paper
+   stock** — i.e. spine width scales linearly with page count divided by how
+   many of that stock's sheets pack into an inch, plus a fixed 0.06in cover
+   material offset. (Lulu also documents 460 PPI for magazine/comic stock and
+   a page-count lookup table for hardcover casewrap/linen — not used here
+   since we target the standard softcover perfect-bound product.) These
+   constants are now the source for `assemble`'s template dimensions —
+   see `src/album/stages/assemble.py`.
 
 5. **What does the full AI pass cost?** Estimate the Claude API spend for
    ~300–500 selected photos before running it, and confirm it's acceptable. (Note

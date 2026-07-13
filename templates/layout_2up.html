@@ -1,0 +1,15 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="page">
+  <div class="safe-area">
+    <div class="grid grid-2up">
+      {% for photo in photos %}
+      <div class="cell">
+        <img src="{{ photo.image_path }}" alt="">
+        {% if photo.caption %}<div class="caption">{{ photo.caption }}</div>{% endif %}
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+</div>
+{% endblock %}
