@@ -1,0 +1,43 @@
+{
+  "id": 42424,
+  "status": {
+    "name": "CREATED",
+    "message": "",
+    "changed": "2026-07-14T10:00:00Z"
+  },
+  "contact_email": "orders@example.com",
+  "external_id": "honeymoon-2026",
+  "shipping_level": "MAIL",
+  "production_due_time": "2026-07-21T10:00:00Z",
+  "line_items": [
+    {
+      "quantity": 1,
+      "pod_package_id": "0850X0850FCPRECW060UW444MXX",
+      "title": "Our Honeymoon",
+      "external_id": "honeymoon-2026",
+      "printable_normalization": {
+        "cover": {"source_url": "https://example.com/albums/honeymoon-2026/book.pdf"},
+        "interior": {"source_url": "https://example.com/albums/honeymoon-2026/book.pdf"}
+      }
+    }
+  ],
+  "shipping_address": {
+    "name": "Alex Morgan",
+    "street1": "1 Main St",
+    "city": "Springfield",
+    "postcode": "00000",
+    "country_code": "US",
+    "phone_number": "+15555555555"
+  },
+  "costs": {
+    "line_item_costs": [{"total_cost_excl_discounts": "12.34"}],
+    "shipping_cost": {"total_cost_excl_discounts": "5.00"},
+    "total_cost_incl_tax": "17.34"
+  },
+  "estimated_shipping_dates": {
+    "dispatch_min": "2026-07-21",
+    "dispatch_max": "2026-07-23",
+    "arrival_min": "2026-07-25",
+    "arrival_max": "2026-07-30"
+  }
+}

@@ -1,0 +1,21 @@
+{
+  "id": 42424,
+  "status": {
+    "name": "SHIPPED",
+    "message": "",
+    "changed": "2026-07-25T09:00:00Z",
+    "line_item_statuses": [
+      {
+        "name": "SHIPPED",
+        "messages": {
+          "tracking_id": "1Z999AA10123456784",
+          "tracking_urls": ["https://example.com/track/1Z999AA10123456784"],
+          "carrier_name": "UPS"
+        }
+      }
+    ]
+  },
+  "contact_email": "orders@example.com",
+  "external_id": "honeymoon-2026",
+  "shipping_level": "MAIL"
+}
