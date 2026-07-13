@@ -1,5 +1,14 @@
 # Directory Update Log
 
+## 2026-07-14
+
+* **Closed step 9's deferred Docker/testcontainer re-verification.** Docker
+  Desktop was reinstalled, fixing the environment flakiness noted below (step 9
+  entry). `TESTCONTAINERS_RYUK_DISABLED=true uv run poe check` now passes clean:
+  ruff, format, basedpyright, and all 74 pytest tests (including
+  `tests/test_similarity.py`'s pgvector testcontainer). No code changes needed —
+  `main` was already in the state left by step 9.
+
 ## 2026-07-13
 
 * **Build step 9 done** (commit `38a4057`, agent `analysis.py`): added

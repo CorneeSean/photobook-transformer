@@ -58,15 +58,16 @@ order, one at a time.
   `testcontainers`' `PostgresContainer` defaults to a `psycopg2` connection URL;
   this project uses psycopg3 (`psycopg[binary]`), so pass `driver="psycopg"`
   explicitly (see `tests/test_similarity.py`).
-- **Environment flakiness (step 9):** during step 9, Docker Desktop became fully
-  unresponsive in this sandbox (even `docker ps`/`docker system df` hung for
-  minutes with no output — beyond the Ryuk landmine above), so
-  `tests/test_similarity.py` (the pgvector testcontainer test from step 8) could
-  not be re-verified for that step's final check; `uv run pytest
-  --ignore=tests/test_similarity.py` plus lint/typecheck were used instead, and
-  all 70 non-container tests passed. Nothing in step 9 touches `db/similarity.py`
-  or Docker. **Re-run the full `uv run poe check` once Docker is confirmed
-  responsive**, to close this out.
+- **Environment flakiness (step 9), resolved 2026-07-14:** during step 9, Docker
+  Desktop became fully unresponsive in this sandbox (even `docker
+  ps`/`docker system df` hung for minutes with no output — beyond the Ryuk
+  landmine above), so `tests/test_similarity.py` (the pgvector testcontainer test
+  from step 8) could not be re-verified for that step's final check; `uv run
+  pytest --ignore=tests/test_similarity.py` plus lint/typecheck were used
+  instead, and all 70 non-container tests passed. Nothing in step 9 touches
+  `db/similarity.py` or Docker. Docker was reinstalled, and
+  `TESTCONTAINERS_RYUK_DISABLED=true uv run poe check` now passes clean
+  (74/74 tests, including `test_similarity.py`) — closed, no further action.
 - **Deferred live-Claude check (step 9):** `ANTHROPIC_API_KEY` isn't set in this
   environment's `.env`, so the agent (`agents/analysis.py`) is tested only via
   PydanticAI's `TestModel` — the build order's "wire in real Claude calls and
