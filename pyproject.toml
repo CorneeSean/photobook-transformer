@@ -16,6 +16,7 @@ dependencies = [
     "pydantic-ai-slim[anthropic]>=2.9.0",
     "pydantic-settings>=2.14.2",
     "pyyaml>=6.0.3",
+    "scikit-image>=0.26.0",
     "scikit-learn>=1.9.0",
     "sqlalchemy>=2.0.51",
     "tzdata>=2026.3",
