@@ -24,7 +24,7 @@ order, one at a time.
 | 3 | Album definition loading | step-03-album-definition (merged, deleted) | done | 84260ef | |
 | 4 | Immich client | step-04-05-immich-client-sync (merged, deleted) | done | 8172dfa | delivered with step 5 (one branch/review) per user; resolves Open Q1 (no CLIP embeddings); live fixture recording skipped — see log |
 | 5 | `sync` stage | step-04-05-immich-client-sync (merged, deleted) | done | 8172dfa | delivered with step 4; live "run for real" skipped (no reachable Immich stack) per user |
-| 6 | `quality` stage | — | todo | — | |
+| 6 | `quality` stage | step-06-quality (merged, deleted) | done | a6c4b9e | real OpenCV blur; aesthetic scorer + CLIP embedder injected (protocols) — real LAION/open_clip impls deferred (heavy) |
 | 7 | `cluster` stage | — | todo | — | |
 | 8 | `select` stage (MMR) + `db/similarity.py` | — | todo | — | |
 | 9 | Agent (`analysis.py`) | — | todo | — | |

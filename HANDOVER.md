@@ -1,8 +1,8 @@
 # Handover — start here
 
 Photo Album Pipeline: a resumable batch pipeline that turns a raw photo dump into
-a printed, curated photo book. **Steps 0–5 are done and merged to `main`; the
-next job is step 6 (the `quality` stage).** `main` is clean and `uv run poe check`
+a printed, curated photo book. **Steps 0–6 are done and merged to `main`; the
+next job is step 7 (the `cluster` stage).** `main` is clean and `uv run poe check`
 is green. Always take the lowest-numbered `todo` in
 [`knowledge/progress.md`](./knowledge/progress.md) as the next step, and read its
 **Notes / blockers** section first (it records the active process change and a
@@ -50,6 +50,9 @@ Merged and `done` (see [`knowledge/progress.md`](./knowledge/progress.md) and
   (idempotent Immich→DB boundary, UTC normalization) + `db/session.py`. Resolved
   open question #1 (Immich exposes **no** CLIP embeddings; see
   [Immich API notes](./knowledge/immich-api.md)). Live verification deferred.
+- **6 `quality`** (`a6c4b9e`) — `src/album/stages/quality.py`: real OpenCV blur +
+  injected `AestheticScorer`/`Embedder` protocols (real LAION/open_clip impls
+  deferred as heavy; wire at step 14).
 
 ## Next step
 

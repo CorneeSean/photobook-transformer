@@ -2,6 +2,30 @@
 
 ## 2026-07-13
 
+* **Build step 6 done** (commit `a6c4b9e`, `quality` stage): added
+  `src/album/stages/quality.py` — scores each photo's blur and aesthetics,
+  scoped by `album_id`, writing back to the `Photo` row. **Blur** is real:
+  Laplacian variance (OpenCV) over the Immich thumbnail. **Aesthetic** scoring
+  and **CLIP embedding** are injected behind `AestheticScorer`/`Embedder`
+  protocols (the LAION predictor / open_clip / torch stack is heavy and
+  model-weight-dependent), so the stage stays unit-testable with stubs — the
+  same seam pattern as [`sync`](/stages/sync.md)'s Immich client. Thumbnails
+  come via a narrow `ThumbnailSource` protocol that `ImmichClient.get_thumbnail`
+  satisfies. Idempotent (skips fully-scored photos unless `force`), with
+  per-photo failure isolation. Added `opencv-python-headless` + `numpy` +
+  `pillow`. Test-first (8 tests) on in-memory SQLite: real blur ranks a **sharp
+  fixture above a pre-blurred copy of the same source image** (downloaded from
+  Lorem Picsum — sharp var 788 vs blurry 3.6) end-to-end through `quality()`;
+  scores persist; idempotency + `force`; album scoping; embedder path persists a
+  768-dim vector (SQLite round-trips vector *storage* fine — only similarity
+  *queries* need Postgres). **Deferred:** the real aesthetic/embedding model
+  implementations (open_clip/LAION) aren't shipped — wired via injection, to be
+  supplied when the flow lands (step 14). Sub-agent review caught one real bug:
+  a mid-photo failure previously left a stray `blur_score` that the trailing
+  `session.flush()` still persisted (partial write despite being counted
+  `failed`) — fixed by computing all scores into locals and assigning to the
+  `Photo` only once every computation succeeds; regression test added.
+
 * **Build steps 4 + 5 done** (delivered together on one branch/review at the
   user's request; `sync` stage + Immich client): added
   `src/album/immich/client.py` — a thin, typed `httpx` wrapper over the Immich
