@@ -33,7 +33,7 @@ order, one at a time.
 | 12 | `caption` stage | — | todo | — | should reuse step 10's `ensure_analysis()` helper in `stages/enhance.py` — see its notes below |
 | 13 | `assemble` stage | step-13-assemble (merged, deleted) | done | 9ec5ca7 | resolves Open Q4 (Lulu 8.5x8.5in square trim, 0.125in bleed, spine = pages/444+0.06in); adds `Album.assembled_pdf_path` (own migration) — the contract step 15 reads |
 | 14 | Wire the flow | — | todo | — | |
-| 15 | `fulfill` stage | — | todo | — | |
+| 15 | `fulfill` stage | step-15-fulfill (merged, deleted) | done | 92a7d4c | Lulu Print API client (OAuth2 client-credentials); reads `Album.assembled_pdf_path`, writes `Album.lulu_order_id`; real Lulu sandbox order deferred (no credentials); no PDF-hosting/upload mechanism yet — see notes below |
 | 16 | Prove genericity | — | todo | — | |
 
 ## Notes / blockers
@@ -49,6 +49,19 @@ order, one at a time.
   and updated this tracker/`log.md` centrally to avoid the three branches
   conflicting on shared docs. This is a deliberate, user-approved exception to
   the "steps are delivered strictly in order" rule above — not a new default.
+- **No PDF-hosting/upload mechanism yet (step 15):** `Album.assembled_pdf_path`
+  is a local disk path; Lulu's `source_url` needs a fetchable `http(s)://` URL.
+  `LuluPrintJobAdapter.submit` raises `UnreachablePdfError` rather than
+  submitting a path Lulu can't reach. Needs real hosting (static file serving,
+  S3, etc.) wired in — likely alongside step 14 (flow) or whenever `fulfill` is
+  first run for real.
+- **Deferred live-Lulu check (step 15):** no Lulu sandbox credentials in this
+  environment, so `LuluClient`/`fulfill` are tested only against recorded
+  fixtures — the build order's "manually verify with a single-copy test order"
+  step wasn't performed. Same deferral pattern as steps 4–5/9. `GET
+  /print-jobs/{id}/`'s response schema was inferred from Lulu's OpenAPI spec,
+  not directly confirmed — re-verify against a live sandbox call alongside the
+  test order.
 - **`enhance`/`caption` share one trigger (step 10):** `stages/enhance.py`'s
   `ensure_analysis()` is the idempotent "one combined vision call" trigger
   described in `architecture.md` — `caption` (step 12) should import and reuse

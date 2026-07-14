@@ -52,6 +52,28 @@
   dict; a redundant second full-table query for the idempotency reset; a
   dead fallback branch in the layout-size lookup. ruff + basedpyright +
   pytest green, 108 tests (94 pre-existing + 14 new).
+* **Build step 15 done** (commit `92a7d4c`, `fulfill` stage): added
+  `src/album/lulu/client.py` (`LuluClient` — OAuth2 client-credentials auth,
+  `POST /print-jobs/`, `GET /print-jobs/{id}/`) and
+  `src/album/stages/fulfill.py` (`fulfill()` + `LuluPrintJobAdapter`, which
+  keeps fulfillment policy — recipient, SKU, shipping level — out of the thin
+  HTTP client). Reads `Album.assembled_pdf_path`, submits it, stores the
+  returned id on `Album.lulu_order_id` (own migration). Researched against
+  Lulu's public OpenAPI spec (fetched 2026-07-14): confirmed the
+  client-credentials token endpoint and `POST /print-jobs/` request/response
+  shape; `GET /print-jobs/{id}/`'s exact response schema was inferred, not
+  directly confirmed. Self-review (code-review skill, 8-angle) caught and
+  fixed: fulfillment policy relocated out of the HTTP client into the stage;
+  `submit()` now rejects non-`http(s)` PDF paths explicitly rather than
+  forwarding a local path to Lulu unchecked. Built in parallel with `assemble`
+  (step 13) — see the parallel-build note above for how the coordinator
+  reconciled the two branches' independent `Album.assembled_pdf_path`
+  migrations after both landed. Flagged gap: no PDF-hosting/upload mechanism
+  exists yet, so a real submission would fail loudly (`UnreachablePdfError`)
+  rather than send Lulu an unfetchable local path — follow-up work for
+  whoever wires the real flow (step 14) or first live order. Manual
+  single-copy test-order verification deferred (no Lulu sandbox credentials).
+  ruff + basedpyright + pytest green, 121 tests (108 pre-existing + 13 new).
 * **Closed step 9's deferred Docker/testcontainer re-verification.** Docker
   Desktop was reinstalled, fixing the environment flakiness noted below (step 9
   entry). `TESTCONTAINERS_RYUK_DISABLED=true uv run poe check` now passes clean:
