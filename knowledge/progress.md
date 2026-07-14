@@ -34,10 +34,20 @@ order, one at a time.
 | 13 | `assemble` stage | step-13-assemble (merged, deleted) | done | 9ec5ca7 | resolves Open Q4 (Lulu 8.5x8.5in square trim, 0.125in bleed, spine = pages/444+0.06in); adds `Album.assembled_pdf_path` (own migration) — the contract step 15 reads |
 | 14 | Wire the flow | step-14-wire-flow (merged, deleted) | done | ada27d6 | real Postgres+Prefect verified (migrations applied, a real flow run tracked and visible via the API); fails cleanly at `sync` — no reachable Immich instance, open since steps 4-5; real LAION/open_clip scorer still deferred (step 6) |
 | 15 | `fulfill` stage | step-15-fulfill (merged, deleted) | done | 92a7d4c | Lulu Print API client (OAuth2 client-credentials); reads `Album.assembled_pdf_path`, writes `Album.lulu_order_id`; real Lulu sandbox order deferred (no credentials); no PDF-hosting/upload mechanism yet — see notes below |
-| 16 | Prove genericity | — | todo | — | |
+| 16 | Prove genericity | step-16-prove-genericity (merged, deleted) | done | d7e903d | adds `data/albums/smith-wedding/album.yml` (wedding-shaped: hour-scale segments, single day) + `tests/test_genericity.py`; zero `src/` files touched — confirmed the abstraction; live run hits the same no-reachable-Immich boundary as step 14 |
 
 ## Notes / blockers
 
+- **Deferred live-GPS/live-Immich check (step 16):** `data/albums/smith-wedding
+  /album.yml` proves the abstraction needs no code change for a structurally
+  different (wedding, hour-scale, single-day) album — confirmed by a real
+  `album run --album smith-wedding` against real Postgres+Prefect, which
+  bootstraps correctly and fails at the same `sync` boundary as every other
+  run in this environment (no reachable Immich instance). Real GPS-tagged
+  photos couldn't be attached for the same reason; the GPS spatial-clustering
+  code path itself is already unit-tested (step 7). Re-run against a live
+  Immich album with real, GPS-tagged wedding photos once one is reachable, to
+  close this out for real alongside the step 14 honeymoon re-verification.
 - **Full end-to-end run blocked on a reachable Immich instance (step 14):**
   `album run` was verified against a real Postgres + Prefect server (real
   migrations, a real tracked flow run) but fails cleanly at `sync` with

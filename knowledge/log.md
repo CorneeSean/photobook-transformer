@@ -2,6 +2,38 @@
 
 ## 2026-07-14
 
+* **Build step 16 done** (commit `d7e903d`, prove genericity): added
+  `data/albums/smith-wedding/album.yml` — a real, shipped album definition
+  structurally different from the trip-shaped `honeymoon-2026` that every
+  prior stage's tests and the step-14 live run exercised: hour-scale segments
+  ("Getting ready" / "Ceremony" / "Reception") instead of day-scale, a single
+  day (`2026-08-15`, `Europe/London`) instead of several. Per build-order.md
+  step 16 and domain-model.md, adding it required **only this YAML file** —
+  confirmed by `git diff --stat main` showing zero files under `src/` touched.
+  `tests/test_genericity.py` loads the real shipped file (not a copy under
+  `tests/fixtures/`) through the same `get_or_create_album()` bootstrap
+  `flow.pipeline()` uses, asserting the expected shape — a regression guard
+  tying CI to the shipped data file, distinct from step 3's
+  `tests/fixtures/albums/wedding.yml` unit test.
+    * **Manual verification**, mirroring step 14: `docker compose up -d db
+      prefect-server` + `uv run poe migrate` against real Postgres+pgvector
+      (already at head, chain applies cleanly); `uv run album run --album
+      smith-wedding` against that real stack bootstrapped a real `Album` + 3
+      `Segment` rows into Postgres (verified via `psql`: correct
+      label/place/position, correct `Europe/London` → UTC conversion),
+      started a real Prefect-tracked flow run (confirmed `FAILED` via the
+      `/flow_runs/filter` API, same as step 14's `e2e-smoke-test` run), and
+      failed cleanly with the same `httpx.ConnectError` boundary at `sync` —
+      no reachable Immich instance in this environment, the same gap open
+      since steps 4-5/14. GPS-tagged real photos aren't attachable without a
+      live Immich instance; the GPS spatial-clustering code path itself is
+      already unit-tested (step 7's "an album with GPS takes the spatial
+      path").
+    * **Self-review (code-review skill, high effort):** no findings — the
+      diff is one data file plus one self-contained test against
+      already-reviewed code (`get_or_create_album`, `load_album_definition`).
+    * ruff + basedpyright + pytest green, 161 tests (160 pre-existing + 1
+      new), run via `TESTCONTAINERS_RYUK_DISABLED=true uv run poe check`.
 * **Build step 14 done** (commit `ada27d6`, wire the flow): added
   `src/album/flow.py` — the only module that imports Prefect. `pipeline()`
   wraps all 9 stages (sync, quality, cluster, select, enhance, render,
