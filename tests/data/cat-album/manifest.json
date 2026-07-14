@@ -1,0 +1,346 @@
+{
+  "album": {
+    "slug": "cat-album",
+    "title": "A Cat's Day"
+  },
+  "date": "2026-06-21",
+  "segments": [
+    {
+      "position": 1,
+      "label": "Dawn Patrol",
+      "place": "The Windowsill",
+      "start_at": "2026-06-21T06:00:00+00:00",
+      "end_at": "2026-06-21T09:00:00+00:00"
+    },
+    {
+      "position": 2,
+      "label": "Garden Expedition",
+      "place": "The Back Garden",
+      "start_at": "2026-06-21T09:00:00+00:00",
+      "end_at": "2026-06-21T12:00:00+00:00"
+    },
+    {
+      "position": 3,
+      "label": "Caf\u00e9 Society",
+      "place": "Caf\u00e9 Miaou",
+      "start_at": "2026-06-21T12:00:00+00:00",
+      "end_at": "2026-06-21T15:00:00+00:00"
+    },
+    {
+      "position": 4,
+      "label": "Rooftop Siesta",
+      "place": "The Rooftops",
+      "start_at": "2026-06-21T15:00:00+00:00",
+      "end_at": "2026-06-21T18:00:00+00:00"
+    },
+    {
+      "position": 5,
+      "label": "Night Prowl",
+      "place": "The Alley",
+      "start_at": "2026-06-21T18:00:00+00:00",
+      "end_at": "2026-06-21T22:00:00+00:00"
+    }
+  ],
+  "photos": [
+    {
+      "file": "01.jpg",
+      "timestamp": "2026-06-21T06:03:00+00:00",
+      "caption": "Certified loaf",
+      "segment_hint": 1,
+      "lat": 51.507794,
+      "lon": -0.087909,
+      "w": 640,
+      "h": 480
+    },
+    {
+      "file": "02.jpg",
+      "timestamp": "2026-06-21T06:33:00+00:00",
+      "caption": "Zoomies incoming",
+      "segment_hint": 1,
+      "lat": 51.507991,
+      "lon": -0.087957,
+      "w": 900,
+      "h": 600
+    },
+    {
+      "file": "03.jpg",
+      "timestamp": "2026-06-21T07:03:00+00:00",
+      "caption": "Judging you, quietly",
+      "segment_hint": 1,
+      "lat": 51.507922,
+      "lon": -0.087781,
+      "w": 506,
+      "h": 900
+    },
+    {
+      "file": "04.jpg",
+      "timestamp": "2026-06-21T07:33:00+00:00",
+      "caption": "Sunbeam supervisor",
+      "segment_hint": 1,
+      "lat": 51.507635,
+      "lon": -0.087696,
+      "w": 633,
+      "h": 900
+    },
+    {
+      "file": "05.jpg",
+      "timestamp": "2026-06-21T08:03:00+00:00",
+      "caption": "Ready for the pounce",
+      "segment_hint": 1,
+      "lat": 51.507622,
+      "lon": -0.08774,
+      "w": 697,
+      "h": 449
+    },
+    {
+      "file": "06.jpg",
+      "timestamp": "2026-06-21T08:33:00+00:00",
+      "caption": "Snack negotiations",
+      "segment_hint": 1,
+      "lat": 51.507642,
+      "lon": -0.087946,
+      "w": 560,
+      "h": 420
+    },
+    {
+      "file": "07.jpg",
+      "timestamp": "2026-06-21T09:03:00+00:00",
+      "caption": "Box? Mine now",
+      "segment_hint": 2,
+      "lat": 51.510055,
+      "lon": -0.089704,
+      "w": 675,
+      "h": 900
+    },
+    {
+      "file": "08.jpg",
+      "timestamp": "2026-06-21T09:33:00+00:00",
+      "caption": "Majestic floof",
+      "segment_hint": 2,
+      "lat": 51.509874,
+      "lon": -0.090066,
+      "w": 675,
+      "h": 900
+    },
+    {
+      "file": "09.jpg",
+      "timestamp": "2026-06-21T10:03:00+00:00",
+      "caption": "Do not disturb",
+      "segment_hint": 2,
+      "lat": 51.510176,
+      "lon": -0.089631,
+      "w": 800,
+      "h": 855
+    },
+    {
+      "file": "10.jpg",
+      "timestamp": "2026-06-21T10:33:00+00:00",
+      "caption": "Head empty, only purrs",
+      "segment_hint": 2,
+      "lat": 51.510146,
+      "lon": -0.089962,
+      "w": 675,
+      "h": 900
+    },
+    {
+      "file": "11.jpg",
+      "timestamp": "2026-06-21T11:03:00+00:00",
+      "caption": "Professional napper",
+      "segment_hint": 2,
+      "lat": 51.510386,
+      "lon": -0.090172,
+      "w": 500,
+      "h": 333
+    },
+    {
+      "file": "12.jpg",
+      "timestamp": "2026-06-21T11:33:00+00:00",
+      "caption": "Blep.",
+      "segment_hint": 2,
+      "lat": 51.510315,
+      "lon": -0.090026,
+      "w": 530,
+      "h": 709
+    },
+    {
+      "file": "13.jpg",
+      "timestamp": "2026-06-21T12:03:00+00:00",
+      "caption": "Ambush from the ferns",
+      "segment_hint": 3,
+      "lat": 51.513087,
+      "lon": -0.092329,
+      "w": 483,
+      "h": 322
+    },
+    {
+      "file": "14.jpg",
+      "timestamp": "2026-06-21T12:33:00+00:00",
+      "caption": "Sipping the cream",
+      "segment_hint": 3,
+      "lat": 51.513185,
+      "lon": -0.09191,
+      "w": 748,
+      "h": 501
+    },
+    {
+      "file": "15.jpg",
+      "timestamp": "2026-06-21T13:03:00+00:00",
+      "caption": "King of the rooftops",
+      "segment_hint": 3,
+      "lat": 51.513108,
+      "lon": -0.092051,
+      "w": 703,
+      "h": 555
+    },
+    {
+      "file": "16.jpg",
+      "timestamp": "2026-06-21T13:33:00+00:00",
+      "caption": "Midnight diplomat",
+      "segment_hint": 3,
+      "lat": 51.513383,
+      "lon": -0.092177,
+      "w": 500,
+      "h": 340
+    },
+    {
+      "file": "17.jpg",
+      "timestamp": "2026-06-21T14:03:00+00:00",
+      "caption": "Suspiciously calm",
+      "segment_hint": 3,
+      "lat": 51.513329,
+      "lon": -0.092362,
+      "w": 500,
+      "h": 332
+    },
+    {
+      "file": "18.jpg",
+      "timestamp": "2026-06-21T14:33:00+00:00",
+      "caption": "Full send",
+      "segment_hint": 3,
+      "lat": 51.513036,
+      "lon": -0.092276,
+      "w": 900,
+      "h": 900
+    },
+    {
+      "file": "19.jpg",
+      "timestamp": "2026-06-21T15:03:00+00:00",
+      "caption": "One more nap",
+      "segment_hint": 4,
+      "lat": 51.515608,
+      "lon": -0.094343,
+      "w": 900,
+      "h": 600
+    },
+    {
+      "file": "20.jpg",
+      "timestamp": "2026-06-21T15:33:00+00:00",
+      "caption": "The stare",
+      "segment_hint": 4,
+      "lat": 51.515388,
+      "lon": -0.094249,
+      "w": 612,
+      "h": 612
+    },
+    {
+      "file": "21.jpg",
+      "timestamp": "2026-06-21T16:03:00+00:00",
+      "caption": "Tail of two cities",
+      "segment_hint": 4,
+      "lat": 51.515472,
+      "lon": -0.09442,
+      "w": 500,
+      "h": 375
+    },
+    {
+      "file": "22.jpg",
+      "timestamp": "2026-06-21T16:33:00+00:00",
+      "caption": "Whisker check complete",
+      "segment_hint": 4,
+      "lat": 51.515677,
+      "lon": -0.094181,
+      "w": 900,
+      "h": 582
+    },
+    {
+      "file": "23.jpg",
+      "timestamp": "2026-06-21T17:03:00+00:00",
+      "caption": "Guarding the sofa",
+      "segment_hint": 4,
+      "lat": 51.515346,
+      "lon": -0.094255,
+      "w": 790,
+      "h": 590
+    },
+    {
+      "file": "24.jpg",
+      "timestamp": "2026-06-21T17:33:00+00:00",
+      "caption": "Sunbeam claimed",
+      "segment_hint": 4,
+      "lat": 51.515515,
+      "lon": -0.094075,
+      "w": 900,
+      "h": 678
+    },
+    {
+      "file": "25.jpg",
+      "timestamp": "2026-06-21T18:03:00+00:00",
+      "caption": "Reporting for cuddles",
+      "segment_hint": 5,
+      "lat": 51.517838,
+      "lon": -0.096627,
+      "w": 640,
+      "h": 472
+    },
+    {
+      "file": "26.jpg",
+      "timestamp": "2026-06-21T18:43:00+00:00",
+      "caption": "Chaos, briefly paused",
+      "segment_hint": 5,
+      "lat": 51.517988,
+      "lon": -0.096729,
+      "w": 640,
+      "h": 428
+    },
+    {
+      "file": "27.jpg",
+      "timestamp": "2026-06-21T19:23:00+00:00",
+      "caption": "A dignified yawn",
+      "segment_hint": 5,
+      "lat": 51.517651,
+      "lon": -0.096346,
+      "w": 900,
+      "h": 675
+    },
+    {
+      "file": "28.jpg",
+      "timestamp": "2026-06-21T20:03:00+00:00",
+      "caption": "Contemplating the void",
+      "segment_hint": 5,
+      "lat": 51.517491,
+      "lon": -0.096507,
+      "w": 900,
+      "h": 675
+    },
+    {
+      "file": "29.jpg",
+      "timestamp": "2026-06-21T20:43:00+00:00",
+      "caption": "Fluff overload",
+      "segment_hint": 5,
+      "lat": 51.517424,
+      "lon": -0.096399,
+      "w": 900,
+      "h": 675
+    },
+    {
+      "file": "30.jpg",
+      "timestamp": "2026-06-21T21:23:00+00:00",
+      "caption": "Signing off",
+      "segment_hint": 5,
+      "lat": 51.517859,
+      "lon": -0.096456,
+      "w": 900,
+      "h": 675
+    }
+  ]
+}
