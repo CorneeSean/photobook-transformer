@@ -137,3 +137,9 @@ different* album end-to-end: a wedding (hour-scale segments, single day, GPS
 present) or a segment-less dump. Adding it must require **only** an `album.yml`
 and an Immich album. If it needs *any* code change, that's a bug in the
 abstraction — fix it, don't work around it. **Commit.**
+
+---
+
+Steps **17+** (adopting Immich API surface that didn't exist at steps 4–5 —
+faces/people, lead-face prioritization, rating/OCR/geocoding) are broken out into
+their own playbook: [Immich enrichment](/immich-enrichment.md).
