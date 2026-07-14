@@ -27,6 +27,12 @@
   #cover.opening { animation: cover-out 0.6s forwards; }
   .title-glow { text-shadow: 0 2px 40px rgba(251,191,36,0.35); }
   #progress-fill { transition: width 0.5s cubic-bezier(0.22, 1, 0.36, 1); }
+  /* Auto-advance switch (driven by aria-pressed, no extra state class). */
+  #auto-toggle .knob { transition: transform 0.25s cubic-bezier(0.22, 1, 0.36, 1); }
+  #auto-toggle[aria-pressed="true"] .track {
+    background: linear-gradient(to right, #fcd34d, #f472b6);
+  }
+  #auto-toggle[aria-pressed="true"] .knob { transform: translateX(1rem); }
 </style>
 </head>
 <body class="min-h-screen">
@@ -65,7 +71,19 @@
   <div class="h-1 w-full overflow-hidden rounded-full bg-white/10">
     <div id="progress-fill" class="h-full rounded-full bg-gradient-to-r from-amber-300 to-pink-400" style="width:0%"></div>
   </div>
-  <p id="counter" class="text-center text-xs tracking-widest text-white/50"></p>
+  <div class="relative flex items-center justify-center">
+    <p id="counter" class="text-center text-xs tracking-widest text-white/50"></p>
+    <button id="auto-toggle" type="button" role="switch" aria-pressed="false"
+            aria-label="Auto-advance one page every 5 seconds"
+            title="Auto-advance one page every 5 seconds"
+            class="absolute right-0 flex items-center gap-2 text-xs uppercase tracking-widest
+                   text-white/50 transition hover:text-white/80">
+      <span class="track relative block h-5 w-9 rounded-full bg-white/15">
+        <span class="knob absolute left-0.5 top-0.5 block h-4 w-4 rounded-full bg-white shadow"></span>
+      </span>
+      <span>Auto</span>
+    </button>
+  </div>
 </div>
 {% endif %}
 
@@ -78,15 +96,42 @@
     const fill = document.getElementById("progress-fill");
     const prev = document.getElementById("prev");
     const next = document.getElementById("next");
+    const autoToggle = document.getElementById("auto-toggle");
     if (!slides.length) return;
 
+    const AUTO_MS = 5000;
     let i = 0;
+    let auto = false;
+    let timer = null;
+
+    function clearTimer() {
+      if (timer !== null) { clearTimeout(timer); timer = null; }
+    }
+    // Auto mode: once past the cover, step one page every AUTO_MS until the
+    // last page, then stop. Rescheduled on every show() (manual or auto), so a
+    // manual page-turn restarts the 5s clock rather than double-advancing.
+    function scheduleAuto() {
+      clearTimer();
+      if (!auto) return;
+      if (i < slides.length - 1) {
+        timer = setTimeout(() => show(i + 1), AUTO_MS);
+      } else {
+        setAuto(false);  // reached the last page — nothing left to advance to
+      }
+    }
+    function setAuto(on) {
+      auto = on;
+      if (autoToggle) autoToggle.setAttribute("aria-pressed", on ? "true" : "false");
+      if (on) scheduleAuto(); else clearTimer();
+    }
+
     function show(n) {
       i = Math.max(0, Math.min(slides.length - 1, n));
       slides.forEach((s, idx) => { s.hidden = idx !== i; });
       if (counter) counter.textContent = (i + 1) + " / " + slides.length;
       if (fill) fill.style.width = ((i + 1) / slides.length * 100) + "%";
       window.scrollTo({ top: 0, behavior: "smooth" });
+      scheduleAuto();
     }
     function openBook() {
       cover.classList.add("opening");
@@ -99,6 +144,7 @@
     document.getElementById("open-book").addEventListener("click", openBook);
     prev && prev.addEventListener("click", () => show(i - 1));
     next && next.addEventListener("click", () => show(i + 1));
+    autoToggle && autoToggle.addEventListener("click", () => setAuto(!auto));
     document.addEventListener("keydown", (e) => {
       if (cover.style.display === "none") {
         if (e.key === "ArrowRight") show(i + 1);

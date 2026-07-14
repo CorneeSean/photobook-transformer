@@ -121,6 +121,27 @@ def test_album_without_segments_renders(session: Session, tmp_path: Path) -> Non
     assert "segment-ribbon" not in html  # no divider without a segment
 
 
+def test_book_has_auto_advance_control(session: Session, tmp_path: Path) -> None:
+    """The viewer ships an 'Auto' switch that steps a page every 5 seconds."""
+    album = make_album(slug="auto")
+    make_photo(
+        album,
+        immich_asset_id="a1",
+        selected=True,
+        page_number=1,
+        rendered_path=_rendered_file(tmp_path, "x.jpg"),
+    )
+    session.add(album)
+    session.commit()
+
+    HtmlPrinter(output_dir=tmp_path).print(album, session)
+
+    html = (tmp_path / "auto" / "book" / "index.html").read_text(encoding="utf-8")
+    assert 'id="auto-toggle"' in html
+    assert 'role="switch"' in html
+    assert "AUTO_MS = 5000" in html  # 5-second cadence
+
+
 def test_multi_segment_draws_one_divider_per_segment_in_order(
     session: Session, tmp_path: Path
 ) -> None:

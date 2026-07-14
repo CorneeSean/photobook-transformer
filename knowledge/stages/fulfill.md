@@ -16,7 +16,8 @@ a second run is a no-op unless `force=True`). The output *medium* is swappable:
 
 - **`HtmlPrinter` (default).** Renders a single self-contained `index.html` — a
   browsable, page-by-page viewer with captions, segment dividers, and a bit of
-  live-flow feel (animated page turns, a progress bar) — from the on-disk
+  live-flow feel (animated page turns, a progress bar, an "Auto" switch that
+  advances a page every 5s to the end) — from the on-disk
   rendered photos. Needs **no external service or credentials**, so it's the
   default output: unlike every other pipeline dependency (Immich, Claude,
   darktable, Lulu), the HTML book renders from what's already on disk. Images are
