@@ -2,6 +2,39 @@
 
 ## 2026-07-14
 
+* **Decision: keep the local ML pipeline — do not offload to Immich or read its
+  DB** (user-directed, resolves [open question #6](/open-questions.md)). Deep web
+  research into what Immich computes and stores concluded we cannot drop
+  `open_clip` (ViT-L/14) + the LAION aesthetic head:
+    * **Immich has no aesthetic/quality score** — only a manual/Lightroom-imported
+      star `rating`. Automated best-of-scene curation is entirely ours.
+    * **Its CLIP embeddings are in an incompatible vector space.** Immich's default
+      smart-search model is a **SigLIP** variant; the LAION aesthetic predictor is
+      a linear head trained on **OpenAI CLIP ViT-L/14** (768-dim). SigLIP
+      (sigmoid loss, WebLI corpus) ≠ OpenAI CLIP (softmax, LAION) even at equal
+      dimension, so Immich's embeddings can't feed the predictor. Forcing Immich
+      onto `ViT-L-14-336__openai` would degrade the user's *search* (SigLIP is
+      better for it) — a bad coupling to impose.
+    * **Therefore the CLIP backbone is unavoidable** (aesthetics needs it), and
+      once it runs, `cluster`/`select` embeddings come free from the same pass —
+      leaving nothing for Immich to offload.
+    * **Reading Immich's Postgres directly was rejected.** Embeddings live in
+      `smart_search.embedding` (`vector(N)`, N = configured-model-dependent) and
+      face vectors in `face_search.embedding` (`vector(512)`, InsightFace
+      `buffalo_l`), but the internal schema is an unversioned, churning contract:
+      the vector extension migrated pgvecto.rs → pgvector/VectorChord, the
+      embedding column width changes when the user switches CLIP model, and face
+      embeddings moved `asset_faces` → `face_search` across releases (upgrade
+      breakage in the wild). That violates the [architecture](/architecture.md)
+      firewall against touching Immich's schema — too fragile to save a forward
+      pass we keep anyway.
+    * A **local-ML-free "minimal" variant** is technically possible (rank
+      `select` on Immich star `rating` + faces + duplicate groups; temporal-only
+      `cluster`; drop CLIP near-dup in favor of Immich duplicate groups) but
+      trades away the core curation value — **not taken**. The faces/rating/OCR
+      [enrichment playbook](/immich-enrichment.md) is unaffected (additive,
+      API-only). [Open question #1](/open-questions.md) (no embeddings on the API)
+      stands, re-confirmed against the current API.
 * **Review process: cap sub-agent review at ≤3 broad-scope agents**
   (user-directed, token-saving): `implementation-workflow.md` step 6 and the
   `AGENTS.md` loop summary now say to run a **maximum of 3 essential,

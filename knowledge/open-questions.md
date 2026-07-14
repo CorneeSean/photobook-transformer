@@ -58,3 +58,27 @@ Resolve early; record answers back into this bundle (and note them in
    ~300–500 selected photos before running it, and confirm it's acceptable. (Note
    the [single combined vision call](/architecture.md) halves the number of image
    uploads versus separate enhance/caption calls.)
+
+6. ~~**Can we offload the local ML (`open_clip` + LAION aesthetic head) to
+   Immich — reuse its embeddings, or read them from its DB — and drop the
+   dependency?**~~ **RESOLVED (2026-07-14, user-directed): No — keep the local ML
+   pipeline.** The deciding fact: Immich computes **no aesthetic/quality score**,
+   and its CLIP embeddings default to a **SigLIP** model whose vector space is
+   *incompatible* with the LAION aesthetic predictor (trained on **OpenAI CLIP
+   ViT-L/14**, 768-dim — SigLIP's sigmoid/WebLI space ≠ OpenAI's softmax/LAION
+   space, even at the same dimension). So aesthetic scoring forces us to run
+   ViT-L/14 (`open_clip`) ourselves regardless — and once it's running, the
+   `cluster`/`select` embeddings come free from the same forward pass, leaving
+   nothing for Immich to offload. Reading embeddings from **Immich's Postgres was
+   rejected**: its internal schema is an unversioned, churning contract (vector
+   extension migrated pgvecto.rs → pgvector/VectorChord; `smart_search.embedding`
+   width changes with the configured model; face embeddings moved
+   `asset_faces` → `face_search` across releases), which violates the
+   [architecture](/architecture.md) firewall against touching Immich's schema —
+   too fragile a coupling to save a forward pass we're keeping anyway. A
+   local-ML-free "minimal" variant is *possible* (rank `select` on Immich star
+   `rating` + faces + duplicate groups, temporal-only `cluster`) but trades away
+   the automated best-of-scene curation that is the pipeline's core value — not
+   taken. The faces/rating/OCR enrichment ([Immich enrichment](/immich-enrichment.md))
+   is unaffected: it's additive and API-only. See the full research write-up in
+   [`log.md`](/log.md) 2026-07-14.
