@@ -140,6 +140,39 @@ def test_book_has_auto_advance_control(session: Session, tmp_path: Path) -> None
     assert 'id="auto-toggle"' in html
     assert 'role="switch"' in html
     assert "AUTO_MS = 5000" in html  # 5-second cadence
+    # A per-step countdown bar drains toward each auto page turn.
+    assert 'id="auto-countdown-fill"' in html
+    assert "runCountdown" in html
+
+
+def test_viewer_uses_semantic_landmarks(session: Session, tmp_path: Path) -> None:
+    """The viewer is built from semantic elements, not anonymous <div>s: the
+    pager is a <nav>, the chrome a <footer>, the chapter flourish an <aside>
+    status region, the reading bar a progressbar, and each photo a <figure>."""
+    album = make_album(slug="semantic", title="Semantic Book")
+    segment = make_segment(album, label="Chapter One", place="Somewhere")
+    make_photo(
+        album,
+        immich_asset_id="a1",
+        selected=True,
+        page_number=1,
+        segment=segment,
+        rendered_path=_rendered_file(tmp_path, "x.jpg"),
+        caption="a cat",
+    )
+    session.add(album)
+    session.commit()
+
+    HtmlPrinter(output_dir=tmp_path).print(album, session)
+
+    html = (tmp_path / "semantic" / "book" / "index.html").read_text(encoding="utf-8")
+    assert "<nav aria-label=" in html  # pager
+    assert '<footer id="hud"' in html  # bottom chrome
+    assert '<aside id="stage-transition"' in html  # chapter flourish
+    assert 'role="progressbar"' in html  # reading progress
+    assert "<figure" in html and "<figcaption" in html  # photo card
+    assert "<header" in html  # a segment's first page carries a chapter header
+    assert 'id="stage"' not in html  # the old wrapper <div> is gone
 
 
 def test_multi_segment_draws_one_divider_per_segment_in_order(
@@ -181,6 +214,11 @@ def test_multi_segment_draws_one_divider_per_segment_in_order(
     assert html.count("segment-ribbon") == 2
     # ...and in page order: Day 1's ribbon precedes Day 2's.
     assert html.index("Day 1") < html.index("Day 2")
+    # Each segment's first slide carries the data the stage-transition flourish
+    # reads — one per segment (on the first page), not on continuation pages.
+    assert html.count("data-segment-label=") == 2
+    assert 'data-segment-label="Day 1"' in html
+    assert 'data-segment-place="Perast"' in html
 
 
 def test_raises_when_nothing_assembled(session: Session, tmp_path: Path) -> None:

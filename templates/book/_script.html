@@ -1,0 +1,116 @@
+<script>
+  // Viewer behavior: paging, the Auto auto-advance mode with its per-step
+  // countdown, and the between-chapter stage transition. Plain vanilla JS over
+  // the ids the component macros emit — no framework, no build.
+  (function () {
+    const slides = Array.from(document.querySelectorAll(".slide"));
+    const cover = document.getElementById("cover");
+    const hud = document.getElementById("hud");
+    const counter = document.getElementById("counter");
+    const pageProgress = document.getElementById("page-progress");
+    const fill = document.getElementById("progress-fill");
+    const prev = document.getElementById("prev");
+    const next = document.getElementById("next");
+    const autoToggle = document.getElementById("auto-toggle");
+    const countdown = document.getElementById("auto-countdown");
+    const countdownFill = document.getElementById("auto-countdown-fill");
+    const stageTransition = document.getElementById("stage-transition");
+    const stLabel = document.getElementById("st-label");
+    const stPlace = document.getElementById("st-place");
+    if (!slides.length) return;
+
+    const AUTO_MS = 5000;
+    // Matches --cover-ms in _styles.html: hide the cover only once it has faded.
+    const COVER_MS = 1100;
+    let i = 0;
+    let auto = false;
+    let timer = null;
+
+    function clearTimer() {
+      if (timer !== null) { clearTimeout(timer); timer = null; }
+    }
+    // Restart the countdown bar's 0→100% fill so it drains over exactly AUTO_MS,
+    // ending as the next page turns. The reflow read forces the reset to apply
+    // before the timed transition, so the bar always starts empty.
+    function runCountdown() {
+      if (!countdownFill) return;
+      countdownFill.style.transition = "none";
+      countdownFill.style.width = "0%";
+      void countdownFill.offsetWidth;  // reflow: commit width:0 before transitioning
+      countdownFill.style.transition = "width " + AUTO_MS + "ms linear";
+      countdownFill.style.width = "100%";
+    }
+    function stopCountdown() {
+      if (!countdownFill) return;
+      countdownFill.style.transition = "none";
+      countdownFill.style.width = "0%";
+    }
+    // Announce a new segment with a flourish when we land on its first page.
+    // Restarting the animation needs the class removed + a reflow.
+    function playStageTransition(label, place) {
+      if (!stageTransition || !label) return;
+      if (stLabel) stLabel.textContent = label;
+      if (stPlace) {
+        stPlace.textContent = place || "";
+        stPlace.style.display = place ? "" : "none";
+      }
+      stageTransition.classList.remove("play");
+      void stageTransition.offsetWidth;  // reflow: allow the animation to replay
+      stageTransition.classList.add("play");
+    }
+
+    // Auto mode: once past the cover, step one page every AUTO_MS until the
+    // last page, then stop. Rescheduled on every show() (manual or auto), so a
+    // manual page-turn restarts the 5s clock rather than double-advancing.
+    function scheduleAuto() {
+      clearTimer();
+      if (!auto) return;
+      if (i < slides.length - 1) {
+        timer = setTimeout(() => show(i + 1), AUTO_MS);
+        runCountdown();
+      } else {
+        setAuto(false);  // reached the last page — nothing left to advance to
+      }
+    }
+    function setAuto(on) {
+      auto = on;
+      if (autoToggle) autoToggle.setAttribute("aria-pressed", on ? "true" : "false");
+      if (countdown) countdown.classList.toggle("hidden", !on);
+      if (on) { scheduleAuto(); } else { clearTimer(); stopCountdown(); }
+    }
+
+    function show(n) {
+      i = Math.max(0, Math.min(slides.length - 1, n));
+      slides.forEach((s, idx) => { s.hidden = idx !== i; });
+      if (counter) counter.textContent = (i + 1) + " / " + slides.length;
+      if (fill) fill.style.width = ((i + 1) / slides.length * 100) + "%";
+      if (pageProgress) pageProgress.setAttribute("aria-valuenow", i + 1);
+      const active = slides[i];
+      if (active && active.dataset.segmentLabel) {
+        playStageTransition(active.dataset.segmentLabel, active.dataset.segmentPlace);
+      }
+      window.scrollTo({ top: 0, behavior: "smooth" });
+      scheduleAuto();
+    }
+    function openBook() {
+      cover.classList.add("opening");
+      setTimeout(() => { cover.style.display = "none"; }, COVER_MS);
+      [prev, next].forEach(b => b && b.classList.replace("hidden", "block"));
+      if (hud) hud.classList.replace("hidden", "flex");
+      show(0);
+    }
+
+    document.getElementById("open-book").addEventListener("click", openBook);
+    prev && prev.addEventListener("click", () => show(i - 1));
+    next && next.addEventListener("click", () => show(i + 1));
+    autoToggle && autoToggle.addEventListener("click", () => setAuto(!auto));
+    document.addEventListener("keydown", (e) => {
+      if (cover.style.display === "none") {
+        if (e.key === "ArrowRight") show(i + 1);
+        if (e.key === "ArrowLeft") show(i - 1);
+      } else if (e.key === "ArrowRight" || e.key === "Enter") {
+        openBook();
+      }
+    });
+  })();
+</script>

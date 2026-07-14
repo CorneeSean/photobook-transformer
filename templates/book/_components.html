@@ -1,41 +1,57 @@
 {#
-  Reusable presentational components for the HTML book viewer, as Jinja macros —
-  the "component library" the viewer composes from. Each takes plain dict context
-  (built in album/printers/html.py) and emits Tailwind-styled markup. Kept
-  presentation-only: no navigation/state logic lives here (that's viewer.html's
-  small JS).
+  Component library for the HTML book viewer, as Jinja macros — one macro per
+  self-contained UI piece, composed by `viewer.html`. Each takes plain dict
+  context (built in album/printers/html.py) and emits semantic, Tailwind-styled
+  markup. Kept presentation-only: no navigation/state logic lives here (that's
+  `_script.html`'s job); the ids/classes below are the contract that script and
+  `_styles.html` reference.
+
+  Pieces:
+    cover(title, page_count)   — the openable title screen
+    book(pages)                — the paged <main>, composed of page() articles
+    page(page, index)          — one <article> spread (segment header + photos)
+    photo(photo)               — one <figure> photo card
+    segment_ribbon(label, place) — the chapter badge shown atop a segment
+    pager()                    — the prev/next <nav>
+    hud(page_count)            — the bottom <footer>: progress, countdown, Auto
+    stage_transition()         — the between-chapter flourish overlay
 #}
 
-{% macro segment_ribbon(label, place) %}
-<div class="segment-ribbon inline-flex items-center gap-2 rounded-full bg-white/10 px-4 py-1.5
-            text-sm font-medium tracking-wide text-amber-100 ring-1 ring-white/15 backdrop-blur">
-  <span class="h-2 w-2 rounded-full bg-amber-300 shadow-[0_0_8px_2px_rgba(252,211,77,0.6)]"></span>
-  <span>{{ label }}</span>
-  {% if place %}<span class="text-amber-200/60">·&nbsp;{{ place }}</span>{% endif %}
-</div>
+{% macro cover(title, page_count) %}
+<section id="cover"
+         class="fixed inset-0 z-20 flex flex-col items-center justify-center gap-8 px-6 text-center">
+  <p class="text-sm uppercase tracking-[0.4em] text-amber-200/70">A photo book</p>
+  <h1 class="title-glow max-w-3xl text-5xl font-semibold sm:text-7xl">{{ title }}</h1>
+  <button id="open-book"
+          class="rounded-full bg-amber-400/90 px-8 py-3 font-medium text-stone-900
+                 shadow-lg shadow-amber-500/30 transition hover:scale-105 hover:bg-amber-300">
+    Open the book →
+  </button>
+  <p class="text-sm text-white/40">{{ page_count }} page{{ '' if page_count == 1 else 's' }}</p>
+</section>
 {% endmacro %}
 
-{% macro photo_card(photo) %}
-<figure class="photo-card group relative overflow-hidden rounded-xl bg-black/30 shadow-lg
-               shadow-black/40 ring-1 ring-white/10">
-  <img src="{{ photo.src }}" alt="{{ photo.caption or '' }}" loading="lazy"
-       class="h-full w-full object-cover transition duration-700 group-hover:scale-[1.03]">
-  {% if photo.caption %}
-  <figcaption class="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/80 via-black/40
-                     to-transparent p-3 text-sm text-stone-100 opacity-0 transition
-                     duration-300 group-hover:opacity-100">
-    {{ photo.caption }}
-  </figcaption>
+{% macro book(pages) %}
+<main id="book"
+      class="mx-auto flex min-h-screen max-w-5xl flex-col justify-center px-4 py-16 sm:px-8">
+  {% for page in pages %}{{ page_slide(page, loop.index0) }}{% endfor %}
+  {% if not pages %}
+  <p class="text-center text-white/50">This book has no pages yet.</p>
   {% endif %}
-</figure>
+</main>
 {% endmacro %}
 
 {% macro page_slide(page, index) %}
-<article class="slide" data-index="{{ index }}" hidden>
+<article class="slide" data-index="{{ index }}"
   {% if page.starts_segment and page.segment_label %}
-  <div class="mb-5 flex justify-center">
+  data-segment-label="{{ page.segment_label }}"
+  {% if page.segment_place %}data-segment-place="{{ page.segment_place }}"{% endif %}
+  {% endif %}
+  hidden>
+  {% if page.starts_segment and page.segment_label %}
+  <header class="mb-5 flex justify-center">
     {{ segment_ribbon(page.segment_label, page.segment_place) }}
-  </div>
+  </header>
   {% endif %}
   <div class="photo-grid grid gap-3 sm:gap-4
               {% if page.photos|length == 1 %}grid-cols-1
@@ -43,8 +59,87 @@
               {% else %}grid-cols-1 sm:grid-cols-2 lg:grid-cols-3{% endif %}">
     {% for photo in page.photos %}{{ photo_card(photo) }}{% endfor %}
   </div>
-  <p class="mt-6 text-center text-xs uppercase tracking-[0.3em] text-white/30">
+  <footer class="mt-6 text-center text-xs uppercase tracking-[0.3em] text-white/30">
     Page {{ page.number }}
-  </p>
+  </footer>
 </article>
+{% endmacro %}
+
+{% macro photo_card(photo) %}
+<figure class="photo-card group relative overflow-hidden rounded-xl bg-black/30 shadow-lg
+               shadow-black/40 ring-1 ring-white/10">
+  <img src="{{ photo.src }}" alt="{{ photo.caption or '' }}" loading="lazy"
+       class="h-full w-full object-cover transition duration-700 ease-out group-hover:scale-[1.03]">
+  {% if photo.caption %}
+  <figcaption class="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/80 via-black/40
+                     to-transparent p-3 text-sm text-stone-100 opacity-0 transition
+                     duration-500 ease-out group-hover:opacity-100">
+    {{ photo.caption }}
+  </figcaption>
+  {% endif %}
+</figure>
+{% endmacro %}
+
+{% macro segment_ribbon(label, place) %}
+<p class="segment-ribbon inline-flex items-center gap-2 rounded-full bg-white/10 px-4 py-1.5
+          text-sm font-medium tracking-wide text-amber-100 ring-1 ring-white/15 backdrop-blur">
+  <span class="h-2 w-2 rounded-full bg-amber-300 shadow-[0_0_8px_2px_rgba(252,211,77,0.6)]"></span>
+  <span>{{ label }}</span>
+  {% if place %}<span class="text-amber-200/60">·&nbsp;{{ place }}</span>{% endif %}
+</p>
+{% endmacro %}
+
+{% macro pager() %}
+<nav aria-label="Page navigation">
+  <button id="prev" aria-label="Previous page"
+          class="fixed left-3 top-1/2 z-10 hidden -translate-y-1/2 rounded-full bg-white/10 p-3
+                 text-2xl leading-none ring-1 ring-white/15 backdrop-blur transition
+                 hover:bg-white/20 sm:block">‹</button>
+  <button id="next" aria-label="Next page"
+          class="fixed right-3 top-1/2 z-10 hidden -translate-y-1/2 rounded-full bg-white/10 p-3
+                 text-2xl leading-none ring-1 ring-white/15 backdrop-blur transition
+                 hover:bg-white/20 sm:block">›</button>
+</nav>
+{% endmacro %}
+
+{% macro hud(page_count) %}
+<footer id="hud" class="fixed inset-x-0 bottom-0 z-10 hidden flex-col gap-2 px-6 pb-4">
+  <div id="page-progress" role="progressbar" aria-label="Reading progress"
+       aria-valuemin="0" aria-valuemax="{{ page_count }}" aria-valuenow="0"
+       class="h-1 w-full overflow-hidden rounded-full bg-white/10">
+    <div id="progress-fill"
+         class="h-full rounded-full bg-gradient-to-r from-amber-300 to-pink-400" style="width:0%"></div>
+  </div>
+  <!-- Per-step countdown to the next auto page turn; decorative, shown only in auto mode. -->
+  <div id="auto-countdown" aria-hidden="true"
+       class="hidden h-0.5 w-full overflow-hidden rounded-full bg-white/5">
+    <div id="auto-countdown-fill" class="h-full rounded-full bg-amber-200/70"></div>
+  </div>
+  <div class="relative flex items-center justify-center">
+    <p id="counter" class="text-center text-xs tracking-widest text-white/50"></p>
+    <button id="auto-toggle" type="button" role="switch" aria-pressed="false"
+            aria-label="Auto-advance one page every 5 seconds"
+            title="Auto-advance one page every 5 seconds"
+            class="absolute right-0 flex items-center gap-2 text-xs uppercase tracking-widest
+                   text-white/50 transition hover:text-white/80">
+      <span class="track relative block h-5 w-9 rounded-full bg-white/15">
+        <span class="knob absolute left-0.5 top-0.5 block h-4 w-4 rounded-full bg-white shadow"></span>
+      </span>
+      <span>Auto</span>
+    </button>
+  </div>
+</footer>
+{% endmacro %}
+
+{% macro stage_transition() %}
+<!-- Flashed when arriving on a page that starts a new segment; announces the
+     chapter politely to assistive tech (role=status), decorative visually. -->
+<aside id="stage-transition" role="status" aria-live="polite"
+       class="pointer-events-none fixed inset-0 z-30 flex items-center justify-center opacity-0">
+  <div class="px-6 text-center">
+    <p class="text-[0.7rem] uppercase tracking-[0.5em] text-amber-200/70">New chapter</p>
+    <h2 id="st-label" class="title-glow mt-3 text-4xl font-semibold text-white sm:text-6xl"></h2>
+    <p id="st-place" class="mt-2 text-lg text-amber-100/70"></p>
+  </div>
+</aside>
 {% endmacro %}

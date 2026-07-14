@@ -9,9 +9,11 @@ reach, but the HTML book renders from what's already on disk.
 
 The page pulls Tailwind + a few keyframe animations from a CDN for styling and a
 bit of live-flow feel (a cover you open into the book, animated page turns, a
-progress bar, and an "Auto" switch that steps a page every 5s to the end), and a
-small vanilla-JS navigator for keyboard/click paging — but it stays *one static
-file*, deliberately not a web app. Photos are referenced by
+progress bar, and an "Auto" switch that steps a page every 5s to the end — with
+a countdown bar draining toward each turn and a flourish announcing each new
+segment as you arrive on it), and a small vanilla-JS navigator for keyboard/click
+paging — but it stays *one static file*, deliberately not a web app. Photos are
+referenced by
 a path **relative to the written HTML file** (computed from each photo's
 ``rendered_path``), so the browser loads the rendered images straight from disk.
 """

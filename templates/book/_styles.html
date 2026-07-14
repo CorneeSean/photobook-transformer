@@ -1,0 +1,54 @@
+<style>
+  /* A warm, filmic palette + the animations that give the book a bit of life.
+     One static file: no framework, no build — just keyframes and a little JS.
+     Transitions are deliberately unhurried (long durations + a soft
+     ease-out curve) so paging and chapter changes feel gentle, not snappy. */
+  :root {
+    /* Shared soft ease-out; keep in sync with COVER_MS in _script.html. */
+    --ease-soft: cubic-bezier(0.22, 1, 0.36, 1);
+    --cover-ms: 1100ms;
+  }
+  body {
+    background:
+      radial-gradient(1200px 600px at 20% -10%, rgba(251,191,36,0.12), transparent 60%),
+      radial-gradient(900px 500px at 100% 0%, rgba(244,114,182,0.10), transparent 55%),
+      #0c0a09;
+    color: #f5f5f4;
+    font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
+  }
+  @keyframes slide-in {
+    from { opacity: 0; transform: translateY(22px) scale(0.98); filter: blur(6px); }
+    to   { opacity: 1; transform: none; filter: blur(0); }
+  }
+  @keyframes cover-out {
+    to { opacity: 0; transform: scale(1.05); pointer-events: none; }
+  }
+  /* Slower page reveal so each spread eases in rather than snapping. */
+  .slide:not([hidden]) { animation: slide-in 0.95s var(--ease-soft); }
+  #cover.opening { animation: cover-out var(--cover-ms) var(--ease-soft) forwards; }
+  .title-glow { text-shadow: 0 2px 40px rgba(251,191,36,0.35); }
+  #progress-fill { transition: width 0.9s var(--ease-soft); }
+  /* Auto-advance switch (driven by aria-pressed, no extra state class). */
+  #auto-toggle .knob { transition: transform 0.35s var(--ease-soft); }
+  #auto-toggle[aria-pressed="true"] .track {
+    background: linear-gradient(to right, #fcd34d, #f472b6);
+  }
+  #auto-toggle[aria-pressed="true"] .knob { transform: translateX(1rem); }
+  /* Per-step countdown: JS restarts a `width 0→100%` transition over AUTO_MS
+     each auto step, so the bar visibly drains toward the next page turn. */
+  #auto-countdown-fill { width: 0%; }
+  /* Stage (segment) transition: an unhurried full-screen flourish announcing
+     each new chapter as you arrive on its first page. `.play` (re)starts it;
+     it lingers (holds opacity 1 from 14%–82%) before easing away. */
+  @keyframes stage-sweep {
+    0%   { opacity: 0; transform: translateY(18px) scale(0.955); filter: blur(8px); }
+    14%  { opacity: 1; transform: none; filter: blur(0); }
+    82%  { opacity: 1; transform: none; filter: blur(0); }
+    100% { opacity: 0; transform: translateY(-18px) scale(1.03); filter: blur(8px); }
+  }
+  #stage-transition.play { animation: stage-sweep 2.8s var(--ease-soft) forwards; }
+  @media (prefers-reduced-motion: reduce) {
+    .slide:not([hidden]), #cover.opening, #stage-transition.play { animation: none; }
+    #progress-fill, #auto-countdown-fill { transition: none !important; }
+  }
+</style>
