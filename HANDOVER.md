@@ -1,26 +1,28 @@
 # Handover — start here
 
 Photo Album Pipeline: a resumable batch pipeline that turns a raw photo dump into
-a printed, curated photo book. **Steps 0–15 are done and merged to `main`; the
-next job is step 16 (prove genericity — the last step).** `main` is clean and
-`uv run poe check` is green (160 tests). Always take the lowest-numbered `todo` in
-[`knowledge/progress.md`](./knowledge/progress.md) as the next step, and read its
-**Notes / blockers** section first — it's long now (toolchain landmines, deferred
-live-integration checks, the parallel-build note) and directly shapes how the
-next step should be approached.
+a printed, curated photo book. **All 16 build steps are done and merged to
+`main` — the build order is complete.** `main` is clean and `uv run poe check`
+is green (161 tests, run with `TESTCONTAINERS_RYUK_DISABLED=true` in this kind
+of sandbox — see Golden rules). There is no next numbered step; what's left is
+either **closing a deferred live-integration check** (see
+[`knowledge/progress.md`](./knowledge/progress.md)'s Notes / blockers section —
+read it in full, it's long) or new, user-directed work.
 
 ## How to start the conversation
 
-Paste this to a fresh agent:
+There's no fixed next build step anymore, so there's no one canonical prompt.
+For closing a deferred item or new work, a fresh agent should still:
 
 > Read `AGENTS.md`, then `knowledge/index.md` and
-> `knowledge/implementation-workflow.md`. Check `knowledge/progress.md` for the
-> next `todo` step (currently step 16) — read its **Notes / blockers** section
-> first, in full. Implement **only that one step**, following the workflow
-> (branch off `main`, TDD, then checks → sub-agent review → squash → fast-forward
-> merge — the human-review gate is skipped per standing instruction, see the
-> tracker's process-change note). Stop and show me your plan for the step before
-> writing code.
+> `knowledge/implementation-workflow.md`. Read `knowledge/progress.md`'s
+> **Notes / blockers** section in full — it lists everything still deferred
+> (live Immich/Claude/Lulu/darktable-cli checks) and any new work the user
+> describes. Follow the same workflow used for every build step (branch off
+> `main`, TDD where applicable, then checks → sub-agent review → squash →
+> fast-forward merge — the human-review gate is skipped per standing
+> instruction, see the tracker's process-change note). Stop and show a plan
+> before writing code.
 
 ## What to read first
 
@@ -30,14 +32,15 @@ Paste this to a fresh agent:
    — the per-step delivery loop (this is mandatory).
 4. [`knowledge/progress.md`](./knowledge/progress.md) — current per-step status
    **and its "Notes / blockers" section — read this in full, not just skimmed**;
-   it now documents several still-open deferred items step 16 will run into.
-5. [`knowledge/build-order.md`](./knowledge/build-order.md) — the step to do, plus
-   the concept docs it links (that's the step's context).
+   it documents every still-open deferred item.
+5. [`knowledge/build-order.md`](./knowledge/build-order.md) — the full,
+   now-complete step list, for context on how each stage was built.
 
 ## Where things stand
 
-Merged and `done` (see [`knowledge/progress.md`](./knowledge/progress.md) and
-[`knowledge/log.md`](./knowledge/log.md) for full detail — this is a summary):
+All merged and `done` (see [`knowledge/progress.md`](./knowledge/progress.md)
+and [`knowledge/log.md`](./knowledge/log.md) for full detail — this is a
+summary):
 
 - **0 Scaffold** (`11d290f`) — `uv` project, ruff/basedpyright/pytest + poe tasks,
   `album` entry point, package skeleton, pre-commit (`no-commit-to-branch`).
@@ -81,18 +84,30 @@ Merged and `done` (see [`knowledge/progress.md`](./knowledge/progress.md) and
   client-credentials). **Still open:** no PDF-hosting/upload mechanism, so
   a real submission raises `UnreachablePdfError` rather than send Lulu an
   unfetchable local path.
+- **16 Prove genericity** (`d7e903d`) — added
+  `data/albums/smith-wedding/album.yml`, a real, structurally different
+  (wedding-shaped: hour-scale segments, single day) album, plus
+  `tests/test_genericity.py`. **Zero `src/` files changed** — confirmed the
+  abstraction. Live run verified against real Postgres+Prefect: bootstraps
+  correctly, fails at the same no-reachable-Immich `sync` boundary as step
+  14. The build order is now complete.
 
-## Next step
+## What's left — closing deferred items, not new build steps
 
-**Step 16 — prove genericity** (the last build step). Read its entry in
-[build-order.md](./knowledge/build-order.md): run a *structurally different*
-album end-to-end (a wedding — hour-scale segments, single day, GPS present —
-or a segment-less dump) and confirm it needs **only** `album.yml` + an Immich
-album, no code change. This is blocked on the same infrastructure gap step 14
-hit: no reachable Immich instance with real photos in this sandbox. What *can*
-be done without live infra (a static/structural genericity audit of `src/`,
-plus whatever the next agent judges reasonable) vs. what must stay deferred is
-a judgment call for whoever picks this up — read the tracker's notes first.
+Every remaining gap is the same shape: this sandbox has no reachable live
+Immich instance, `ANTHROPIC_API_KEY`, `darktable-cli` binary (only in the
+Docker app image), or Lulu sandbox credentials. Nothing is blocked on missing
+code — see [`knowledge/progress.md`](./knowledge/progress.md)'s Notes /
+blockers section for the full, current list, including:
+
+- A genuinely full `album run --album <slug>` (real sync → real quality
+  scoring → ... → real Lulu order) once all four are available.
+- The real LAION/open_clip aesthetic scorer + CLIP embedder (step 6's
+  deferral) — `_UnavailableQualityModel` in `flow.py` stands in for it.
+- A PDF-hosting/upload mechanism so `fulfill` can give Lulu a fetchable
+  `http(s)://` URL instead of a local path (step 15's gap).
+- Manual spot-checks that need real data: darktable render quality, caption
+  accuracy/non-genericity, and a live Lulu single-copy test order.
 
 ## Parallelization
 
@@ -101,22 +116,23 @@ git worktrees/branches (a deliberate, user-approved exception to "strictly in
 order" — see the tracker's 2026-07-14 parallel-build note for exactly how
 that was done for steps 10+13+15 and 11+12: dependency-check first, self-review
 each branch, one coordinator merges serially and reconciles any shared-file
-conflicts, e.g. two branches independently adding the same DB column). Step 16
-is the only step left, so this doesn't apply right now — but check for this
-opportunity on any future multi-step batch of work.
+conflicts, e.g. two branches independently adding the same DB column). Applies
+to future deferred-item or new-feature work too, if it splits similarly.
 
 ## Golden rules
 
-- **Never work on or commit to `main`.** One step per branch.
+- **Never work on or commit to `main`.** One unit of work per branch, even for
+  docs-only changes — the `no-commit-to-branch` hook blocks *any* direct
+  commit to `main`.
 - **Order is fixed:** checks green → sub-agent (automated) review → commit. The
   human-review gate is skipped per the user's standing instruction; merge
   autonomously once checks + sub-agent review are clean. Re-run checks after every
   change round — **including immediately before the commit** (a `ruff`/py314 bug
   can silently reintroduce invalid syntax; see log 2026-07-13).
-- Update `knowledge/progress.md` and `knowledge/log.md` **on the step branch,
-  before the fast-forward merge** — `main` is commit-protected, so a post-merge
-  docs commit can't land without a second branch.
+- Update `knowledge/progress.md` and `knowledge/log.md` **on the working
+  branch, before the fast-forward merge** — `main` is commit-protected, so a
+  post-merge docs commit can't land without a second branch.
 - **`TESTCONTAINERS_RYUK_DISABLED=true`** is needed for `uv run poe check` in
   this kind of sandbox (Ryuk reaper landmine, see tracker notes) — Docker
-  itself works fine here (confirmed step 14: real Postgres + Prefect server
-  brought up and torn down cleanly via `docker compose`).
+  itself works fine here (confirmed steps 14 and 16: real Postgres + Prefect
+  server brought up and torn down cleanly via `docker compose`).

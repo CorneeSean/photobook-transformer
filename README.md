@@ -35,10 +35,6 @@ uv run poe down    # docker compose down
 uv run poe migrate # alembic upgrade head
 ```
 
-`poe up`/`poe down`/`poe migrate` become functional once
-[build steps 1 and 2](./knowledge/build-order.md) land the compose file and the
-migrations; until then they will error.
-
 ## Run a pipeline end-to-end
 
 1. Add `data/albums/<slug>/album.yml` (see

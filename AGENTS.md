@@ -24,11 +24,18 @@ anything that reasons about structure.
 
 ## Current state
 
-Greenfield. Right now the repo contains only the planning docs — there is **no
-code yet**. Work proceeds through the numbered
-[**Build order**](./knowledge/build-order.md) (step 0 = scaffold). The workflow
-commands below become available once step 0 lands; until then, run the underlying
-tools directly (`uv run ruff …`, etc.).
+All 16 steps of the numbered [**Build order**](./knowledge/build-order.md) are
+done and merged to `main` — every stage (`sync` through `fulfill`) is
+implemented, wired into one Prefect flow, and step 16 confirmed the
+`Album`/`Segment` abstraction needs no code change for a structurally
+different album. See [`HANDOVER.md`](./HANDOVER.md) for a full summary and
+[`knowledge/progress.md`](./knowledge/progress.md)'s Notes / blockers section
+for what's still deferred (live-Immich/Claude/Lulu/darktable-cli checks — this
+sandbox has no reachable instances of any of them, so those are the live
+follow-ups, not new build steps). There is no more build-order work queued;
+further changes are either closing a deferred item or new, user-directed work
+— both still follow the workflow described below (branch, checks, review,
+squash-merge).
 
 ## How a step is implemented (read before writing any code)
 
