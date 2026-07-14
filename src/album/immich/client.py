@@ -128,6 +128,18 @@ class ImmichClient:
         response.raise_for_status()
         return response.content
 
+    def get_original(self, asset_id: str) -> bytes:
+        """Raw, full-resolution original bytes for an asset, via
+        ``GET /assets/{id}/original``.
+
+        Unlike :meth:`get_thumbnail` (a small downscaled JPEG for AI analysis),
+        this is the actual source pixels `render` (darktable-cli) needs — XMP
+        sidecars carry only edit instructions, not image data.
+        """
+        response = self._client.get(f"/assets/{asset_id}/original")
+        response.raise_for_status()
+        return response.content
+
     def close(self) -> None:
         self._client.close()
 

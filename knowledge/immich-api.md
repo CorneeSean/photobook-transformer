@@ -35,6 +35,7 @@ spec contains zero `embedding` fields; embeddings live only in Immich's internal
 | Asset + EXIF | `GET /assets/{id}` | `exifInfo` sub-object; see timezone note below. |
 | Duplicate groups | `GET /duplicates` | list of `{duplicateId, assets[], suggestedKeepAssetIds}`. |
 | Thumbnail bytes | `GET /assets/{id}/thumbnail?size=thumbnail` | for `quality`/`enhance`. |
+| Original bytes | `GET /assets/{id}/original` | full-resolution source pixels, for `render` (darktable-cli's input — XMP sidecars carry only edit instructions, not pixels). |
 
 Auth is the `x-api-key` header (key from Immich's web UI → Account Settings → API
 Keys), base URL includes the `/api` prefix (e.g. `http://localhost:2283/api`).

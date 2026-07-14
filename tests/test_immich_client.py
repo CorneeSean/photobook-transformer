@@ -99,6 +99,18 @@ def test_get_thumbnail_returns_bytes(client: ImmichClient) -> None:
 
 
 @respx.mock
+def test_get_original_returns_bytes(client: ImmichClient) -> None:
+    route = respx.get(f"{_BASE_URL}/assets/asset-1/original").mock(
+        return_value=httpx.Response(200, content=b"\xff\xd8\xff-full-res-jpeg-bytes")
+    )
+
+    data = client.get_original("asset-1")
+
+    assert data == b"\xff\xd8\xff-full-res-jpeg-bytes"
+    assert route.calls[0].request.method == "GET"
+
+
+@respx.mock
 def test_sends_api_key_header(client: ImmichClient) -> None:
     route = respx.get(f"{_BASE_URL}/duplicates").mock(return_value=httpx.Response(200, json=[]))
 
