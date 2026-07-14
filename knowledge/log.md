@@ -2,6 +2,27 @@
 
 ## 2026-07-14
 
+* **Build step 11 done** (commit `168940f`, `render` stage): added
+  `src/album/stages/render.py` (`darktable-cli` batch invocation over the XMP
+  sidecars `enhance` writes) and `ImmichClient.get_original()` — a real gap:
+  the client only exposed thumbnails before, but `darktable-cli` needs the
+  actual source pixels (XMP carries only edit instructions), documented in
+  `knowledge/immich-api.md`'s endpoint table. Fetches each selected photo's
+  original, stages it locally, invokes an injected `Renderer` protocol
+  (`DarktableRenderer` shells out via `subprocess.run` in the real path),
+  and sets `Photo.rendered_path` on success; a selected photo without an XMP
+  sidecar yet (`xmp_written=False`) is counted as `not_ready` rather than
+  silently dropped, mirroring `enhance.py`'s `unclustered` handling. Built in
+  parallel with step 12 (`caption`) once step 10 unblocked both. Self-review
+  (code-review skill) caught and fixed: no check that the renderer actually
+  produced an output file (trusted a "raise on failure" contract blindly);
+  the staged original was re-fetched from Immich on every retry instead of
+  reused; the staged original was never cleaned up, growing disk use
+  unboundedly — fixed to delete it after a successful render. Deferred: the
+  manual "visibly corrected JPEG" check (no `darktable-cli` on this host,
+  only in the Docker app image). ruff + basedpyright + pytest green, 146
+  tests (131 pre-existing + 15 new: 14 in `tests/test_render.py`, 1 for
+  `get_original` in `tests/test_immich_client.py`).
 * **Build step 12 done** (commit `69f82b3`, `caption` stage): added
   `src/album/stages/caption.py` — a thin stage whose only job is to iterate
   an album's `selected` photos and call `enhance.ensure_analysis()` (step

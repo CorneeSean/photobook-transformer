@@ -29,7 +29,7 @@ order, one at a time.
 | 8 | `select` stage (MMR) + `db/similarity.py` | step-08-select (merged, deleted) | done | 4fec4a1 | real pgvector query verified against a Postgres testcontainer |
 | 9 | Agent (`analysis.py`) | step-09-agent (merged, deleted) | done | 38a4057 | real-Claude sanity check deferred (no `ANTHROPIC_API_KEY`); tested via `TestModel` only |
 | 10 | `enhance` stage | step-10-enhance (merged, deleted) | done | e7fccfe | shared idempotent `ensure_analysis()` trigger (reused by step 12 `caption`); cross-camera exposure baseline via `skimage.exposure.match_histograms`; darktable-native XMP sidecars under `data/albums/<slug>/xmp/` |
-| 11 | `render` stage | — | todo | — | manual verification |
+| 11 | `render` stage | step-11-render (merged, deleted) | done | 168940f | adds `ImmichClient.get_original()` (originals weren't fetchable before — only thumbnails); manual "visibly corrected JPEG" check deferred (no `darktable-cli` on this host, only in the Docker app image) |
 | 12 | `caption` stage | step-12-caption (merged, deleted) | done | 69f82b3 | thin wrapper over `enhance`'s `ensure_analysis()`; order-independent with `enhance` (whichever runs first triggers the one shared call); manual ~20-caption spot-check deferred (no `ANTHROPIC_API_KEY`) |
 | 13 | `assemble` stage | step-13-assemble (merged, deleted) | done | 9ec5ca7 | resolves Open Q4 (Lulu 8.5x8.5in square trim, 0.125in bleed, spine = pages/444+0.06in); adds `Album.assembled_pdf_path` (own migration) — the contract step 15 reads |
 | 14 | Wire the flow | — | todo | — | |
@@ -38,6 +38,15 @@ order, one at a time.
 
 ## Notes / blockers
 
+- **Deferred manual render verification (step 11):** no `darktable-cli`
+  binary on this host (it lives only in the Docker app image, see build step
+  1) — the build order's "a rendered file exists, opens, and is visibly
+  corrected versus its original" manual check wasn't performed. The
+  orchestration around it (fetching originals, invoking the renderer,
+  idempotency, failure isolation) is fully unit-tested with an injected
+  `Renderer`/`OriginalSource` protocol instead. Same deferral pattern as
+  steps 4-5/9/15/12; do this once the Docker app image is built and
+  reachable.
 - **Deferred manual caption spot-check (step 12):** no `ANTHROPIC_API_KEY` in
   this environment, so `caption` is tested only via PydanticAI `TestModel`/
   `FunctionModel` — the build order's "spot-check ~20 captions for accuracy
