@@ -28,6 +28,30 @@
   cameras as the same. Deferred: live-Claude sanity check (no
   `ANTHROPIC_API_KEY`, same pattern as step 9). ruff + basedpyright + pytest
   green, 94 tests (74 pre-existing + 20 new).
+* **Build step 13 done** (commit `9ec5ca7`, `assemble` stage): added
+  `src/album/stages/assemble.py` + `templates/{base,section,layout_1up,
+  layout_2up,layout_3up}.html`. Resolved Open Q4 (Lulu's trim/bleed/spine
+  spec, fetched from Lulu's public OpenAPI docs on 2026-07-14): 8.5x8.5in
+  square trim, 0.125in bleed, spine width = page_count/444 + 0.06in
+  (softcover perfect-bound). Reads `selected=True` photos, groups by
+  segment/scene/timestamp, cycles them through 1up/2up/3up layouts (densest
+  first), renders via WeasyPrint to `<slug>/assembled.pdf`, and stores the
+  path on the new `Album.assembled_pdf_path` column (own migration,
+  `9e650f717355`) — the contract `fulfill` (step 15) reads. Segment-less
+  album fallback tested (genericity guard). Structural PDF assertions
+  (page count, page-box dims via `pypdf`) stand in for the build order's
+  manual "open it and look" check. Self-review (code-review skill, 8-angle,
+  run by the coordinator after the building agent hit a session limit
+  mid-self-review — see the parallel-build note above) caught and fixed:
+  `<img>` paths resolved against the templates dir instead of the process's
+  cwd (masked by every test fixture using an absolute path); the
+  zero-selected-photos fallback PDF had no `@page` size rule, defaulting to
+  WeasyPrint's A4 instead of the Lulu spec; a selected photo with no
+  `rendered_path` yet silently produced `<img src="None">` instead of
+  raising; an O(photos×segments) lookup that ignored an already-built O(1)
+  dict; a redundant second full-table query for the idempotency reset; a
+  dead fallback branch in the layout-size lookup. ruff + basedpyright +
+  pytest green, 108 tests (94 pre-existing + 14 new).
 * **Closed step 9's deferred Docker/testcontainer re-verification.** Docker
   Desktop was reinstalled, fixing the environment flakiness noted below (step 9
   entry). `TESTCONTAINERS_RYUK_DISABLED=true uv run poe check` now passes clean:

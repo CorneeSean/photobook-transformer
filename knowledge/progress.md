@@ -31,7 +31,7 @@ order, one at a time.
 | 10 | `enhance` stage | step-10-enhance (merged, deleted) | done | e7fccfe | shared idempotent `ensure_analysis()` trigger (reused by step 12 `caption`); cross-camera exposure baseline via `skimage.exposure.match_histograms`; darktable-native XMP sidecars under `data/albums/<slug>/xmp/` |
 | 11 | `render` stage | — | todo | — | manual verification |
 | 12 | `caption` stage | — | todo | — | should reuse step 10's `ensure_analysis()` helper in `stages/enhance.py` — see its notes below |
-| 13 | `assemble` stage | — | todo | — | resolves Open Q4 |
+| 13 | `assemble` stage | step-13-assemble (merged, deleted) | done | 9ec5ca7 | resolves Open Q4 (Lulu 8.5x8.5in square trim, 0.125in bleed, spine = pages/444+0.06in); adds `Album.assembled_pdf_path` (own migration) — the contract step 15 reads |
 | 14 | Wire the flow | — | todo | — | |
 | 15 | `fulfill` stage | — | todo | — | |
 | 16 | Prove genericity | — | todo | — | |
