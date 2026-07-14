@@ -39,6 +39,26 @@ uv run poe migrate # alembic upgrade head
 [build steps 1 and 2](./knowledge/build-order.md) land the compose file and the
 migrations; until then they will error.
 
+## Run a pipeline end-to-end
+
+1. Add `data/albums/<slug>/album.yml` (see
+   [Album definition](./knowledge/album-definition.md)) with a real
+   `immich_album_id` from Immich's web UI, and set the `.env` credentials it
+   needs (`IMMICH_API_KEY`, `ANTHROPIC_API_KEY`, `LULU_CLIENT_KEY`/
+   `LULU_CLIENT_SECRET` — see `.env.example`).
+2. `uv run poe up` (or `docker compose up -d db prefect-server` for just the
+   two services a run needs, skipping Immich's heavier stack if it's already
+   running elsewhere), then `uv run poe migrate`.
+3. `uv run album run --album <slug>` (equivalently `uv run poe run --
+   --album <slug>`). Watch it in Prefect's UI at `http://localhost:4200`.
+
+Every dependency `flow.py` wires is real except one, deliberately deferred
+since [build step 6](./knowledge/progress.md): the LAION-style aesthetic
+predictor + CLIP embedder (`open_clip`/`torch` — a heavy, not-yet-added
+dependency). A run still completes without it — `select`'s MMR has a
+documented fallback for missing `aesthetic_score`/`clip_embedding` — just
+with degraded curation quality until that's wired.
+
 ## Workflow commands
 
 | Command | What it does |

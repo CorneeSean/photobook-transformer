@@ -21,7 +21,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
-from typing import Protocol
+from typing import Protocol, runtime_checkable
 
 import cv2
 import numpy as np
@@ -37,12 +37,20 @@ class ThumbnailSource(Protocol):
     def get_thumbnail(self, asset_id: str, *, size: str = "thumbnail") -> bytes: ...
 
 
+# runtime_checkable: flow.py's pipeline() (a Prefect @flow) takes these types
+# directly in its own signature. Prefect always builds a Pydantic parameter
+# schema for a flow's signature (even with validate_parameters=False, which
+# pipeline() sets — that only skips *validating* args against the schema,
+# not building it), and that schema generation does an isinstance check on
+# every annotation. (@task has no such schema/validation step at all.)
+@runtime_checkable
 class AestheticScorer(Protocol):
     """Scores a JPEG/PNG image's aesthetic quality (higher is better)."""
 
     def score(self, image: bytes) -> float: ...
 
 
+@runtime_checkable
 class Embedder(Protocol):
     """Produces a CLIP embedding for an image (used by cluster/select via pgvector)."""
 

@@ -46,7 +46,7 @@ import logging
 import subprocess
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Protocol
+from typing import Protocol, runtime_checkable
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -62,6 +62,13 @@ class OriginalSource(Protocol):
     def get_original(self, asset_id: str) -> bytes: ...
 
 
+# runtime_checkable: flow.py's pipeline() (a Prefect @flow) takes this type
+# directly in its own signature. Prefect always builds a Pydantic parameter
+# schema for a flow's signature (even with validate_parameters=False, which
+# pipeline() sets — that only skips *validating* args against the schema,
+# not building it), and that schema generation does an isinstance check on
+# every annotation. (@task has no such schema/validation step at all.)
+@runtime_checkable
 class Renderer(Protocol):
     """Invokes darktable-cli (or a stand-in, in tests) over one photo.
 

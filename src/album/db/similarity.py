@@ -10,7 +10,7 @@ the real query here is covered separately against a Postgres test container
 
 from __future__ import annotations
 
-from typing import Protocol
+from typing import Protocol, runtime_checkable
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -18,6 +18,13 @@ from sqlalchemy.orm import Session
 from album.db.models import Photo
 
 
+# runtime_checkable: flow.py's pipeline() (a Prefect @flow) takes this type
+# directly in its own signature. Prefect always builds a Pydantic parameter
+# schema for a flow's signature (even with validate_parameters=False, which
+# pipeline() sets — that only skips *validating* args against the schema,
+# not building it), and that schema generation does an isinstance check on
+# every annotation. (@task has no such schema/validation step at all.)
+@runtime_checkable
 class SimilaritySearch(Protocol):
     def max_similarity(
         self, session: Session, embedding: list[float] | None, against: list[int]

@@ -21,7 +21,7 @@ or pushing to S3) is follow-up work for whoever wires the real flow.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Protocol
+from typing import Protocol, runtime_checkable
 
 from sqlalchemy.orm import Session
 
@@ -30,6 +30,13 @@ from album.db.models import Album
 from album.lulu.client import LuluClient, PrintJobRequest, ShippingAddress
 
 
+# runtime_checkable: flow.py's pipeline() (a Prefect @flow) takes this type
+# directly in its own signature. Prefect always builds a Pydantic parameter
+# schema for a flow's signature (even with validate_parameters=False, which
+# pipeline() sets — that only skips *validating* args against the schema,
+# not building it), and that schema generation does an isinstance check on
+# every annotation. (@task has no such schema/validation step at all.)
+@runtime_checkable
 class PrintJobSubmitter(Protocol):
     """The slice of Lulu integration that ``fulfill`` needs to submit a job.
 
