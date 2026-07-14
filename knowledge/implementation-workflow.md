@@ -1,7 +1,7 @@
 ---
 type: Playbook
 title: Implementation workflow (per-step handoff)
-description: How an agent implements one build step at a time — branch, TDD, sub-agent review, user review, checks, squash, merge.
+description: How an agent implements one build step at a time — branch, TDD, sub-agent review (≤3 broad-scope agents), user review, checks, squash, merge.
 tags: [workflow, process, review, git, branching, handoff]
 timestamp: 2026-07-12
 ---
@@ -59,6 +59,16 @@ review chain, squash, merge) around it.
    giving it the step's context. If it has comments: address them, **re-run
    `uv run poe check` until green**, then re-review. **Repeat until the reviewer
    returns no further comments.** Record `agent-review: passed` in the tracker.
+   **Cap the review at a maximum of 3 essential, broad-scope review sub-agents
+   to keep token cost bounded** — do *not* fan out into many narrow single-angle
+   agents. Give each remaining agent a broad remit, e.g.: (1) correctness across
+   the whole diff, (2) cleanup — reuse/simplification/efficiency, (3)
+   tests/conventions/docs. Use fewer when the diff is small: one broad-scope
+   reviewer is enough for a modest change, and a trivial docs-only change the
+   user directed needs none. If you drive the review through the `/code-review`
+   skill, prefer a **low/medium effort** level (fewer agents) over high/max
+   (which fans out widely) unless the diff is large or risky enough to justify
+   the extra spend.
 7. **User review (only on green checks + a satisfied sub-agent).** Present the
    step to the **user** (summary of what changed, how it was verified, the diff).
    If the user requests changes: make them, **re-run `uv run poe check` until

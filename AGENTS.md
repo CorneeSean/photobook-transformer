@@ -57,7 +57,10 @@ re-runs what precedes it. In short:
 4. **Get `uv run poe check` green first** (ruff + basedpyright + pytest), or do
    the step's manual verification. No review starts until checks are green.
 5. **Then invoke a review sub-agent** on the diff; address comments, **re-run
-   `poe check` to green**, re-review — until it has no comments.
+   `poe check` to green**, re-review — until it has no comments. **Cap this at a
+   maximum of 3 essential, broad-scope review sub-agents** (correctness /
+   cleanup / tests-conventions) — don't fan out into many narrow angles; use
+   fewer for a small diff. See implementation-workflow.md step 6.
 6. **Then ask the user to review;** on requested changes, fix, **re-run `poe
    check`**, **re-run the sub-agent review**, then return to the user — until
    approved.

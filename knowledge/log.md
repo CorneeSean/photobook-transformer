@@ -2,6 +2,13 @@
 
 ## 2026-07-14
 
+* **Review process: cap sub-agent review at ≤3 broad-scope agents**
+  (user-directed, token-saving): `implementation-workflow.md` step 6 and the
+  `AGENTS.md` loop summary now say to run a **maximum of 3 essential,
+  broad-scope** review sub-agents (correctness / cleanup / tests-conventions)
+  rather than fanning out into many narrow single-angle agents — fewer for a
+  small diff, none for a trivial user-directed docs change; prefer low/medium
+  `/code-review` effort over high/max unless the diff warrants the spend.
 * **Printer abstraction + HTML default output** (post-step-16, user-directed):
   generalized `fulfill` from a Lulu-only submitter to a pluggable
   [`Printer`](/stages/fulfill.md), and made a browsable HTML book the default
