@@ -20,9 +20,10 @@ fanning out across ``Photo``-count concurrent tasks; build-order.md step
 loop becomes Prefect-level fan-out instead.
 
 Every dependency (DB session, Immich client, similarity search, quality
-scorer/embedder, the vision model, the renderer, the Lulu adapter) is
+scorer/embedder, the vision model, the renderer, the output ``Printer``) is
 injectable via keyword arguments, defaulting to the real thing built from
-``config.py`` — the same DI shape every stage already uses, so
+``config.py`` (the ``Printer`` defaults to :class:`~album.printers.html.HtmlPrinter`)
+— the same DI shape every stage already uses, so
 :func:`pipeline` itself is unit-testable (wiring/ordering) without touching
 Postgres, Immich, Claude, darktable-cli, or Lulu. See
 ``tests/test_flow.py``.
@@ -56,12 +57,13 @@ from album.db.session import new_session
 from album.db.similarity import PgVectorSimilarity, SimilaritySearch
 from album.definition import load_album_definition
 from album.immich.client import ImmichClient
-from album.lulu.client import LuluClient
+from album.printers.base import Printer
+from album.printers.html import HtmlPrinter
 from album.stages.assemble import assemble
 from album.stages.caption import caption
 from album.stages.cluster import cluster
 from album.stages.enhance import enhance
-from album.stages.fulfill import LuluPrintJobAdapter, PrintJobSubmitter, fulfill
+from album.stages.fulfill import fulfill
 from album.stages.quality import AestheticScorer, Embedder, quality
 from album.stages.render import DarktableRenderer, Renderer, render
 from album.stages.select import select
@@ -177,8 +179,8 @@ def _assemble_task(album_id: int, session: Session) -> None:
 
 
 @task(name="fulfill")
-def _fulfill_task(album_id: int, session: Session, client: PrintJobSubmitter) -> None:
-    fulfill(album_id, session, client)
+def _fulfill_task(album_id: int, session: Session, printer: Printer) -> None:
+    fulfill(album_id, session, printer)
     session.commit()
 
 
@@ -192,7 +194,7 @@ def pipeline(
     aesthetic: AestheticScorer | None = None,
     embedder: Embedder | None = None,
     renderer: Renderer | None = None,
-    print_job_submitter: PrintJobSubmitter | None = None,
+    printer: Printer | None = None,
     model: Model | None = None,
 ) -> None:
     """Run every stage, in build order, for one album.
@@ -218,7 +220,6 @@ def pipeline(
         # — nothing here should leak a resource that came before it.
         owns_client = immich_client is None
         client = immich_client if immich_client is not None else ImmichClient.from_settings()
-        lulu_client: LuluClient | None = None
         try:
             album_id = get_or_create_album(db_session, album_slug)
             db_session.commit()
@@ -248,19 +249,13 @@ def pipeline(
             _caption_task(album_id, db_session, client, model)
             _assemble_task(album_id, db_session)
 
-            submitter = print_job_submitter
-            if submitter is None:
-                # Two-step construction (unlike the ternary defaults above):
-                # LuluPrintJobAdapter wraps a LuluClient it doesn't own, so
-                # that client is tracked here and closed below.
-                lulu_client = LuluClient.from_settings()
-                submitter = LuluPrintJobAdapter.from_settings(lulu_client)
-            _fulfill_task(album_id, db_session, submitter)
+            # HtmlPrinter is the default: a browsable webpage rendered from the
+            # on-disk photos, needing no external service or credentials (unlike
+            # LuluPrinter, which callers inject when they want a physical order).
+            _fulfill_task(album_id, db_session, printer if printer is not None else HtmlPrinter())
         finally:
             if owns_client:
                 client.close()
-            if lulu_client is not None:
-                lulu_client.close()
     finally:
         if owns_session:
             db_session.close()

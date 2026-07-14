@@ -44,6 +44,14 @@ photo-album-pipeline/
 │       ├── immich/
 │       │   └── client.py         # thin typed wrapper over the Immich REST API
 │       │
+│       ├── lulu/
+│       │   └── client.py         # thin typed wrapper over Lulu's Print API (transport only)
+│       │
+│       ├── printers/             # pluggable output media for the finished book
+│       │   ├── base.py           # Printer protocol + BookPage reader (iter_book_pages)
+│       │   ├── html.py           # HtmlPrinter — default; static page-by-page webpage
+│       │   └── lulu.py           # LuluPrinter — opt-in; submits the master PDF to Lulu
+│       │
 │       ├── agents/               # PydanticAI: output model + Agent (swap for TestModel)
 │       │   └── analysis.py       # ONE agent; output = bounded tone deltas + caption
 │       │
@@ -56,14 +64,17 @@ photo-album-pipeline/
 │           ├── render.py         # darktable-cli invocation
 │           ├── caption.py
 │           ├── assemble.py
-│           └── fulfill.py
+│           └── fulfill.py            # delegates to an injected printers.Printer
 │
-├── templates/                    # Jinja2 page layouts, shared across albums
-│   ├── base.html
-│   ├── section.html              # segment header page
+├── templates/                    # Jinja2 templates, shared across albums
+│   ├── base.html                 # print-PDF page shell (assemble)
+│   ├── section.html              # segment header page (assemble)
 │   ├── layout_1up.html
 │   ├── layout_2up.html
-│   └── layout_3up.html
+│   ├── layout_3up.html
+│   └── book/                     # HtmlPrinter's webpage viewer
+│       ├── viewer.html           # the single self-contained page shell
+│       └── _components.html      # reusable presentational macros (component library)
 │
 ├── data/                         # gitignored except album.yml files
 │   └── albums/                   # (DB now lives in Postgres, not on disk here)

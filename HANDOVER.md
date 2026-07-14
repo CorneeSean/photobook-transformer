@@ -92,6 +92,15 @@ summary):
   correctly, fails at the same no-reachable-Immich `sync` boundary as step
   14. The build order is now complete.
 
+**Post-step-16 (user-directed), on `main` after the build order:** `fulfill` was
+generalized from a Lulu-only submitter to a pluggable `Printer`
+(`src/album/printers/`: `base.py` + `html.py` + `lulu.py`). The new **default**
+output is `HtmlPrinter` — a self-contained, browsable page-by-page webpage
+(`data/albums/<slug>/book/index.html`) rendered from the on-disk photos, needing
+no external service; `LuluPrinter` (physical order) is opt-in. `Album.lulu_order_id`
+became the medium-agnostic `Album.output_ref`. So a default `album run` now
+produces a real, viewable deliverable end-to-end. See the tracker's Notes.
+
 ## What's left — closing deferred items, not new build steps
 
 Every remaining gap is the same shape: this sandbox has no reachable live
@@ -104,8 +113,9 @@ blockers section for the full, current list, including:
   scoring → ... → real Lulu order) once all four are available.
 - The real LAION/open_clip aesthetic scorer + CLIP embedder (step 6's
   deferral) — `_UnavailableQualityModel` in `flow.py` stands in for it.
-- A PDF-hosting/upload mechanism so `fulfill` can give Lulu a fetchable
-  `http(s)://` URL instead of a local path (step 15's gap).
+- A PDF-hosting/upload mechanism so the opt-in `LuluPrinter` can give Lulu a
+  fetchable `http(s)://` URL instead of a local path (step 15's gap; the default
+  `HtmlPrinter` needs no hosting, so a default run is no longer blocked here).
 - Manual spot-checks that need real data: darktable render quality, caption
   accuracy/non-genericity, and a live Lulu single-copy test order.
 

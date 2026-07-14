@@ -35,6 +35,7 @@ from sqlalchemy.orm import Session
 import album.flow as flow_module
 from album.db.models import Album
 from album.flow import get_or_create_album, pipeline
+from album.printers.html import HtmlPrinter
 
 from .conftest import make_album
 
@@ -145,7 +146,7 @@ def test_pipeline_runs_every_stage_once_in_order_with_the_right_album_id(
         aesthetic=object(),  # pyright: ignore[reportArgumentType]
         embedder=object(),  # pyright: ignore[reportArgumentType]
         renderer=object(),  # pyright: ignore[reportArgumentType]
-        print_job_submitter=object(),  # pyright: ignore[reportArgumentType]
+        printer=object(),  # pyright: ignore[reportArgumentType]
         model=TestModel(),
     )
 
@@ -197,7 +198,7 @@ def test_pipeline_does_not_close_an_injected_session_or_client(
         aesthetic=object(),  # pyright: ignore[reportArgumentType]
         embedder=object(),  # pyright: ignore[reportArgumentType]
         renderer=object(),  # pyright: ignore[reportArgumentType]
-        print_job_submitter=object(),  # pyright: ignore[reportArgumentType]
+        printer=object(),  # pyright: ignore[reportArgumentType]
         model=TestModel(),
     )
 
@@ -242,21 +243,22 @@ def test_pipeline_builds_and_closes_its_own_client_when_none_is_injected(
         aesthetic=object(),  # pyright: ignore[reportArgumentType]
         embedder=object(),  # pyright: ignore[reportArgumentType]
         renderer=object(),  # pyright: ignore[reportArgumentType]
-        print_job_submitter=object(),  # pyright: ignore[reportArgumentType]
+        printer=object(),  # pyright: ignore[reportArgumentType]
         model=TestModel(),
     )
 
     assert built.closed is True
 
 
-def test_pipeline_builds_and_closes_its_own_lulu_client_when_no_submitter_is_injected(
+def test_pipeline_uses_html_printer_by_default_when_none_is_injected(
     session: Session, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """Regression test: the LuluClient built for the default fulfill path
-    must be closed too, not just the ImmichClient — same resource-lifecycle
-    contract, easy to miss since it's constructed two steps deep
-    (LuluPrintJobAdapter.from_settings(LuluClient.from_settings()))."""
+    """When no printer is injected, the default output medium is the credential-
+    free :class:`~album.printers.html.HtmlPrinter` — not Lulu. (Lulu needs live
+    credentials + a hosted PDF, so it's opt-in, injected by the caller.)"""
     _persist(session, make_album(slug="honeymoon-2026", immich_album_id="immich-1"))
+
+    captured: dict[str, object] = {}
 
     for stage_name in (
         "sync",
@@ -267,9 +269,15 @@ def test_pipeline_builds_and_closes_its_own_lulu_client_when_no_submitter_is_inj
         "render",
         "caption",
         "assemble",
-        "fulfill",
     ):
         monkeypatch.setattr(flow_module, stage_name, lambda *a, **k: None)
+
+    def _capture_fulfill(
+        album_id: int, session: Session, printer: object, **_kwargs: object
+    ) -> None:
+        captured["printer"] = printer
+
+    monkeypatch.setattr(flow_module, "fulfill", _capture_fulfill)
 
     class _FakeImmichClient:
         def close(self) -> None:
@@ -277,18 +285,6 @@ def test_pipeline_builds_and_closes_its_own_lulu_client_when_no_submitter_is_inj
 
     monkeypatch.setattr(
         flow_module.ImmichClient, "from_settings", classmethod(lambda cls: _FakeImmichClient())
-    )
-
-    class _FakeLuluClient:
-        def __init__(self) -> None:
-            self.closed = False
-
-        def close(self) -> None:
-            self.closed = True
-
-    built_lulu_client = _FakeLuluClient()
-    monkeypatch.setattr(
-        flow_module.LuluClient, "from_settings", classmethod(lambda cls: built_lulu_client)
     )
 
     pipeline(
@@ -299,11 +295,10 @@ def test_pipeline_builds_and_closes_its_own_lulu_client_when_no_submitter_is_inj
         embedder=object(),  # pyright: ignore[reportArgumentType]
         renderer=object(),  # pyright: ignore[reportArgumentType]
         model=TestModel(),
-        # print_job_submitter deliberately not injected, forcing pipeline()
-        # to build its own LuluClient + LuluPrintJobAdapter.
+        # printer deliberately not injected, forcing pipeline() to default it.
     )
 
-    assert built_lulu_client.closed is True
+    assert isinstance(captured["printer"], HtmlPrinter)
 
 
 def test_pipeline_closes_session_even_if_client_construction_fails(

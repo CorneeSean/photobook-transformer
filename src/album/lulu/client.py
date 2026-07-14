@@ -2,11 +2,11 @@
 
 This is the *only* module that talks to Lulu over HTTP — it makes no fulfillment
 decisions (what product, what recipient, what shipping level) of its own. The
-[`fulfill`](../stages/fulfill.py) stage is the boundary that submits an album's
-assembled PDF and records the resulting order id: it owns that policy (see
-``LuluPrintJobAdapter`` there) and calls into this module only for the HTTP
-exchange, exactly like [`immich/client.py`](../immich/client.py) never decides what
-to sync.
+[`LuluPrinter`](../printers/lulu.py) (an opt-in
+[`Printer`](../printers/base.py) the `fulfill` stage can delegate to) owns that
+policy — which SKU, which recipient, submitting an album's assembled PDF and
+returning the order id — and calls into this module only for the HTTP exchange,
+exactly like [`immich/client.py`](../immich/client.py) never decides what to sync.
 
 Modelled against Lulu's public Print API OpenAPI spec
 (https://api.lulu.com/api-docs/openapi-specs/openapi_public.yml, fetched 2026-07-14).

@@ -33,11 +33,28 @@ order, one at a time.
 | 12 | `caption` stage | step-12-caption (merged, deleted) | done | 69f82b3 | thin wrapper over `enhance`'s `ensure_analysis()`; order-independent with `enhance` (whichever runs first triggers the one shared call); manual ~20-caption spot-check deferred (no `ANTHROPIC_API_KEY`) |
 | 13 | `assemble` stage | step-13-assemble (merged, deleted) | done | 9ec5ca7 | resolves Open Q4 (Lulu 8.5x8.5in square trim, 0.125in bleed, spine = pages/444+0.06in); adds `Album.assembled_pdf_path` (own migration) — the contract step 15 reads |
 | 14 | Wire the flow | step-14-wire-flow (merged, deleted) | done | ada27d6 | real Postgres+Prefect verified (migrations applied, a real flow run tracked and visible via the API); fails cleanly at `sync` — no reachable Immich instance, open since steps 4-5; real LAION/open_clip scorer still deferred (step 6) |
-| 15 | `fulfill` stage | step-15-fulfill (merged, deleted) | done | 92a7d4c | Lulu Print API client (OAuth2 client-credentials); reads `Album.assembled_pdf_path`, writes `Album.lulu_order_id`; real Lulu sandbox order deferred (no credentials); no PDF-hosting/upload mechanism yet — see notes below |
+| 15 | `fulfill` stage | step-15-fulfill (merged, deleted) | done | 92a7d4c | Lulu Print API client (OAuth2 client-credentials); reads `Album.assembled_pdf_path`, wrote `Album.lulu_order_id` (renamed to `output_ref` post-step-16 when `fulfill` became printer-pluggable — see Notes); real Lulu sandbox order deferred (no credentials); no PDF-hosting/upload mechanism yet — see notes below |
 | 16 | Prove genericity | step-16-prove-genericity (merged, deleted) | done | d7e903d | adds `data/albums/smith-wedding/album.yml` (wedding-shaped: hour-scale segments, single day) + `tests/test_genericity.py`; zero `src/` files touched — confirmed the abstraction; live run hits the same no-reachable-Immich boundary as step 14 |
 
 ## Notes / blockers
 
+- **Printer abstraction + HTML default output (2026-07-14, post-step-16,
+  user-directed):** `fulfill` was generalized from a Lulu-only submitter to a
+  pluggable [`Printer`](../src/album/printers/base.py) — the output *medium* is
+  now swappable. New `src/album/printers/` package: `base.py` (the `Printer`
+  protocol + `iter_book_pages` shared page reader), `html.py`
+  (`HtmlPrinter`, the new **default** — a self-contained page-by-page webpage
+  rendered from the on-disk photos, no external service/credentials needed), and
+  `lulu.py` (`LuluPrinter`, the old `LuluPrintJobAdapter` moved out of the stage;
+  opt-in). `Album.lulu_order_id` was renamed to the medium-agnostic
+  `Album.output_ref` (migration `b7f2c1a4e8d0`); `stages/fulfill.py` now depends
+  only on the `Printer` protocol; `flow.py`'s `print_job_submitter` param became
+  `printer`, defaulting to `HtmlPrinter()` (no LuluClient built or closed unless a
+  `LuluPrinter` is injected). `album/lulu/client.py` (raw HTTP transport) is
+  unchanged. Verified: `TESTCONTAINERS_RYUK_DISABLED=true uv run poe check` green
+  (165 tests). Self-reviewed via the `code-review` sub-agent. This means a default
+  `album run` now produces a real, viewable deliverable end-to-end (the webpage),
+  no longer blocked on the Lulu PDF-hosting gap below.
 - **Deferred live-GPS/live-Immich check (step 16):** `data/albums/smith-wedding
   /album.yml` proves the abstraction needs no code change for a structurally
   different (wedding, hour-scale, single-day) album — confirmed by a real
@@ -58,9 +75,11 @@ order, one at a time.
   LAION/open_clip quality scorer (step 6's deferral, still open — see
   `flow.py`'s `_UnavailableQualityModel`). Re-run `album run --album
   honeymoon-2026` once all of these are available to close this out.
-- **No PDF-hosting/upload mechanism (step 15, still open):** `fulfill`'s
-  default path will still raise `UnreachablePdfError` on a real run until
-  something serves `assembled_pdf_path` at a fetchable `http(s)://` URL.
+- **No PDF-hosting/upload mechanism (step 15, still open — now Lulu-only):**
+  since HTML is the default printer, a real run is no longer blocked here; only
+  the **opt-in** `LuluPrinter` needs it. `LuluPrinter.print` raises
+  `UnreachablePdfError` until something serves `assembled_pdf_path` at a
+  fetchable `http(s)://` URL.
 - **Real LAION/open_clip scorer still not wired (step 6, resurfaced at step
   14):** `flow.py`'s `_UnavailableQualityModel` is a raising placeholder —
   `quality()`'s per-photo failure isolation turns that into every photo
@@ -97,10 +116,10 @@ order, one at a time.
   the "steps are delivered strictly in order" rule above — not a new default.
 - **No PDF-hosting/upload mechanism yet (step 15):** `Album.assembled_pdf_path`
   is a local disk path; Lulu's `source_url` needs a fetchable `http(s)://` URL.
-  `LuluPrintJobAdapter.submit` raises `UnreachablePdfError` rather than
-  submitting a path Lulu can't reach. Needs real hosting (static file serving,
-  S3, etc.) wired in — likely alongside step 14 (flow) or whenever `fulfill` is
-  first run for real.
+  `LuluPrinter.print` (post-step-16; was `LuluPrintJobAdapter.submit`) raises
+  `UnreachablePdfError` rather than submitting a path Lulu can't reach. Needs
+  real hosting (static file serving, S3, etc.) wired in — only for the opt-in
+  Lulu path, since the default `HtmlPrinter` needs no hosting.
 - **Deferred live-Lulu check (step 15):** no Lulu sandbox credentials in this
   environment, so `LuluClient`/`fulfill` are tested only against recorded
   fixtures — the build order's "manually verify with a single-copy test order"

@@ -34,7 +34,8 @@ timestamp: 2026-07-12
 | Tone rendering | `darktable-cli`, driven by XMP sidecars |
 | Color matching | scikit-image (`match_histograms`) |
 | Layout → PDF | Jinja2 + WeasyPrint (fallback: headless Playwright) |
-| Print fulfillment | Lulu Print API |
+| Output (default) | `HtmlPrinter` — static page-by-page webpage (Jinja2 + Tailwind CDN) |
+| Print fulfillment (opt-in) | `LuluPrinter` → Lulu Print API |
 
 See [Working agreement](/working-agreement.md) for how the tooling choices are
 exercised (typing gate, commit gate, `uv run poe` tasks) and

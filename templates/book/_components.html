@@ -1,0 +1,50 @@
+{#
+  Reusable presentational components for the HTML book viewer, as Jinja macros —
+  the "component library" the viewer composes from. Each takes plain dict context
+  (built in album/printers/html.py) and emits Tailwind-styled markup. Kept
+  presentation-only: no navigation/state logic lives here (that's viewer.html's
+  small JS).
+#}
+
+{% macro segment_ribbon(label, place) %}
+<div class="segment-ribbon inline-flex items-center gap-2 rounded-full bg-white/10 px-4 py-1.5
+            text-sm font-medium tracking-wide text-amber-100 ring-1 ring-white/15 backdrop-blur">
+  <span class="h-2 w-2 rounded-full bg-amber-300 shadow-[0_0_8px_2px_rgba(252,211,77,0.6)]"></span>
+  <span>{{ label }}</span>
+  {% if place %}<span class="text-amber-200/60">·&nbsp;{{ place }}</span>{% endif %}
+</div>
+{% endmacro %}
+
+{% macro photo_card(photo) %}
+<figure class="photo-card group relative overflow-hidden rounded-xl bg-black/30 shadow-lg
+               shadow-black/40 ring-1 ring-white/10">
+  <img src="{{ photo.src }}" alt="{{ photo.caption or '' }}" loading="lazy"
+       class="h-full w-full object-cover transition duration-700 group-hover:scale-[1.03]">
+  {% if photo.caption %}
+  <figcaption class="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/80 via-black/40
+                     to-transparent p-3 text-sm text-stone-100 opacity-0 transition
+                     duration-300 group-hover:opacity-100">
+    {{ photo.caption }}
+  </figcaption>
+  {% endif %}
+</figure>
+{% endmacro %}
+
+{% macro page_slide(page, index) %}
+<article class="slide" data-index="{{ index }}" hidden>
+  {% if page.starts_segment and page.segment_label %}
+  <div class="mb-5 flex justify-center">
+    {{ segment_ribbon(page.segment_label, page.segment_place) }}
+  </div>
+  {% endif %}
+  <div class="photo-grid grid gap-3 sm:gap-4
+              {% if page.photos|length == 1 %}grid-cols-1
+              {% elif page.photos|length == 2 %}grid-cols-1 sm:grid-cols-2
+              {% else %}grid-cols-1 sm:grid-cols-2 lg:grid-cols-3{% endif %}">
+    {% for photo in page.photos %}{{ photo_card(photo) }}{% endfor %}
+  </div>
+  <p class="mt-6 text-center text-xs uppercase tracking-[0.3em] text-white/30">
+    Page {{ page.number }}
+  </p>
+</article>
+{% endmacro %}

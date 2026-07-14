@@ -40,13 +40,27 @@ uv run poe migrate # alembic upgrade head
 1. Add `data/albums/<slug>/album.yml` (see
    [Album definition](./knowledge/album-definition.md)) with a real
    `immich_album_id` from Immich's web UI, and set the `.env` credentials it
-   needs (`IMMICH_API_KEY`, `ANTHROPIC_API_KEY`, `LULU_CLIENT_KEY`/
-   `LULU_CLIENT_SECRET` — see `.env.example`).
+   needs (`IMMICH_API_KEY`, `ANTHROPIC_API_KEY` — see `.env.example`; the
+   `LULU_*` credentials are only needed for the opt-in Lulu printer, below).
 2. `uv run poe up` (or `docker compose up -d db prefect-server` for just the
    two services a run needs, skipping Immich's heavier stack if it's already
    running elsewhere), then `uv run poe migrate`.
 3. `uv run album run --album <slug>` (equivalently `uv run poe run --
    --album <slug>`). Watch it in Prefect's UI at `http://localhost:4200`.
+
+## Output: the book
+
+The final `fulfill` stage delivers the assembled book through a pluggable
+[`Printer`](./src/album/printers/base.py). The **default** is `HtmlPrinter`: it
+writes a single self-contained, browsable webpage to
+`data/albums/<slug>/book/index.html` — a page-by-page viewer with captions and
+segment dividers, rendering the on-disk photos, no external service needed. Open
+that file in a browser to page through the book.
+
+To order a physical copy instead, inject the opt-in `LuluPrinter`
+(`pipeline(..., printer=LuluPrinter.from_settings(LuluClient.from_settings()))`),
+which submits the print-ready PDF to [Lulu](https://api.lulu.com)'s Print API —
+this needs the `LULU_*` credentials and a PDF hosted at a URL Lulu can fetch.
 
 Every dependency `flow.py` wires is real except one, deliberately deferred
 since [build step 6](./knowledge/progress.md): the LAION-style aesthetic

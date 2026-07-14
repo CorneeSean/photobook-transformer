@@ -2,6 +2,38 @@
 
 ## 2026-07-14
 
+* **Printer abstraction + HTML default output** (post-step-16, user-directed):
+  generalized `fulfill` from a Lulu-only submitter to a pluggable
+  [`Printer`](/stages/fulfill.md), and made a browsable HTML book the default
+  output medium.
+    * New `src/album/printers/` package: `base.py` (`Printer` protocol,
+      `BookPage`/`BookPhoto`/`PrintResult` types, and `iter_book_pages` — the
+      shared reader that reconstructs the book's pages from the DB the way
+      `assemble` paginated them, with the no-segments genericity fallback);
+      `html.py` (`HtmlPrinter`, the **default** — renders a single
+      self-contained `index.html` page-by-page viewer with captions, segment
+      dividers, animated page turns and a progress bar, from Jinja macros +
+      a CDN CSS lib + a little vanilla JS, referencing the on-disk rendered
+      photos by relative path — no external service or credentials); `lulu.py`
+      (`LuluPrinter`, the old `LuluPrintJobAdapter` moved out of the stage,
+      now opt-in). `templates/book/{viewer.html,_components.html}` hold the
+      viewer shell and its reusable presentational macros.
+    * `Album.lulu_order_id` → `Album.output_ref` (medium-agnostic; migration
+      `b7f2c1a4e8d0` renames the column). `stages/fulfill.py` now depends only
+      on the `Printer` protocol (`FulfillResult.printed`/`output_ref`); each
+      printer validates its own precondition, so the stage stays
+      medium-agnostic. `flow.py`'s `print_job_submitter` param → `printer`,
+      defaulting to `HtmlPrinter()` — no `LuluClient` is built or closed unless
+      a `LuluPrinter` is injected. `album/lulu/client.py` (raw HTTP transport)
+      is unchanged.
+    * Tests: new `tests/test_html_printer.py` (page grouping, captions,
+      segment dividers, no-segments fallback, on-disk relative `<img>` srcs,
+      run-assemble-first guard) and `tests/test_lulu_printer.py` (moved adapter
+      tests); `tests/test_fulfill.py` genericized against a fake `Printer`;
+      `tests/test_flow.py` updated (default is `HtmlPrinter`, not Lulu). ruff +
+      basedpyright + pytest green, **165 tests**, via
+      `TESTCONTAINERS_RYUK_DISABLED=true uv run poe check`. Self-reviewed with
+      the `code-review` sub-agent.
 * **Build step 16 done** (commit `d7e903d`, prove genericity): added
   `data/albums/smith-wedding/album.yml` — a real, shipped album definition
   structurally different from the trip-shaped `honeymoon-2026` that every

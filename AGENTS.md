@@ -28,7 +28,11 @@ All 16 steps of the numbered [**Build order**](./knowledge/build-order.md) are
 done and merged to `main` — every stage (`sync` through `fulfill`) is
 implemented, wired into one Prefect flow, and step 16 confirmed the
 `Album`/`Segment` abstraction needs no code change for a structurally
-different album. See [`HANDOVER.md`](./HANDOVER.md) for a full summary and
+different album. Since then (post-step-16, user-directed) `fulfill` was
+generalized to a pluggable `Printer` (`src/album/printers/`), with a browsable
+HTML book (`HtmlPrinter`) as the default output and Lulu opt-in — see
+[`knowledge/progress.md`](./knowledge/progress.md)'s Notes / blockers section.
+See [`HANDOVER.md`](./HANDOVER.md) for a full summary and
 [`knowledge/progress.md`](./knowledge/progress.md)'s Notes / blockers section
 for what's still deferred (live-Immich/Claude/Lulu/darktable-cli checks — this
 sandbox has no reachable instances of any of them, so those are the live
@@ -137,9 +141,11 @@ src/album/
   config.py      cli.py      flow.py      definition.py
   db/            models.py similarity.py session.py
   immich/        client.py
+  lulu/          client.py     (thin Lulu Print API HTTP transport)
+  printers/      base.py html.py lulu.py  (pluggable output media; HtmlPrinter is default)
   agents/        analysis.py   (ONE agent: tone deltas + caption, swap for TestModel)
   stages/        sync quality cluster select enhance render caption assemble fulfill
-templates/       Jinja2 page layouts
+templates/       Jinja2 page layouts (+ book/ for the HTML viewer)
 data/albums/     <slug>/album.yml (the only thing needed to define an album)
 tests/           conftest.py + per-stage tests + fixtures/
 ```

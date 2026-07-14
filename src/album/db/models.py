@@ -27,10 +27,12 @@ class Album(Base):
     immich_album_id: Mapped[str | None] = mapped_column(default=None)
 
     # --- populated by `fulfill` ---
-    # Lulu's print-job id, returned by POST /print-jobs/. NULL until submitted;
-    # its presence is what makes `fulfill` idempotent (skip re-submission unless
+    # A printer-agnostic reference to the delivered output: a Lulu print-job id,
+    # a `file://`/path to a generated webpage, etc. — whatever the chosen
+    # `Printer` returns (see album/printers/). NULL until the book is printed;
+    # its presence is what makes `fulfill` idempotent (skip re-printing unless
     # force=True — see stages/fulfill.py).
-    lulu_order_id: Mapped[str | None] = mapped_column(default=None)
+    output_ref: Mapped[str | None] = mapped_column(default=None)
 
     # Default IANA timezone (e.g. "Europe/Podgorica") for interpreting any
     # segment or photo time that arrives without an explicit UTC offset. Used
