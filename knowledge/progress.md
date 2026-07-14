@@ -32,12 +32,33 @@ order, one at a time.
 | 11 | `render` stage | step-11-render (merged, deleted) | done | 168940f | adds `ImmichClient.get_original()` (originals weren't fetchable before — only thumbnails); manual "visibly corrected JPEG" check deferred (no `darktable-cli` on this host, only in the Docker app image) |
 | 12 | `caption` stage | step-12-caption (merged, deleted) | done | 69f82b3 | thin wrapper over `enhance`'s `ensure_analysis()`; order-independent with `enhance` (whichever runs first triggers the one shared call); manual ~20-caption spot-check deferred (no `ANTHROPIC_API_KEY`) |
 | 13 | `assemble` stage | step-13-assemble (merged, deleted) | done | 9ec5ca7 | resolves Open Q4 (Lulu 8.5x8.5in square trim, 0.125in bleed, spine = pages/444+0.06in); adds `Album.assembled_pdf_path` (own migration) — the contract step 15 reads |
-| 14 | Wire the flow | — | todo | — | |
+| 14 | Wire the flow | step-14-wire-flow (merged, deleted) | done | ada27d6 | real Postgres+Prefect verified (migrations applied, a real flow run tracked and visible via the API); fails cleanly at `sync` — no reachable Immich instance, open since steps 4-5; real LAION/open_clip scorer still deferred (step 6) |
 | 15 | `fulfill` stage | step-15-fulfill (merged, deleted) | done | 92a7d4c | Lulu Print API client (OAuth2 client-credentials); reads `Album.assembled_pdf_path`, writes `Album.lulu_order_id`; real Lulu sandbox order deferred (no credentials); no PDF-hosting/upload mechanism yet — see notes below |
 | 16 | Prove genericity | — | todo | — | |
 
 ## Notes / blockers
 
+- **Full end-to-end run blocked on a reachable Immich instance (step 14):**
+  `album run` was verified against a real Postgres + Prefect server (real
+  migrations, a real tracked flow run) but fails cleanly at `sync` with
+  `ConnectionRefused` — no reachable Immich instance with real photos in
+  this environment, a gap open since steps 4-5. Also still missing for a
+  genuinely full run: `ANTHROPIC_API_KEY`, `darktable-cli` (only in the
+  Docker app image, not this host), Lulu credentials, and the real
+  LAION/open_clip quality scorer (step 6's deferral, still open — see
+  `flow.py`'s `_UnavailableQualityModel`). Re-run `album run --album
+  honeymoon-2026` once all of these are available to close this out.
+- **No PDF-hosting/upload mechanism (step 15, still open):** `fulfill`'s
+  default path will still raise `UnreachablePdfError` on a real run until
+  something serves `assembled_pdf_path` at a fetchable `http(s)://` URL.
+- **Real LAION/open_clip scorer still not wired (step 6, resurfaced at step
+  14):** `flow.py`'s `_UnavailableQualityModel` is a raising placeholder —
+  `quality()`'s per-photo failure isolation turns that into every photo
+  landing with `blur_score`/`aesthetic_score`/`clip_embedding` left `NULL`.
+  `select()` already has a tested fallback for that, so a run still
+  completes, just with degraded curation. Wiring the real predictor
+  (`open_clip` + `torch` + pretrained weights — a heavy, still-unadded
+  dependency) is follow-up work, not blocking further build steps.
 - **Deferred manual render verification (step 11):** no `darktable-cli`
   binary on this host (it lives only in the Docker app image, see build step
   1) — the build order's "a rendered file exists, opens, and is visibly

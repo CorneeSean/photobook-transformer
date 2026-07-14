@@ -2,6 +2,59 @@
 
 ## 2026-07-14
 
+* **Build step 14 done** (commit `ada27d6`, wire the flow): added
+  `src/album/flow.py` — the only module that imports Prefect. `pipeline()`
+  wraps all 9 stages (sync, quality, cluster, select, enhance, render,
+  caption, assemble, fulfill) as `@task`s around one shared,
+  per-stage-committed `Session`; `get_or_create_album()` idempotently
+  bootstraps an `Album` row from `album.yml` (reused on every later run,
+  never re-imported). Every dependency is injectable, defaulting to the real
+  thing from `config.py`, making `pipeline()` itself unit-testable
+  (wiring/ordering) without touching any real external system.
+  `src/album/cli.py`'s `run` subcommand now works, with a clean error
+  message instead of a raw traceback for expected failures. `@runtime_checkable`
+  added to five Protocol classes across `db/similarity.py`,
+  `stages/quality.py`, `stages/render.py`, `stages/fulfill.py` — required
+  because `pipeline()` (a Prefect `@flow`) takes them directly in its
+  signature, and Prefect always builds a Pydantic parameter schema for a
+  flow (even with `validate_parameters=False`, set here to stop that schema
+  from rejecting test doubles).
+    * **Manual verification:** brought up real Postgres (`pgvector/pgvector:pg16`)
+      + a real Prefect server via `docker compose up -d db prefect-server`;
+      `alembic upgrade head` applied the full migration chain (steps 2, 13,
+      15) cleanly. `album run --album e2e-smoke-test` against that stack
+      bootstrapped a real `Album` row into Postgres, started a real
+      Prefect-tracked flow run (confirmed via the API — state `FAILED`,
+      exactly what the Prefect UI would show), and failed cleanly with
+      `ConnectionRefused` at `sync` — the one boundary this environment
+      can't cross (no reachable Immich instance with real photos, open
+      since steps 4-5). Real `ANTHROPIC_API_KEY`, `darktable-cli` (Docker
+      app image only), and Lulu credentials are also unavailable here.
+      `docker-compose.yml` gained `PREFECT_API_URL` (mirroring the existing
+      `DATABASE_URL` in-network override) and `prefect-server` in `app`'s
+      `depends_on`; `README.md`'s run-locally section now has the real
+      end-to-end command sequence.
+    * **Self-review (8-angle high-effort code review) caught and fixed real
+      issues:** `db_session`/`client` were constructed before the
+      try/finally guarding them, so a failure building the Immich client
+      after the session opened would leak the DB connection — restructured
+      so client construction lives inside the guarded try. The `LuluClient`
+      built for the default fulfill path was never closed (unlike the
+      Immich client) — fixed, with a regression test. The `runtime_checkable`
+      comments originally blamed `@task`'s "parameter-schema builder" for
+      needing them; `@task` has no such machinery at all (verified against
+      the installed Prefect source) — only `@flow` does; corrected across
+      all four files. `_UnavailableAestheticScorer`/`_UnavailableEmbedder`
+      were two near-identical classes for what's really one model — merged
+      into `_UnavailableQualityModel`. `cli.py` had no error handling at
+      all — added a clean-message-and-exit(1) path for expected,
+      user-fixable errors.
+    * **Deferred, not new to this step:** the real LAION/open_clip quality
+      scorer (step 6's deferral, resurfaced here as `_UnavailableQualityModel`)
+      and `fulfill`'s PDF-hosting gap (step 15) are both still open — see
+      the progress tracker's notes.
+    * ruff + basedpyright + pytest green, 160 tests (146 pre-existing + 5 in
+      `tests/test_cli.py` + 9 in `tests/test_flow.py`).
 * **Build step 11 done** (commit `168940f`, `render` stage): added
   `src/album/stages/render.py` (`darktable-cli` batch invocation over the XMP
   sidecars `enhance` writes) and `ImmichClient.get_original()` — a real gap:
