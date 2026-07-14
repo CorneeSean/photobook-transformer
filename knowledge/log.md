@@ -2,6 +2,32 @@
 
 ## 2026-07-14
 
+* **Parallel build: steps 10 (`enhance`), 13 (`assemble`), 15 (`fulfill`)
+  built concurrently**, per user, on separate git worktrees/branches, since
+  they share no files or logic (confirmed by dependency analysis: 11 `render`
+  and 12 `caption` genuinely depend on 10, so weren't parallelized). Each
+  agent self-administered a `code-review` pass before handing off; a
+  coordinator merged all three serially, reconciling the one real conflict —
+  `assemble` and `fulfill` each independently added an `Album` column
+  (`assembled_pdf_path` and `lulu_order_id`), so `fulfill`'s placeholder
+  `assembled_pdf_path` migration/column was dropped in favor of `assemble`'s
+  real one, and `fulfill`'s `lulu_order_id` migration was rebased to chain
+  onto it.
+* **Build step 10 done** (commit `e7fccfe`, `enhance` stage): added
+  `src/album/stages/enhance.py` — `ensure_analysis()`, the shared idempotent
+  "one combined vision call" trigger (persists tone deltas + caption together,
+  skips if already populated) that `caption` (step 12) should reuse; cross-camera
+  exposure baseline via `skimage.exposure.match_histograms` per scene
+  (earliest-timestamp photo as reference), combined with the AI's per-photo
+  deltas on top; writes darktable-native XMP sidecars (`darktable:` namespace)
+  to `data/albums/<slug>/xmp/`, which `render` (step 11) will feed to
+  `darktable-cli`. Self-review (code-review skill, 8-angle) caught and fixed:
+  a force-re-run idempotency bug that compounded the camera baseline on every
+  forced re-run; selected-but-unclustered photos vanishing silently (now
+  counted + logged); a `camera_model` None/None false-match treating two
+  cameras as the same. Deferred: live-Claude sanity check (no
+  `ANTHROPIC_API_KEY`, same pattern as step 9). ruff + basedpyright + pytest
+  green, 94 tests (74 pre-existing + 20 new).
 * **Closed step 9's deferred Docker/testcontainer re-verification.** Docker
   Desktop was reinstalled, fixing the environment flakiness noted below (step 9
   entry). `TESTCONTAINERS_RYUK_DISABLED=true uv run poe check` now passes clean:

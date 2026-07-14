@@ -28,9 +28,9 @@ order, one at a time.
 | 7 | `cluster` stage | step-07-cluster (merged, deleted) | done | 2a39df5 | temporal + spatial(DBSCAN) scenes; no-segments & no-GPS fallbacks tested (genericity guard) |
 | 8 | `select` stage (MMR) + `db/similarity.py` | step-08-select (merged, deleted) | done | 4fec4a1 | real pgvector query verified against a Postgres testcontainer |
 | 9 | Agent (`analysis.py`) | step-09-agent (merged, deleted) | done | 38a4057 | real-Claude sanity check deferred (no `ANTHROPIC_API_KEY`); tested via `TestModel` only |
-| 10 | `enhance` stage | — | todo | — | |
+| 10 | `enhance` stage | step-10-enhance (merged, deleted) | done | e7fccfe | shared idempotent `ensure_analysis()` trigger (reused by step 12 `caption`); cross-camera exposure baseline via `skimage.exposure.match_histograms`; darktable-native XMP sidecars under `data/albums/<slug>/xmp/` |
 | 11 | `render` stage | — | todo | — | manual verification |
-| 12 | `caption` stage | — | todo | — | |
+| 12 | `caption` stage | — | todo | — | should reuse step 10's `ensure_analysis()` helper in `stages/enhance.py` — see its notes below |
 | 13 | `assemble` stage | — | todo | — | resolves Open Q4 |
 | 14 | Wire the flow | — | todo | — | |
 | 15 | `fulfill` stage | — | todo | — | |
@@ -38,6 +38,24 @@ order, one at a time.
 
 ## Notes / blockers
 
+- **Parallel build (2026-07-14, per user):** steps 10 (`enhance`), 13
+  (`assemble`), and 15 (`fulfill`) were built concurrently on separate
+  branches/worktrees rather than strictly in order, since a dependency check
+  showed they don't share files or logic (11 `render` and 12 `caption` do
+  depend on 10, so those still wait for it). Each was self-reviewed
+  (`code-review` skill) before merging; a coordinator (not the building agent)
+  reconciled the two independently-added migrations (`assemble`'s real
+  `Album.assembled_pdf_path` vs. `fulfill`'s placeholder of the same column)
+  and updated this tracker/`log.md` centrally to avoid the three branches
+  conflicting on shared docs. This is a deliberate, user-approved exception to
+  the "steps are delivered strictly in order" rule above — not a new default.
+- **`enhance`/`caption` share one trigger (step 10):** `stages/enhance.py`'s
+  `ensure_analysis()` is the idempotent "one combined vision call" trigger
+  described in `architecture.md` — `caption` (step 12) should import and reuse
+  it rather than reimplementing the same skip-if-already-populated check.
+- **Deferred live-Claude check (step 10):** same reason and pattern as step 9
+  below — no `ANTHROPIC_API_KEY` in this environment, so `enhance` is tested
+  only via PydanticAI `TestModel`. Do this once a key is available.
 - **Process change (from step 4 onward, per user):** deliver each step with the
   full workflow *except* the human-review gate — after `uv run poe check` is green
   and the sub-agent review is clean, squash and fast-forward-merge autonomously
