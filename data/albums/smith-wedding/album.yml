@@ -1,0 +1,21 @@
+slug: smith-wedding
+title: Anna & Tom
+immich_album_id: immich-smith-wedding-2026
+timezone: Europe/London
+meta:
+  occasion: wedding
+  names: [Anna, Tom]
+
+segments:
+  - label: "Getting ready"
+    place: "The Old Rectory"
+    start_at: 2026-08-15T09:00:00+01:00
+    end_at:   2026-08-15T13:00:00+01:00
+  - label: "Ceremony"
+    place: "St. Mary's"
+    start_at: 2026-08-15T13:00:00+01:00
+    end_at:   2026-08-15T14:30:00+01:00
+  - label: "Reception"
+    place: "The Barn"
+    start_at: 2026-08-15T15:00:00+01:00
+    end_at:   2026-08-15T23:59:59+01:00
