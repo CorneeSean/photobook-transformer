@@ -30,7 +30,7 @@ order, one at a time.
 | 9 | Agent (`analysis.py`) | step-09-agent (merged, deleted) | done | 38a4057 | real-Claude sanity check deferred (no `ANTHROPIC_API_KEY`); tested via `TestModel` only |
 | 10 | `enhance` stage | step-10-enhance (merged, deleted) | done | e7fccfe | shared idempotent `ensure_analysis()` trigger (reused by step 12 `caption`); cross-camera exposure baseline via `skimage.exposure.match_histograms`; darktable-native XMP sidecars under `data/albums/<slug>/xmp/` |
 | 11 | `render` stage | — | todo | — | manual verification |
-| 12 | `caption` stage | — | todo | — | should reuse step 10's `ensure_analysis()` helper in `stages/enhance.py` — see its notes below |
+| 12 | `caption` stage | step-12-caption (merged, deleted) | done | 69f82b3 | thin wrapper over `enhance`'s `ensure_analysis()`; order-independent with `enhance` (whichever runs first triggers the one shared call); manual ~20-caption spot-check deferred (no `ANTHROPIC_API_KEY`) |
 | 13 | `assemble` stage | step-13-assemble (merged, deleted) | done | 9ec5ca7 | resolves Open Q4 (Lulu 8.5x8.5in square trim, 0.125in bleed, spine = pages/444+0.06in); adds `Album.assembled_pdf_path` (own migration) — the contract step 15 reads |
 | 14 | Wire the flow | — | todo | — | |
 | 15 | `fulfill` stage | step-15-fulfill (merged, deleted) | done | 92a7d4c | Lulu Print API client (OAuth2 client-credentials); reads `Album.assembled_pdf_path`, writes `Album.lulu_order_id`; real Lulu sandbox order deferred (no credentials); no PDF-hosting/upload mechanism yet — see notes below |
@@ -38,14 +38,20 @@ order, one at a time.
 
 ## Notes / blockers
 
-- **Parallel build (2026-07-14, per user):** steps 10 (`enhance`), 13
-  (`assemble`), and 15 (`fulfill`) were built concurrently on separate
-  branches/worktrees rather than strictly in order, since a dependency check
-  showed they don't share files or logic (11 `render` and 12 `caption` do
-  depend on 10, so those still wait for it). Each was self-reviewed
-  (`code-review` skill) before merging; a coordinator (not the building agent)
-  reconciled the two independently-added migrations (`assemble`'s real
-  `Album.assembled_pdf_path` vs. `fulfill`'s placeholder of the same column)
+- **Deferred manual caption spot-check (step 12):** no `ANTHROPIC_API_KEY` in
+  this environment, so `caption` is tested only via PydanticAI `TestModel`/
+  `FunctionModel` — the build order's "spot-check ~20 captions for accuracy
+  and non-genericity" manual step wasn't performed. Same deferral pattern as
+  steps 4-5/9/15; do this once a key is available.
+- **Parallel build (2026-07-14, per user):** steps 10 (`enhance`), 12
+  (`caption`), 13 (`assemble`), and 15 (`fulfill`) were built concurrently on
+  separate branches/worktrees rather than strictly in order (step 11
+  `render` was also parallelized alongside 12, once 10 unblocked both — see
+  its own entry once merged), since a dependency check showed each pair
+  shares no files or logic. Each was self-reviewed (`code-review` skill)
+  before merging; a coordinator (not the building agent) reconciled the two
+  independently-added migrations (`assemble`'s real `Album.assembled_pdf_path`
+  vs. `fulfill`'s placeholder of the same column)
   and updated this tracker/`log.md` centrally to avoid the three branches
   conflicting on shared docs. This is a deliberate, user-approved exception to
   the "steps are delivered strictly in order" rule above — not a new default.

@@ -2,6 +2,17 @@
 
 ## 2026-07-14
 
+* **Build step 12 done** (commit `69f82b3`, `caption` stage): added
+  `src/album/stages/caption.py` — a thin stage whose only job is to iterate
+  an album's `selected` photos and call `enhance.ensure_analysis()` (step
+  10's shared idempotent "one combined vision call" trigger) for each,
+  reusing rather than reimplementing its idempotency. Order-independent with
+  `enhance`: whichever stage runs first triggers the one shared API call per
+  photo. Per-photo failure isolation (bad thumbnail, unparseable model
+  response) mirrors `quality.py`/`enhance.py`. Built in parallel with step 11
+  (`render`) — see that entry once merged. Deferred: the manual ~20-caption
+  accuracy spot-check (no `ANTHROPIC_API_KEY`). ruff + basedpyright + pytest
+  green, 131 tests (121 pre-existing + 10 new).
 * **Parallel build: steps 10 (`enhance`), 13 (`assemble`), 15 (`fulfill`)
   built concurrently**, per user, on separate git worktrees/branches, since
   they share no files or logic (confirmed by dependency analysis: 11 `render`
