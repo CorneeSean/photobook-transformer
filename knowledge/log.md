@@ -1,5 +1,20 @@
 # Directory Update Log
 
+## 2026-07-16
+
+* **Immich keep-or-replace decision recorded** — new
+  [`build/immich-dependency-decision.md`](/build/immich-dependency-decision.md) (linked from
+  [`index.md`](/index.md)). Analyses what the pipeline actually consumes from Immich
+  (two roles — managed library + faces/dedup ML — across seven API capabilities,
+  all behind the [`sync`](/stages/sync.md) boundary), maps each to an open-source
+  substitute (filesystem+exiftool+pyvips for storage; InsightFace `buffalo_l` +
+  DBSCAN for the `Person` concept; pgvector/`imagehash` for dedup), and flags
+  InsightFace's non-commercial model licensing. **Decision: keep Immich for now,
+  preserve replaceability** via the `AssetSource`/`ThumbnailSource` protocols; build
+  a `LocalPhotoSource` alongside and measure only when the second stack's cost bites
+  or a headless deployment is needed. Complements (inverts) [open question
+  #6](/build/open-questions.md) — we keep local ML *and* keep Immich, for now.
+
 ## 2026-07-15
 
 * **TestContainers step 22 — darktable render integration** done (branch
