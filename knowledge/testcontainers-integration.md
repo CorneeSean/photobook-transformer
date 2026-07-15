@@ -60,7 +60,7 @@ Then:
 *Test:* migrations apply to a real Postgres; `select` picks match the stub-based
 expectations against the real query; a re-run is idempotent. **Commit.**
 
-**22. darktable render integration** *(in scope — **done**, `4399ab3`)*. Runs the
+**22. darktable render integration** *(in scope — **done**, `8aac81b`)*. Runs the
 real `DarktableRenderer` **inside the shipped app Docker image** (which contains
 `darktable-cli`) over a real source JPEG + a real `write_xmp_sidecar` sidecar
 (`tests/test_render_integration.py`, `@pytest.mark.integration`); asserts the
