@@ -4,9 +4,10 @@ Photo Album Pipeline: a resumable batch pipeline that turns a raw photo dump int
 a printed, curated photo book. **All 16 build steps are done and merged to
 `main` — the original build order is complete.** A follow-on **[Immich
 enrichment playbook](./knowledge/immich-enrichment.md) (steps 17-20)** is now
-underway: **step 17 (faces/people in the client + `sync`) is done and merged**;
-the next numbered step is **17b (lead-face resolution)**, then 18 (people/lead-aware
-`select`), with 19/20 optional. `main` is clean and `uv run poe check` is green
+underway: **steps 17 (faces/people in the client + `sync`) and 17b (lead-face
+resolution) are done and merged**; the next numbered step is **18 (people/lead-aware
+`select`)** — the first consumer of `Person.is_lead`/`Photo.person_ids` — with
+19/20 optional. `main` is clean and `uv run poe check` is green
 (177 tests, run with `TESTCONTAINERS_RYUK_DISABLED=true` in this kind of sandbox —
 see Golden rules). What's left is either the next enrichment step, **closing a
 deferred live-integration check** (see

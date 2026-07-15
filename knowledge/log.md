@@ -2,6 +2,51 @@
 
 ## 2026-07-15
 
+* **Enrichment step 17b — lead-face resolution** done (`06810d7`, branch
+  `step-17b-lead-faces`, merged). The user names the priority subjects (couple,
+  baby, guest of honour) via `album.yml`'s `lead_faces`; the resolver turns that
+  into a set of Immich person IDs and marks the matching `Person` rows
+  `is_lead=True` for `select` (step 18). **No local face model** — Immich already
+  recognizes library faces into people; the reference just *names* which are the
+  leads (face embeddings aren't exposed over the API, same as CLIP — see
+  [immich-api](/immich-api.md)).
+    * **definition:** `LeadFacesYAML` on `AlbumYAML` — **exactly one** of
+      `reference_image` / `reference_asset_id` / `person_ids` — plus
+      `load_lead_faces()`. Leads are a resolution *input*, not persisted `Album`
+      state, so they're read from `album.yml` at resolution time, not stored.
+    * **client:** `upload_asset()` (`POST /assets`, multipart) for the reference
+      image. Immich content-dedups (`status="duplicate"` returns the existing
+      id), so a repeat upload is safe.
+    * **schema:** `Album.lead_reference_asset_id` (nullable) caches the uploaded
+      reference's asset id so a re-run reuses it instead of re-uploading.
+      Migration `d4a1c7b93e56`, verified on real Postgres (upgrade/downgrade,
+      zero autogenerate drift).
+    * **stages/lead_faces.py:** `LeadFaceResolver` (Prefect-free; injected client
+      + `sleep`). `reference_image` uploads then **polls `get_faces` while
+      Immich runs face detection asynchronously** (timeout → clear
+      `LeadFaceResolutionError`); `reference_asset_id`/`person_ids` resolve with
+      no upload; an unassigned reference face is **warned, not silently missed**.
+      `_mark_leads` makes the album's lead set *exactly* the resolved set.
+    * **flow:** `_resolve_leads_task` runs after `sync` (reads `lead_faces` from
+      `album.yml`; a clean no-op when the file/block is absent). Genericity guard
+      holds — no `lead_faces` ⇒ no `Person` rows touched.
+    * **Review:** 3 broad-scope sub-agents. A correctness agent caught that
+      `_mark_leads` only ever *set* `is_lead=True`, so editing `album.yml` and
+      re-running would leave a removed lead marked forever — fixed to demote
+      stale leads (the lead set now exactly matches the current config), with a
+      test. Two test-strength gaps closed: the poll test now asserts the retry
+      actually happened (`face_calls == [...]×3`), and a real run-then-rerun test
+      pins single-upload idempotency (the prior test only pre-seeded the cache
+      column). Cleanup flagged parallel structure with `sync`'s Person upsert and
+      the flow reading `album.yml` — both kept as defensible (different mutation;
+      resolver stays pure/testable with config injected).
+      `TESTCONTAINERS_RYUK_DISABLED=true uv run poe check` green, 194 tests.
+    * **Docs updated alongside:** [album-definition](/album-definition.md) (the
+      `lead_faces` block), [data-model](/data-model.md) (new column),
+      [immich-api](/immich-api.md) (`POST /assets` + async detection),
+      [stages/index](/stages/index.md); a commented `lead_faces` example added to
+      the shipped `smith-wedding/album.yml`.
+
 * **Enrichment step 17 — faces/people in the client + `sync` (+schema)** done
   (`c99d319`, branch `step-17-faces-sync`, merged). First step of the
   [Immich enrichment playbook](/immich-enrichment.md); adopts Immich's

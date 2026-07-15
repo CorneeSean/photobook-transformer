@@ -41,13 +41,26 @@ order, one at a time.
 | # | Step | Branch | Status | Commit | Notes |
 |---|------|--------|--------|--------|-------|
 | 17 | Faces in client + `sync` (+schema) | step-17-faces-sync (merged, deleted) | done | c99d319 | `ImmichFace` + `get_faces` (`GET /faces?id=`); `Photo.face_count`/`person_ids` + album-scoped `Person` table (migration `c3d9e5a1f742`, verified on real Postgres, zero autogenerate drift); per-asset N+1 face fetch, idempotent Person upsert, failure-isolated for both httpx + pydantic ValidationError; genericity guard holds (`person_ids=[]` ⇒ face-free behavior). 3-agent review; 177 tests green |
-| 17b | Lead-face resolution | — | todo | — | `lead_faces` in `album.yml` → mark `Person.is_lead`; `reference_image` upload + await async face detection. `is_lead` column already shipped in step 17 |
+| 17b | Lead-face resolution | step-17b-lead-faces (merged, deleted) | done | 06810d7 | `LeadFacesYAML` (exactly one of reference_image/reference_asset_id/person_ids) + `load_lead_faces`; client `upload_asset` (POST /assets); `Album.lead_reference_asset_id` cache (migration `d4a1c7b93e56`, verified on Postgres); `LeadFaceResolver` uploads + polls async face detection, marks `Person.is_lead` (exact set, clears stale); `_resolve_leads_task` after sync; genericity guard holds. 3-agent review (fixed stale-lead clearing); 194 tests |
 | 18 | People-aware + lead-aware `select` | — | todo | — | coverage + tie-break + lead boost/coverage; genericity guard (byte-for-byte for face-free albums) |
 | 19 | Name-grounded `caption` (optional) | — | todo | — | pass `Person.name`s into the shared analysis call |
 | 20 | Rating / OCR / geocoded place (optional) | — | todo | — | `rating` + `exifInfo.city/state/country` + OCR into nullable columns |
 
 ## Notes / blockers
 
+- **Enrichment step 17b done; live reference-upload/detection deferred
+  (2026-07-15):** `lead_faces` resolution is built and tested against a fake
+  provider (upload → async-detection poll → `is_lead`), but the real
+  `POST /assets` upload and Immich's *actual* async face-detection timing weren't
+  exercised — no reachable Immich, same deferral as steps 4-5/9/17. On the first
+  live run: confirm the reference upload dedups on re-run, that faces appear
+  within the poll timeout (tune `LeadFaceResolver.poll_timeout_s` if Immich's job
+  queue is slow), and that a lead unassigned in Immich surfaces the warning.
+  **Next enrichment step: 18 (people/lead-aware `select`)** — the first consumer
+  of `Person.is_lead`/`Photo.person_ids`. Idempotency corner (accepted): if a
+  reference upload succeeds but the async-detection poll then times out, the run
+  rolls back and loses the cached `lead_reference_asset_id`; content-dedup makes
+  the re-upload return the same id, so it self-heals.
 - **Enrichment step 17 done; live faces re-verification deferred (2026-07-15):**
   `sync` now fetches Immich faces/people into `Photo.face_count`/`person_ids` +
   the `Person` cache. Built and tested against recorded `/faces` fixtures and the
