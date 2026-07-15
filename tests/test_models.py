@@ -5,7 +5,7 @@ from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from album.db.models import Album, Photo, Segment
+from album.db.models import Album, Person, Photo, Segment
 
 
 class TestModels:
@@ -43,6 +43,35 @@ class TestModels:
         assert stored.segments == []
         assert stored.photos == [photo]
         assert photo.segment_id is None
+
+    def test_person_unique_per_album_and_defaults(
+        self, session: Session, make_album: Callable[..., Album]
+    ) -> None:
+        album = make_album()
+        session.add(album)
+        session.commit()
+        person = Person(album_id=album.id, immich_person_id="p-1", name="Alex")
+        session.add(person)
+        session.commit()
+
+        # is_lead defaults to False; the same Immich person can't be cached twice
+        # for one album.
+        assert person.is_lead is False
+        session.add(Person(album_id=album.id, immich_person_id="p-1", name="Alex again"))
+        with pytest.raises(IntegrityError):
+            session.commit()
+
+    def test_photo_face_columns_default_null(
+        self, session: Session, make_album: Callable[..., Album], make_photo: Callable[..., Photo]
+    ) -> None:
+        album = make_album()
+        photo = make_photo(album, immich_asset_id="asset-9")
+        session.add(album)
+        session.commit()
+
+        # NULL until `sync` has fetched faces (resumability invariant).
+        assert photo.face_count is None
+        assert photo.person_ids is None
 
     def test_segment_position_unique_per_album(
         self,

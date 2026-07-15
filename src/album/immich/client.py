@@ -19,10 +19,10 @@ from __future__ import annotations
 
 from datetime import datetime
 from types import TracebackType
-from typing import Self
+from typing import Any, Self
 
 import httpx
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from album.config import get_settings
 
@@ -65,6 +65,38 @@ class ImmichDuplicate(BaseModel):
 
     duplicate_id: str = Field(alias="duplicateId")
     assets: list[ImmichAsset]
+
+
+class ImmichFace(BaseModel):
+    """The subset of Immich's ``AssetFaceResponseDto`` the pipeline consumes.
+
+    Immich nests the recognized subject under ``person`` (``null`` for a
+    detected-but-unassigned face); we flatten just ``person.id``/``person.name``
+    up to the boundary and drop the bounding-box/thumbnail detail — the same
+    lean shape as :class:`ImmichAsset`. ``person_id`` is ``None`` for a
+    detected-but-unassigned face, which still counts as a real face.
+    """
+
+    model_config = ConfigDict(populate_by_name=True)
+
+    id: str
+    # sourceType is machine-learning | exif | manual.
+    source_type: str | None = Field(default=None, alias="sourceType")
+    person_id: str | None = Field(default=None, alias="personId")
+    person_name: str | None = Field(default=None, alias="personName")
+
+    @model_validator(mode="before")
+    @classmethod
+    def _flatten_person(cls, data: Any) -> Any:
+        """Lift ``person.id``/``person.name`` up to ``personId``/``personName``.
+
+        ``person`` is ``null`` for a detected-but-unassigned face; leave the
+        person fields at their ``None`` default in that case.
+        """
+        if isinstance(data, dict) and isinstance(data.get("person"), dict):
+            person: dict[str, Any] = data["person"]
+            return {**data, "personId": person.get("id"), "personName": person.get("name")}
+        return data
 
 
 class ImmichClient:
@@ -121,6 +153,16 @@ class ImmichClient:
         response = self._client.get("/duplicates")
         response.raise_for_status()
         return [ImmichDuplicate.model_validate(group) for group in response.json()]
+
+    def get_faces(self, asset_id: str) -> list[ImmichFace]:
+        """Detected faces for an asset, via ``GET /faces?id={asset_id}``.
+
+        Each face may or may not be assigned to a ``Person``; an unassigned face
+        (``person: null``) is still a real detection with no ``person_id`` yet.
+        """
+        response = self._client.get("/faces", params={"id": asset_id})
+        response.raise_for_status()
+        return [ImmichFace.model_validate(face) for face in response.json()]
 
     def get_thumbnail(self, asset_id: str, *, size: str = "thumbnail") -> bytes:
         """Raw thumbnail bytes for an asset, via ``GET /assets/{id}/thumbnail``."""

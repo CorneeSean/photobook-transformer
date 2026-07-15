@@ -55,6 +55,7 @@ class Album(Base):
     segments: Mapped[list[Segment]] = relationship(
         back_populates="album", order_by="Segment.position"
     )
+    people: Mapped[list[Person]] = relationship(back_populates="album")
 
 
 class Segment(Base):
@@ -99,6 +100,15 @@ class Photo(Base):
     gps_lat: Mapped[float | None] = mapped_column(default=None)
     gps_lon: Mapped[float | None] = mapped_column(default=None)
     duplicate_group_id: Mapped[str | None] = mapped_column(default=None)
+    # Faces detected by Immich (no local face-detection dependency). Both NULL
+    # until `sync` has fetched faces for this photo — the resumability invariant.
+    # `face_count` counts *all* detected faces (portrait-vs-landscape signal);
+    # `person_ids` holds only the *assigned* faces' stable Immich person UUIDs,
+    # which `select` reasons about structurally (coverage) and `caption` joins to
+    # Person.name. A recognized-but-unassigned face counts toward face_count but
+    # contributes no person id.
+    face_count: Mapped[int | None] = mapped_column(default=None)
+    person_ids: Mapped[list[str] | None] = mapped_column(JSON, default=None)
 
     # --- populated by `quality` ---
     blur_score: Mapped[float | None] = mapped_column(default=None)  # Laplacian variance
@@ -132,3 +142,28 @@ class Photo(Base):
 
     album: Mapped[Album] = relationship(back_populates="photos")
     segment: Mapped[Segment | None] = relationship()
+
+
+class Person(Base):
+    """An album-scoped cache of an Immich ``Person`` the pipeline has seen.
+
+    Lets `caption` resolve a photo's ``person_ids`` to display names without a
+    second Immich round-trip, and lets a name surviving an Immich merge/rename be
+    a re-``sync`` away. Populated by `sync`, keyed on the stable Immich person id.
+    ``is_lead`` marks a priority subject resolved from ``album.yml``'s
+    ``lead_faces`` (populated in a later step); it defaults False, so an album
+    with no configured leads behaves exactly as before.
+    """
+
+    __tablename__ = "people"
+    __table_args__ = (UniqueConstraint("album_id", "immich_person_id"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    album_id: Mapped[int] = mapped_column(ForeignKey("albums.id"), index=True)
+
+    immich_person_id: Mapped[str]
+    # None ⇒ recognized but unnamed in Immich.
+    name: Mapped[str | None] = mapped_column(default=None)
+    is_lead: Mapped[bool] = mapped_column(default=False)  # a priority subject (from lead_faces)
+
+    album: Mapped[Album] = relationship(back_populates="people")

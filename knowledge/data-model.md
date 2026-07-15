@@ -57,6 +57,7 @@ class Album(Base):
     segments: Mapped[list["Segment"]] = relationship(
         back_populates="album", order_by="Segment.position"
     )
+    people: Mapped[list["Person"]] = relationship(back_populates="album")
 
 
 class Segment(Base):
@@ -101,6 +102,11 @@ class Photo(Base):
     gps_lat: Mapped[float | None]
     gps_lon: Mapped[float | None]
     duplicate_group_id: Mapped[str | None]
+    # Faces detected by Immich (no local face-detection dependency). Both NULL
+    # until `sync` has fetched faces for this photo (resumability invariant),
+    # distinct from a fetched-but-faceless photo (face_count=0, person_ids=[]).
+    face_count: Mapped[int | None]                # all detected faces (portrait vs landscape)
+    person_ids: Mapped[list[str] | None] = mapped_column(JSON)  # assigned Immich person UUIDs only
 
     # --- populated by `quality` ---
     blur_score: Mapped[float | None]           # Laplacian variance
@@ -134,6 +140,28 @@ class Photo(Base):
 
     album: Mapped[Album] = relationship(back_populates="photos")
     segment: Mapped["Segment | None"] = relationship()
+
+
+class Person(Base):
+    """An album-scoped cache of an Immich `Person` the pipeline has seen.
+
+    Lets `caption` resolve a photo's `person_ids` to display names without a
+    second Immich round-trip, and lets a name surviving an Immich merge/rename
+    be a re-`sync` away. Populated by `sync`, keyed on the stable Immich person
+    id. `is_lead` marks a priority subject resolved from `album.yml`'s
+    `lead_faces` (populated in a later enrichment step) — defaults False, so an
+    album with no configured leads is unaffected.
+    """
+
+    __tablename__ = "people"
+    __table_args__ = (UniqueConstraint("album_id", "immich_person_id"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    album_id: Mapped[int] = mapped_column(ForeignKey("albums.id"), index=True)
+
+    immich_person_id: Mapped[str]
+    name: Mapped[str | None]                # None ⇒ recognized but unnamed in Immich
+    is_lead: Mapped[bool] = mapped_column(default=False)
 ```
 
 ## Notes
@@ -153,6 +181,17 @@ class Photo(Base):
   > SQLite with a stub similarity function, while the real `pgvector` query is
   > covered by a separate, slower test against a Postgres test container.
   > `testcontainers-python` is the clean way to do that.
+- **Faces are Immich-provided, structured, not opaque.** `Photo.person_ids` is a
+  JSON array of *stable Immich person UUIDs* (assigned faces only) — the value
+  [`select`](/stages/select.md) reasons about structurally (set membership /
+  per-person coverage), analogous to `duplicate_group_id`; `caption` joins it to
+  `Person.name`. `face_count` counts *all* detected faces (including
+  recognized-but-unassigned ones, which contribute no `person_id`) as a
+  portrait-vs-landscape signal. The small album-scoped `Person` table is the
+  id→name cache. Both `Photo` columns are nullable for the usual reason (`NULL` =
+  `sync` hasn't fetched faces yet); an album with no recognized faces leaves
+  `person_ids=[]` and every people-aware stage reduces to its face-free behavior
+  (genericity guard). See [Immich enrichment](/immich-enrichment.md).
 - **`Album.meta` is deliberately dumb.** No stage branches on its contents; it's
   interpolated into caption prompts and templates only. Anything a stage needs to
   *reason* about belongs in a real column or a `Segment`.

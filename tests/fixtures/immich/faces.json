@@ -1,0 +1,64 @@
+[
+  {
+    "id": "face-1111",
+    "sourceType": "machine-learning",
+    "boundingBoxX1": 100,
+    "boundingBoxY1": 120,
+    "boundingBoxX2": 220,
+    "boundingBoxY2": 260,
+    "imageWidth": 4032,
+    "imageHeight": 3024,
+    "person": {
+      "id": "p1111111-1111-4111-8111-111111111111",
+      "name": "Alex",
+      "birthDate": null,
+      "isHidden": false,
+      "thumbnailPath": "/api/people/p1111111/thumbnail"
+    }
+  },
+  {
+    "id": "face-2222",
+    "sourceType": "machine-learning",
+    "boundingBoxX1": 300,
+    "boundingBoxY1": 140,
+    "boundingBoxX2": 410,
+    "boundingBoxY2": 250,
+    "imageWidth": 4032,
+    "imageHeight": 3024,
+    "person": {
+      "id": "p2222222-2222-4222-8222-222222222222",
+      "name": "Sam",
+      "birthDate": null,
+      "isHidden": false,
+      "thumbnailPath": "/api/people/p2222222/thumbnail"
+    }
+  },
+  {
+    "id": "face-3333",
+    "sourceType": "exif",
+    "boundingBoxX1": 512,
+    "boundingBoxY1": 300,
+    "boundingBoxX2": 640,
+    "boundingBoxY2": 440,
+    "imageWidth": 4032,
+    "imageHeight": 3024,
+    "person": null
+  },
+  {
+    "id": "face-4444",
+    "sourceType": "manual",
+    "boundingBoxX1": 700,
+    "boundingBoxY1": 160,
+    "boundingBoxX2": 820,
+    "boundingBoxY2": 300,
+    "imageWidth": 4032,
+    "imageHeight": 3024,
+    "person": {
+      "id": "p4444444-4444-4444-8444-444444444444",
+      "name": "Sam",
+      "birthDate": null,
+      "isHidden": false,
+      "thumbnailPath": "/api/people/p4444444/thumbnail"
+    }
+  }
+]

@@ -9,10 +9,11 @@ number — numbering drifts as stages get added or split. See
 
 * [ingest](/stages/ingest.md) - Import an album's photos into a dedicated Immich album (manual, once per album).
 * [dedupe](/stages/dedupe.md) - Immich's built-in duplicate detection; we consume the results.
+* faces/people - Immich's built-in face detection + people recognition; `sync` consumes it (no local face model). See [Immich enrichment](/immich-enrichment.md).
 
 ## Our pipeline
 
-* [sync](/stages/sync.md) - The boundary — pull Immich asset list, EXIF, and duplicate groups into our DB.
+* [sync](/stages/sync.md) - The boundary — pull Immich asset list, EXIF, duplicate groups, and faces/people into our DB.
 * [quality](/stages/quality.md) - Score blur and aesthetics; compute embeddings if Immich doesn't expose them.
 * [cluster](/stages/cluster.md) - Assign photos to segments and detect scenes; degrades gracefully.
 * [select](/stages/select.md) - Diversity-aware best-of-scene via MMR.

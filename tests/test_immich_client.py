@@ -87,6 +87,35 @@ class TestImmichClient:
         ]
 
     @respx.mock
+    def test_get_faces(self, client: ImmichClient) -> None:
+        route = respx.get(f"{_BASE_URL}/faces").mock(
+            return_value=httpx.Response(200, json=_fixture("faces.json"))
+        )
+
+        faces = client.get_faces("a2222222-2222-4222-8222-222222222222")
+
+        # `?id=` scopes the lookup to a single asset.
+        assert route.calls[0].request.url.params["id"] == "a2222222-2222-4222-8222-222222222222"
+        assert [f.id for f in faces] == ["face-1111", "face-2222", "face-3333", "face-4444"]
+        # Assigned faces flatten person.id/name up to the boundary.
+        assert (faces[0].person_id, faces[0].person_name) == (
+            "p1111111-1111-4111-8111-111111111111",
+            "Alex",
+        )
+        # A detected-but-unassigned face (person: null) is still a real face,
+        # counted, but carries no person id/name.
+        assert faces[2].person_id is None
+        assert faces[2].person_name is None
+        # All three sourceType variants parse (machine-learning | exif | manual).
+        assert [f.source_type for f in faces] == [
+            "machine-learning",
+            "machine-learning",
+            "exif",
+            "manual",
+        ]
+        assert faces[3].person_name == "Sam"
+
+    @respx.mock
     def test_get_thumbnail_returns_bytes(self, client: ImmichClient) -> None:
         route = respx.get(f"{_BASE_URL}/assets/asset-1/thumbnail").mock(
             return_value=httpx.Response(200, content=b"\xff\xd8\xff-jpeg-bytes")

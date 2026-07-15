@@ -9,19 +9,28 @@ timestamp: 2026-07-13
 # Immich API notes
 
 Findings pinned down while building the [Immich client](/build-order.md) (step 4),
-against the Immich **OpenAPI spec v3.0.2** (the project's live Immich version).
-The [`client.py`](../src/album/immich/client.py) wrapper is modelled on these.
+against the Immich **OpenAPI spec v3.0.2** (the project's live Immich version at
+the time). The [`client.py`](../src/album/immich/client.py) wrapper is modelled on
+these. The **faces/people** surface below was added later (enrichment step 17,
+2026-07-14) against a current Immich (~v1.126); the rest of this doc is still the
+v3.0.2 snapshot and should be re-verified on the first live run.
 
 ## Open question #1 — does Immich expose CLIP embeddings? **No.**
 
 The public REST API exposes **no CLIP / smart-search embeddings**. The OpenAPI
 spec contains zero `embedding` fields; embeddings live only in Immich's internal
-`smart_search` table and are never returned over HTTP. What *is* exposed:
+`smart_search` table and are never returned over HTTP. **Re-confirmed 2026-07-14**
+against a current Immich (~v1.126) while adding the faces surface below: still no
+embedding fields, and still **no asset-to-asset visual-similarity endpoint**
+(smart search only accepts a *text* query and returns *assets*). Face embeddings
+are in the same boat — internal only. What *is* exposed:
 
 - **Smart search** (`POST /search/smart`) — returns matching *assets* for a text
   query; the vector itself never crosses the wire.
 - **Duplicate detection** (`GET /duplicates`, and `AssetResponseDto.duplicateId`
   on each asset) — the ML-derived output we *can* consume.
+- **Faces / people** (`GET /faces?id={assetId}`, `GET /people`) — see below;
+  another ML-derived output we consume, no local model needed.
 
 **Consequence:** the [`quality`](/stages/quality.md) stage must compute the
 [`clip_embedding`](/data-model.md) itself via `open_clip` (ViT-L/14, matching the
@@ -36,6 +45,7 @@ spec contains zero `embedding` fields; embeddings live only in Immich's internal
 | Duplicate groups | `GET /duplicates` | list of `{duplicateId, assets[], suggestedKeepAssetIds}`. |
 | Thumbnail bytes | `GET /assets/{id}/thumbnail?size=thumbnail` | for `quality`/`enhance`. |
 | Original bytes | `GET /assets/{id}/original` | full-resolution source pixels, for `render` (darktable-cli's input — XMP sidecars carry only edit instructions, not pixels). |
+| Faces for an asset | `GET /faces?id={assetId}` | list of `AssetFaceResponseDto`; each has `id`, `sourceType` (`machine-learning`\|`exif`\|`manual`), bounding box, and a nested `person: {id, name, …}` that is **`null` for a detected-but-unassigned face**. `sync` flattens just `person.id`/`person.name` to the lean [`ImmichFace`](../src/album/immich/client.py). One call *per asset* (an N+1 over the album — accepted; `sync` is a per-album batch behind Prefect retries). |
 
 Auth is the `x-api-key` header (key from Immich's web UI → Account Settings → API
 Keys), base URL includes the `/api` prefix (e.g. `http://localhost:2283/api`).

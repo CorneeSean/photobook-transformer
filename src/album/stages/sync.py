@@ -26,11 +26,13 @@ from datetime import UTC, datetime
 from typing import Protocol
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
+import httpx
+from pydantic import ValidationError
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from album.db.models import Album, Photo
-from album.immich.client import ImmichAsset, ImmichExif
+from album.db.models import Album, Person, Photo
+from album.immich.client import ImmichAsset, ImmichExif, ImmichFace
 
 _log = logging.getLogger(__name__)
 
@@ -44,6 +46,8 @@ class AssetSource(Protocol):
 
     def get_album_assets(self, immich_album_id: str) -> list[ImmichAsset]: ...
 
+    def get_faces(self, asset_id: str) -> list[ImmichFace]: ...
+
 
 @dataclass
 class SyncResult:
@@ -51,6 +55,8 @@ class SyncResult:
     updated: int = 0
     # Immich asset ids whose capture zone couldn't be determined (timestamp left NULL).
     ambiguous: list[str] = field(default_factory=list)
+    # Immich asset ids whose face fetch failed (face columns left untouched/NULL).
+    face_errors: list[str] = field(default_factory=list)
 
 
 class SyncStage:
@@ -77,6 +83,11 @@ class SyncStage:
         existing = {
             photo.immich_asset_id: photo
             for photo in session.scalars(select(Photo).where(Photo.album_id == album_id))
+        }
+        # Album-scoped Person cache, keyed by Immich id so re-sync upserts in place.
+        people = {
+            person.immich_person_id: person
+            for person in session.scalars(select(Person).where(Person.album_id == album_id))
         }
 
         result = SyncResult()
@@ -106,8 +117,70 @@ class SyncStage:
             photo.gps_lat = exif.latitude if exif else None
             photo.gps_lon = exif.longitude if exif else None
 
+            self._sync_faces(album_id, asset, photo, people, session, result)
+
         session.flush()
         return result
+
+    def _sync_faces(
+        self,
+        album_id: int,
+        asset: ImmichAsset,
+        photo: Photo,
+        people: dict[str, Person],
+        session: Session,
+        result: SyncResult,
+    ) -> None:
+        """Populate ``photo.face_count``/``person_ids`` and upsert ``Person`` rows.
+
+        Failure-isolated: a face fetch *or parse* failing for one asset is logged
+        and recorded, leaving that photo's face columns untouched (NULL on a first
+        sync) rather than aborting the whole album — the same isolation the
+        ambiguous-timestamp path uses. ``people`` is mutated in place so a person
+        seen on an earlier asset isn't inserted twice within one run.
+        """
+        # NB: two separate `except` clauses, not `except (A, B):` — ruff 0.15.21's
+        # py314 formatter mangles the parenthesized-tuple form (see log.md
+        # 2026-07-13). A transport failure (httpx.HTTPError) OR a malformed face
+        # payload (pydantic ValidationError, raised inside get_faces) must both be
+        # isolated to this one asset, never abort the album mid-loop.
+        try:
+            faces = self._source.get_faces(asset.id)
+        except httpx.HTTPError:
+            self._record_face_error(asset, result)
+            return
+        except ValidationError:
+            self._record_face_error(asset, result)
+            return
+
+        photo.face_count = len(faces)
+        # Assigned faces only, de-duplicated but order-preserving (a person may
+        # appear in more than one face on the same photo).
+        photo.person_ids = list(
+            dict.fromkeys(face.person_id for face in faces if face.person_id is not None)
+        )
+
+        for face in faces:
+            if face.person_id is None:
+                continue
+            person = people.get(face.person_id)
+            if person is None:
+                person = Person(album_id=album_id, immich_person_id=face.person_id)
+                session.add(person)
+                people[face.person_id] = person
+            # Let a rename in Immich propagate, but never clobber a known name with None.
+            if face.person_name is not None:
+                person.name = face.person_name
+
+    def _record_face_error(self, asset: ImmichAsset, result: SyncResult) -> None:
+        """Record a per-asset face fetch/parse failure without aborting the album."""
+        result.face_errors.append(asset.id)
+        _log.warning(
+            "asset %s (%s): faces fetch/parse failed; leaving face columns unchanged",
+            asset.id,
+            asset.original_file_name,
+            exc_info=True,
+        )
 
     def _capture_time_utc(
         self, asset: ImmichAsset, default_zone: ZoneInfo | None

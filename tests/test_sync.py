@@ -11,25 +11,57 @@ import logging
 from collections.abc import Callable
 from datetime import UTC, datetime
 
+import httpx
 import pytest
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from album.db.models import Album, Photo
-from album.immich.client import ImmichAsset
+from album.db.models import Album, Person, Photo
+from album.immich.client import ImmichAsset, ImmichFace
 from album.stages.sync import SyncStage
 
 
-class FakeImmich:
-    """An in-memory :class:`~album.stages.sync.AssetSource` for tests."""
+def _face(face_id: str, person_id: str | None = None, name: str | None = None) -> ImmichFace:
+    """Build a face the way it arrives on the wire (person nested, null if unassigned)."""
+    person = {"id": person_id, "name": name} if person_id is not None else None
+    payload = {"id": face_id, "sourceType": "machine-learning", "person": person}
+    return ImmichFace.model_validate(payload)
 
-    def __init__(self, assets: list[ImmichAsset]) -> None:
+
+class FakeImmich:
+    """An in-memory :class:`~album.stages.sync.AssetSource` for tests.
+
+    Faces are canned per asset id; an asset id listed in ``face_errors`` raises
+    from ``get_faces`` to exercise `sync`'s per-asset failure isolation.
+    """
+
+    def __init__(
+        self,
+        assets: list[ImmichAsset],
+        *,
+        faces: dict[str, list[ImmichFace]] | None = None,
+        face_errors: set[str] | None = None,
+        face_parse_errors: set[str] | None = None,
+    ) -> None:
         self._assets = assets
+        self._faces = faces or {}
+        self._face_errors = face_errors or set()
+        self._face_parse_errors = face_parse_errors or set()
         self.calls: list[str] = []
+        self.face_calls: list[str] = []
 
     def get_album_assets(self, immich_album_id: str) -> list[ImmichAsset]:
         self.calls.append(immich_album_id)
         return self._assets
+
+    def get_faces(self, asset_id: str) -> list[ImmichFace]:
+        self.face_calls.append(asset_id)
+        if asset_id in self._face_errors:
+            raise httpx.HTTPError(f"boom for {asset_id}")
+        if asset_id in self._face_parse_errors:
+            # A malformed payload — exactly what the real client raises mid-parse.
+            ImmichFace.model_validate({"sourceType": "machine-learning"})  # missing required id
+        return self._faces.get(asset_id, [])
 
 
 class TestSync:
@@ -173,3 +205,117 @@ class TestSync:
         assert photo.duplicate_group_id == "dup-7"
         assert photo.camera_model == "Apple iPhone 15 Pro"
         assert (photo.gps_lat, photo.gps_lon) == (42.4, 18.7)
+
+    def test_populates_faces_and_upserts_people(
+        self, session: Session, make_album: Callable[..., Album]
+    ) -> None:
+        album_id = self._persist(session, make_album(immich_album_id="immich-abc"))
+        client = FakeImmich(
+            [self._asset("a1")],
+            faces={
+                "a1": [
+                    _face("f1", "p-alex", "Alex"),
+                    _face("f2", "p-sam", "Sam"),
+                    _face("f3"),  # detected but unassigned (person: null)
+                ]
+            },
+        )
+
+        SyncStage(client).run(album_id, session)
+
+        assert client.face_calls == ["a1"]
+        photo = session.scalars(select(Photo)).one()
+        # face_count counts *all* faces; person_ids holds only assigned ones.
+        assert photo.face_count == 3
+        assert photo.person_ids == ["p-alex", "p-sam"]
+        people = {p.immich_person_id: p for p in session.scalars(select(Person))}
+        assert set(people) == {"p-alex", "p-sam"}
+        assert people["p-alex"].name == "Alex"
+        assert all(p.album_id == album_id and not p.is_lead for p in people.values())
+
+    def test_faceless_asset_lands_empty_not_null(
+        self, session: Session, make_album: Callable[..., Album]
+    ) -> None:
+        album_id = self._persist(session, make_album(immich_album_id="immich-abc"))
+
+        SyncStage(FakeImmich([self._asset("a1")], faces={"a1": []})).run(album_id, session)
+
+        photo = session.scalars(select(Photo)).one()
+        # Fetched but faceless — distinct from "not fetched yet" (NULL).
+        assert photo.face_count == 0
+        assert photo.person_ids == []
+
+    def test_sync_faces_idempotent(
+        self, session: Session, make_album: Callable[..., Album]
+    ) -> None:
+        album_id = self._persist(session, make_album(immich_album_id="immich-abc"))
+        stage = SyncStage(
+            FakeImmich([self._asset("a1")], faces={"a1": [_face("f1", "p-alex", "Alex")]})
+        )
+        stage.run(album_id, session)
+        # A rename in Immich propagates on re-sync, without duplicating the row.
+        stage = SyncStage(
+            FakeImmich([self._asset("a1")], faces={"a1": [_face("f1", "p-alex", "Alex M.")]})
+        )
+        stage.run(album_id, session)
+
+        people = session.scalars(select(Person)).all()
+        assert len(people) == 1
+        assert people[0].name == "Alex M."
+
+    def test_dedups_person_ids_across_faces(
+        self, session: Session, make_album: Callable[..., Album]
+    ) -> None:
+        album_id = self._persist(session, make_album(immich_album_id="immich-abc"))
+        # Two detected faces of the same person on one photo (plus a second person).
+        client = FakeImmich(
+            [self._asset("a1")],
+            faces={
+                "a1": [
+                    _face("f1", "p-alex", "Alex"),
+                    _face("f2", "p-sam", "Sam"),
+                    _face("f3", "p-alex", "Alex"),
+                ]
+            },
+        )
+
+        SyncStage(client).run(album_id, session)
+
+        photo = session.scalars(select(Photo)).one()
+        assert photo.face_count == 3  # all faces counted
+        # person_ids de-duplicated, first-seen order preserved.
+        assert photo.person_ids == ["p-alex", "p-sam"]
+        assert len(session.scalars(select(Person)).all()) == 2
+
+    @pytest.mark.parametrize(
+        ("kind", "kwargs"),
+        [
+            ("transport", {"face_errors": {"a1"}}),  # httpx.HTTPError from get_faces
+            ("parse", {"face_parse_errors": {"a1"}}),  # pydantic.ValidationError mid-parse
+        ],
+    )
+    def test_face_fetch_failure_is_isolated(
+        self,
+        session: Session,
+        make_album: Callable[..., Album],
+        caplog: pytest.LogCaptureFixture,
+        kind: str,
+        kwargs: dict[str, set[str]],
+    ) -> None:
+        album_id = self._persist(session, make_album(immich_album_id="immich-abc"))
+        client = FakeImmich(
+            [self._asset("a1"), self._asset("a2")],
+            faces={"a2": [_face("f1", "p-sam", "Sam")]},
+            **kwargs,  # a1's face call blows up (transport or parse); a2 is fine
+        )
+
+        with caplog.at_level(logging.WARNING):
+            result = SyncStage(client).run(album_id, session)
+
+        assert result.face_errors == ["a1"]
+        assert "faces" in caplog.text
+        photos = {p.immich_asset_id: p for p in session.scalars(select(Photo))}
+        # a1's face columns stay NULL (never aborts the album); a2 is unaffected.
+        assert (photos["a1"].face_count, photos["a1"].person_ids) == (None, None)
+        assert photos["a2"].face_count == 1
+        assert photos["a2"].person_ids == ["p-sam"]
