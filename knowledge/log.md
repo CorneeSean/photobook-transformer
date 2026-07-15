@@ -2,6 +2,44 @@
 
 ## 2026-07-15
 
+* **TestContainers step 22 — darktable render integration** done (branch
+  `step-22-darktable-render`, merged). Runs the **real** `DarktableRenderer`
+  inside the **shipped app Docker image** (which carries `darktable-cli`) over a
+  real source JPEG + a real `write_xmp_sidecar` sidecar, asserting the output
+  JPEG exists, decodes, and is **visibly brighter** than the source
+  (`tests/test_render_integration.py`, `@pytest.mark.integration`) — the
+  automated form of build step 11's deferred "visibly corrected versus original"
+  manual check, no internet model.
+    * **Found + fixed a real bug (the point of the step):** `enhance` wrote XMP
+      sidecars as *flat* attributes (`darktable:exposure="0.5"` …) — a schema
+      `darktable-cli` **silently ignores**. Every render was a no-op copy; no
+      tone correction ever reached an image (the exact failure build-11's manual
+      check would have caught). Rewrote `write_xmp_sidecar` to darktable's real
+      binary **history stack**: one `<rdf:li>` per non-zero knob with a
+      hex-encoded C-params blob — `exposure_ev`→`exposure` (1:1 EV),
+      `shadows`/`highlights`→`shadhi` (`[-1,1]`→`[-100,100]`),
+      `temp_shift_k`→`temperature` (bounded Kelvin→R/B multiplier). Minimal
+      backward-compatible scaffold (`xmp_version="4"`, no `iop_order_list` so
+      darktable uses its own order); struct `modversion`s pinned to the app
+      image's **darktable 5.0.1**. Verified module-by-module in a container
+      (debug trace: "successfully loaded module exposure/shadhi/temperature").
+    * **Investigation:** the flat schema was confirmed a 0-effect no-op (source
+      luma == rendered luma == no-XMP-render luma) before the fix; a hand-built
+      stack then produced +2 EV (luma 99→245). Ground-truth format taken from
+      darktable's own reference sidecar (`src/tests/benchmark/darktable-bench-4.2
+      .xmp`) + the `wmakeev/darkroom-xmp-tools` param encodings; struct layouts
+      confirmed against `release-5.0.1` module sources.
+    * **Landmine:** the test shells to the `docker` CLI, **not** docker-py — this
+      sandbox's `~/.docker` credential helper (`docker-credential-gcloud`)
+      crashes under Python 3.14 (`No module named 'imp'`), which breaks
+      docker-py's/testcontainers' image *build*; the CLI resolves creds fine.
+    * `test_enhance.py::TestXmpSidecar` rewritten to assert the history-stack
+      structure + decode the exposure/shadhi params blobs (round-trip). Plain
+      `uv run poe check` green (214 tests, 11 integration; Ryuk no longer needs
+      disabling — landmine resolved this same day). No `src/` behavior change
+      beyond `write_xmp_sidecar`; the `Renderer` protocol/orchestration is
+      untouched.
+
 * **Doc**: Added [Pipeline execution shape](/pipeline-execution.md) — documents
   that the pipeline runs as a linear chain today (one shared `Session`, committed
   per stage) but is a **DAG** underneath, with two parallelisable fan-out groups

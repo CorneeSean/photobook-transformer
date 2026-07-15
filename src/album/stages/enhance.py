@@ -17,17 +17,32 @@ Two responsibilities, per [enhance.md](/stages/enhance.md):
 
 XMP schema choice
 ------------------
-We write **darktable's own history-stack attributes** in the sidecar (the
-``darktable:`` namespace), not Adobe's Camera Raw (``crs:``) schema, because
-``render`` invokes ``darktable-cli`` directly (tech-stack.md) — darktable reads
-its own sidecar format natively with no import/conversion step. We keep the
-history minimal and flat (one ``rdf:Description`` carrying
-``darktable:exposure``, ``darktable:temperature_offset``, ``darktable:shadows``,
-``darktable:highlights`` as plain float attributes) rather than a full
-multi-``iop`` history stack — enough for `render` (step 11) to read the four
-numbers back and apply them through darktable's real exposure/temperature/
-shadows-and-highlights modules; it can promote this to a richer history stack
-later without changing what `enhance` writes.
+We write **darktable's real history stack** in the sidecar (the ``darktable:``
+namespace), because ``render`` invokes ``darktable-cli`` directly (tech-stack.md)
+and darktable reads *only* that format. darktable does not have plain-text tone
+attributes: each module's settings are a **hex-encoded dump of its C params
+struct** inside a ``<darktable:history>`` ``rdf:Seq``. (An earlier flat-attribute
+schema here — ``darktable:exposure="0.5"`` and friends — was silently *ignored*
+by darktable-cli, so ``enhance`` applied nothing at all through ``render``; this
+was caught by step 22's darktable integration test and is why the format is now
+the real stack. See stages/render.md.)
+
+We emit the **minimal, backward-compatible scaffold** darktable's XMP reader
+accepts: ``darktable:xmp_version="4"`` and one ``rdf:li`` history entry per
+*non-zero* tone knob, with **no explicit** ``iop_order_list`` so darktable places
+each module using its own built-in order for whatever version is installed (more
+robust across darktable upgrades than pinning a module list). The four bounded
+``ToneParams`` knobs map onto three real darktable modules:
+
+- ``exposure_ev``           -> the ``exposure`` module's ``exposure`` field (both in EV, 1:1);
+- ``shadows`` / ``highlights`` -> the ``shadhi`` module (our ``[-1, 1]`` scaled to
+  darktable's ``[-100, 100]``);
+- ``temp_shift_k``          -> the ``temperature`` module's red/blue channel
+  multipliers (Kelvin approximated as a bounded ``±`` swing; positive = warmer).
+
+The module ``modversion``/struct layouts are darktable 5.0.1's (the binary is
+pinned in the app Docker image, build step 1); a darktable major upgrade can
+change a struct and would need these updated (the integration test guards it).
 
 Sidecar path: ``<data_root>/<album.slug>/xmp/<photo.filename>.xmp`` (e.g.
 ``data/albums/honeymoon-2026/xmp/IMG_0001.jpg.xmp``), mirroring
@@ -44,6 +59,7 @@ already ``True`` unless ``force=True``; per-photo failures are isolated
 from __future__ import annotations
 
 import logging
+import struct
 import xml.etree.ElementTree as ET
 from dataclasses import dataclass
 from pathlib import Path
@@ -62,14 +78,28 @@ _log = logging.getLogger(__name__)
 
 _DEFAULT_DATA_ROOT = Path("data/albums")
 
-# darktable's own XMP namespace convention: reverse-DNS style URI, "darktable"
-# prefix. Made up here (this project isn't literally registered with them) but
-# structurally matches how darktable itself emits sidecars.
+# darktable's XMP namespaces (its real, documented sidecar schema).
 _DARKTABLE_NS = "http://darktable.sf.net/xmp/1.0/"
 _RDF_NS = "http://www.w3.org/1999/02/22-rdf-syntax-ns#"
 _X_NS = "adobe:ns:meta/"
 
 _NAMESPACES = {"darktable": _DARKTABLE_NS, "rdf": _RDF_NS, "x": _X_NS}
+
+# darktable 5.0.1 module-introspection versions (its ``DT_MODULE_INTROSPECTION``);
+# darktable rejects/legacy-converts a history entry whose modversion+struct don't
+# match the installed module, so these are pinned to the app image's darktable.
+_MODVERSION = {"exposure": 6, "shadhi": 5, "temperature": 4}
+
+# The default "blending off" blendop params — identical across modules for a given
+# blendop version, copied verbatim from a darktable-written sidecar. Every history
+# entry needs a blendop, and this one is a pass-through (the module applies fully).
+_BLENDOP_VERSION = 11
+_BLENDOP_OFF = "gz10eJxjYGBgYAFiCQYYOOHEgAYY0QVwggZ7CB6pfOygYtaVAyCMi08IAAB5xiOg"
+
+# Kelvin -> red/blue channel-multiplier swing. temp_shift_k is clamped to
+# ±2000 K (AnalysisResult); at that bound this yields a ~±0.15 multiplier — a
+# clearly visible but bounded warm/cool shift (AGENTS.md rule 5, never drastic).
+_TEMP_K_TO_MULT = 7.5e-5
 
 
 @dataclass(frozen=True)
@@ -157,12 +187,62 @@ def _decode_gray(image: bytes) -> np.ndarray:
     return decoded.astype(np.float64)
 
 
-def write_xmp_sidecar(path: Path, tone: ToneParams) -> None:
-    """Write ``tone`` as a darktable-style XMP sidecar at ``path``.
+def _exposure_params(exposure_ev: float) -> str:
+    """Hex dump of ``dt_iop_exposure_params_t`` (modversion 6): manual mode, no
+    black point, ``exposure`` in EV, then the two deflicker defaults and the
+    ``compensate_exposure_bias`` flag."""
+    return struct.pack("<iffffi", 0, 0.0, exposure_ev, 50.0, -4.0, 0).hex()
 
-    See the module docstring for the schema choice (darktable's own
-    ``darktable:`` namespace, flat attributes rather than a full ``iop``
-    history stack). Creates parent directories as needed.
+
+def _shadhi_params(shadows: float, highlights: float) -> str:
+    """Hex dump of ``dt_iop_shadhi_params_t`` (modversion 5). Our ``[-1, 1]``
+    shadows/highlights scale onto darktable's ``[-100, 100]``; the rest are the
+    module's own defaults (bilateral soften, radius 100, compress 50)."""
+    return struct.pack(
+        "<IffffffffIfI",
+        0,  # order = DT_IOP_GAUSSIAN_ZERO
+        100.0,  # radius
+        shadows * 100.0,  # shadows: [-1, 1] -> [-100, 100]
+        0.0,  # whitepoint
+        highlights * 100.0,  # highlights: [-1, 1] -> [-100, 100]
+        0.0,  # reserved2
+        50.0,  # compress
+        100.0,  # shadows_ccorrect
+        50.0,  # highlights_ccorrect
+        0,  # flags
+        0.000001,  # low_approximation
+        1,  # shadhi_algo = SHADHI_ALGO_BILATERAL
+    ).hex()
+
+
+def _temperature_params(temp_shift_k: float) -> str:
+    """Hex dump of ``dt_iop_temperature_params_t`` (modversion 4): red/green/blue/
+    various channel multipliers + preset. A Kelvin shift is approximated as an
+    equal-and-opposite red/blue swing (green fixed) — positive is warmer."""
+    swing = temp_shift_k * _TEMP_K_TO_MULT
+    return struct.pack("<ffffi", 1.0 + swing, 1.0, 1.0 - swing, 1.0, 0).hex()
+
+
+def _history_entries(tone: ToneParams) -> list[tuple[str, str]]:
+    """``(operation, params_hex)`` for each *non-zero* tone knob — a zero knob is
+    a true no-op, so it's left out to keep the sidecar minimal (an all-zero tone
+    yields an empty history, which darktable renders with its defaults)."""
+    entries: list[tuple[str, str]] = []
+    if tone.exposure_ev != 0.0:
+        entries.append(("exposure", _exposure_params(tone.exposure_ev)))
+    if tone.temp_shift_k != 0.0:
+        entries.append(("temperature", _temperature_params(tone.temp_shift_k)))
+    if tone.shadows != 0.0 or tone.highlights != 0.0:
+        entries.append(("shadhi", _shadhi_params(tone.shadows, tone.highlights)))
+    return entries
+
+
+def write_xmp_sidecar(path: Path, tone: ToneParams) -> None:
+    """Write ``tone`` as a darktable history-stack XMP sidecar at ``path``.
+
+    See the module docstring for the schema (darktable's real binary history
+    stack — the only format ``darktable-cli`` actually applies). Creates parent
+    directories as needed.
     """
     path.parent.mkdir(parents=True, exist_ok=True)
 
@@ -170,16 +250,41 @@ def write_xmp_sidecar(path: Path, tone: ToneParams) -> None:
     ET.register_namespace("rdf", _RDF_NS)
     ET.register_namespace("darktable", _DARKTABLE_NS)
 
+    entries = _history_entries(tone)
+
     xmpmeta = ET.Element(f"{{{_X_NS}}}xmpmeta")
     rdf = ET.SubElement(xmpmeta, f"{{{_RDF_NS}}}RDF")
     description = ET.SubElement(rdf, f"{{{_RDF_NS}}}Description")
     description.set(f"{{{_RDF_NS}}}about", "")
-    description.set(f"{{{_DARKTABLE_NS}}}exposure", str(tone.exposure_ev))
-    description.set(f"{{{_DARKTABLE_NS}}}temperature_offset", str(tone.temp_shift_k))
-    description.set(f"{{{_DARKTABLE_NS}}}shadows", str(tone.shadows))
-    description.set(f"{{{_DARKTABLE_NS}}}highlights", str(tone.highlights))
+    description.set(f"{{{_DARKTABLE_NS}}}xmp_version", "4")
+    description.set(f"{{{_DARKTABLE_NS}}}history_end", str(len(entries)))
+
+    seq = ET.SubElement(
+        ET.SubElement(description, f"{{{_DARKTABLE_NS}}}history"), f"{{{_RDF_NS}}}Seq"
+    )
+    for num, (operation, params) in enumerate(entries):
+        _append_history_entry(seq, num, operation, params)
 
     ET.ElementTree(xmpmeta).write(path, encoding="UTF-8", xml_declaration=True)
+
+
+def _append_history_entry(seq: ET.Element, num: int, operation: str, params: str) -> None:
+    """Append one ``<rdf:li>`` module entry (a fully-specified, blending-off
+    history item) to the history ``rdf:Seq``."""
+    li = ET.SubElement(seq, f"{{{_RDF_NS}}}li")
+    attrs = {
+        "num": str(num),
+        "operation": operation,
+        "enabled": "1",
+        "modversion": str(_MODVERSION[operation]),
+        "params": params,
+        "multi_name": "",
+        "multi_priority": "0",
+        "blendop_version": str(_BLENDOP_VERSION),
+        "blendop_params": _BLENDOP_OFF,
+    }
+    for key, value in attrs.items():
+        li.set(f"{{{_DARKTABLE_NS}}}{key}", value)
 
 
 def _xmp_path(data_root: Path, album_slug: str, filename: str) -> Path:

@@ -7,9 +7,9 @@ enrichment playbook](./knowledge/immich-enrichment.md) (steps 17-20)** is now
 underway: **steps 17 (faces/people in the client + `sync`), 17b (lead-face
 resolution), and 18 (people/lead-aware `select`) are done and merged**; the
 remaining playbook steps are the *optional* **19 (name-grounded `caption`)** and
-**20 (rating / OCR / geocoded place)**. `main` is clean and `uv run poe check` is green
-(177 tests, run with `TESTCONTAINERS_RYUK_DISABLED=true` in this kind of sandbox —
-see Golden rules). What's left is either the next enrichment step, **closing a
+**20 (rating / OCR / geocoded place)**. `main` is clean and plain `uv run poe check` is green
+(214 tests; the Ryuk reaper works now, so `TESTCONTAINERS_RYUK_DISABLED` is no
+longer needed — resolved 2026-07-15, see Golden rules). What's left is either the next enrichment step, **closing a
 deferred live-integration check** (see
 [`knowledge/progress.md`](./knowledge/progress.md)'s Notes / blockers section —
 read it in full, it's long), or new, user-directed work.
@@ -147,7 +147,7 @@ to future deferred-item or new-feature work too, if it splits similarly.
 - Update `knowledge/progress.md` and `knowledge/log.md` **on the working
   branch, before the fast-forward merge** — `main` is commit-protected, so a
   post-merge docs commit can't land without a second branch.
-- **`TESTCONTAINERS_RYUK_DISABLED=true`** is needed for `uv run poe check` in
-  this kind of sandbox (Ryuk reaper landmine, see tracker notes) — Docker
-  itself works fine here (confirmed steps 14 and 16: real Postgres + Prefect
-  server brought up and torn down cleanly via `docker compose`).
+- **Ryuk works now (resolved 2026-07-15):** plain `uv run poe check` is green;
+  `TESTCONTAINERS_RYUK_DISABLED` is no longer needed (the old reaper landmine
+  went away with the Docker reinstall — see tracker notes). Docker itself works
+  fine here (confirmed steps 14/16: real Postgres + Prefect via `docker compose`).

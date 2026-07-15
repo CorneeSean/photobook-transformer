@@ -40,9 +40,10 @@ applicable, `uv run poe check` green — or the container run as the manual
 verification, sub-agent review, squash-merge; human-review gate stays waived per
 the step-4-onward note in [progress](/progress.md)). Mark the new tests so the
 fast SQLite suite stays the default and containers run in a separate gate
-(`@pytest.mark.integration`, or a `poe` task that opts in). Keep
-`TESTCONTAINERS_RYUK_DISABLED=true` set — the Ryuk reaper landmine in this
-sandbox (see [progress](/progress.md) notes and [log](/log.md) 2026-07-13/08).
+(`@pytest.mark.integration`, or a `poe` task that opts in). The Ryuk reaper now
+works, so plain `uv run poe check` is green — `TESTCONTAINERS_RYUK_DISABLED` is
+**no longer needed** (the old sandbox landmine was resolved 2026-07-15; see
+[progress](/progress.md) notes).
 
 **21. pgvector schema + integration harness** *(in scope — highest value)*.
 A session-scoped `pgvector` testcontainer fixture that runs **`alembic upgrade
@@ -59,13 +60,24 @@ Then:
 *Test:* migrations apply to a real Postgres; `select` picks match the stub-based
 expectations against the real query; a re-run is idempotent. **Commit.**
 
-**22. darktable render integration** *(in scope)*. Run the app Docker image
-(which contains `darktable-cli`) as a container; feed a real source JPEG + a
-generated XMP sidecar through `RenderStage`'s real `DarktableRenderer`; assert an
-output JPEG exists and is **visibly different** from the source (e.g. differing
-bytes/histogram). This closes the deferred *"a rendered file exists, opens, and is
-visibly corrected versus its original"* manual check (build step 11) with no
-internet model — just the binary we already ship. **Commit.**
+**22. darktable render integration** *(in scope — **done**, `4399ab3`)*. Runs the
+real `DarktableRenderer` **inside the shipped app Docker image** (which contains
+`darktable-cli`) over a real source JPEG + a real `write_xmp_sidecar` sidecar
+(`tests/test_render_integration.py`, `@pytest.mark.integration`); asserts the
+output JPEG exists, decodes, and is **visibly brighter** than the source. Closes
+build step 11's deferred *"visibly corrected versus its original"* manual check,
+no internet model.
+- **Found + fixed a real bug:** `enhance`'s XMP sidecars used a made-up *flat*
+  `darktable:exposure="…"` attribute schema that `darktable-cli` **silently
+  ignores** — every render was a no-op, so no tone correction ever reached the
+  image. Fixed by rewriting `write_xmp_sidecar` to emit darktable's real binary
+  *history stack* (exposure / shadhi / temperature modules; struct layouts pinned
+  to the app image's darktable 5.0.1). The "visibly brighter" assertion is the
+  regression guard.
+- **Landmine:** shells out to the `docker` CLI, not docker-py — this sandbox's
+  `~/.docker` credential helper (`docker-credential-gcloud`) crashes under Python
+  3.14 (`No module named 'imp'`), breaking docker-py's image build; the CLI is
+  fine. **Commit.**
 
 **23. DB-backed flow smoke test** *(optional)*. Run the whole Prefect flow against
 the real Postgres container with **Immich/Claude/Lulu still injected as doubles**,

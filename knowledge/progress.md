@@ -51,7 +51,7 @@ order, one at a time.
 | # | Step | Branch | Status | Commit | Notes |
 |---|------|--------|--------|--------|-------|
 | 21 | pgvector schema + integration harness | step-21-pgvector-integration (merged, deleted) | done | ac2cd14 | alembic-migrated pgvector container fixture; `select` over the real `PgVectorSimilarity` (near-dup skip, idempotent; lead coverage with a negative control + `person_ids` JSON round-trip); migrations reach head + no drift; migration round-trip; `integration` marker + `poe test-fast`. 2-agent review (fixed a fileConfig/caplog cross-test leak). 211 tests |
-| 22 | darktable-cli render integration | — | todo | — | run the app image (has darktable-cli), assert a rendered JPEG differs from source — closes step-11's deferred manual check; no internet model |
+| 22 | darktable-cli render integration | step-22-darktable-render (merged, deleted) | done | 4399ab3 | real `DarktableRenderer` inside the shipped app image renders a real `write_xmp_sidecar` sidecar → asserts output JPEG exists, decodes, **visibly brighter** (`tests/test_render_integration.py`). **Found + fixed a real bug:** `enhance`'s flat-attribute XMP was silently ignored by darktable (every render a no-op) — rewrote `write_xmp_sidecar` to darktable's real binary history stack (exposure/shadhi/temperature, structs pinned to darktable 5.0.1). Closes step-11's deferred manual check. Shells to `docker` CLI (docker-py build breaks on the py3.14 gcloud cred-helper landmine). |
 | 23 | DB-backed flow smoke test (optional) | — | todo | — | whole flow on real Postgres, Immich/Claude/Lulu as doubles |
 | 24 | Immich ML integration (deferred optional) | — | todo | — | needs internet CLIP/face models or a pre-baked model-cache image — see the playbook |
 
@@ -131,15 +131,21 @@ order, one at a time.
   completes, just with degraded curation. Wiring the real predictor
   (`open_clip` + `torch` + pretrained weights — a heavy, still-unadded
   dependency) is follow-up work, not blocking further build steps.
-- **Deferred manual render verification (step 11):** no `darktable-cli`
-  binary on this host (it lives only in the Docker app image, see build step
-  1) — the build order's "a rendered file exists, opens, and is visibly
-  corrected versus its original" manual check wasn't performed. The
-  orchestration around it (fetching originals, invoking the renderer,
-  idempotency, failure isolation) is fully unit-tested with an injected
-  `Renderer`/`OriginalSource` protocol instead. Same deferral pattern as
-  steps 4-5/9/15/12; do this once the Docker app image is built and
-  reachable.
+- **Deferred manual render verification (step 11) — CLOSED by step 22
+  (2026-07-15):** `tests/test_render_integration.py` now runs the real
+  `DarktableRenderer` inside the shipped app Docker image over a real source
+  JPEG + a real `write_xmp_sidecar` sidecar and asserts the output is visibly
+  corrected — the automated form of the build-11 manual check. **This surfaced
+  a real bug:** `enhance`'s XMP used a made-up *flat* `darktable:exposure="…"`
+  attribute schema that `darktable-cli` **silently ignores**, so every render
+  was a no-op and no tone correction ever reached the image. Fixed by rewriting
+  `write_xmp_sidecar` to emit darktable's real binary *history stack*
+  (exposure / shadhi / temperature; struct `modversion`s pinned to the app
+  image's darktable 5.0.1 — a darktable major upgrade may need them updated, the
+  integration test guards it). Note the temperature knob (`temp_shift_k`) is a
+  bounded Kelvin→multiplier approximation; exposure and shadows/highlights map
+  cleanly. Still deferred: a real end-to-end run against a live Immich (the
+  originals source) — same boundary as steps 4-5/14.
 - **Deferred manual caption spot-check (step 12):** no `ANTHROPIC_API_KEY` in
   this environment, so `caption` is tested only via PydanticAI `TestModel`/
   `FunctionModel` — the build order's "spot-check ~20 captions for accuracy
@@ -188,15 +194,16 @@ order, one at a time.
 - **Deferred live checks:** steps 4–5 fixtures/sync were built without a reachable
   Immich stack; re-verify against a live instance + the honeymoon album on the
   first real sync (see [Immich API notes](/immich-api.md)).
-- **Toolchain landmine (step 8):** in this dev sandbox, `testcontainers`' Ryuk
-  reaper container fails to start (`error while creating mount source path
-  '/host_mnt/.../docker.sock'` — Docker Desktop socket-mount restriction under
-  this sandbox). Run Postgres-testcontainer tests with
-  `TESTCONTAINERS_RYUK_DISABLED=true` (e.g.
-  `TESTCONTAINERS_RYUK_DISABLED=true uv run poe check`). Also note
-  `testcontainers`' `PostgresContainer` defaults to a `psycopg2` connection URL;
-  this project uses psycopg3 (`psycopg[binary]`), so pass `driver="psycopg"`
-  explicitly (see `tests/test_similarity.py`).
+- **Ryuk landmine (step 8) — RESOLVED 2026-07-15:** the Ryuk reaper now starts
+  fine and the full suite is green with **no** `TESTCONTAINERS_RYUK_DISABLED`
+  (plain `uv run poe check`). The earlier failure (`error while creating mount
+  source path '/host_mnt/.../docker.sock'` — a Docker Desktop socket-mount
+  restriction) went away with the Docker reinstall; `TESTCONTAINERS_RYUK_DISABLED`
+  is no longer needed and the historical `uv run poe check` invocations in
+  [log](/log.md) that set it are kept only as a record. Still relevant from the
+  same step: `testcontainers`' `PostgresContainer` defaults to a `psycopg2`
+  connection URL, but this project uses psycopg3 (`psycopg[binary]`), so pass
+  `driver="psycopg"` explicitly (see `tests/test_similarity.py`).
 - **Environment flakiness (step 9), resolved 2026-07-14:** during step 9, Docker
   Desktop became fully unresponsive in this sandbox (even `docker
   ps`/`docker system df` hung for minutes with no output — beyond the Ryuk

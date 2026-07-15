@@ -13,6 +13,7 @@ PydanticAI's ``TestModel``.
 
 from __future__ import annotations
 
+import struct
 import xml.etree.ElementTree as ET
 from collections.abc import Callable
 from datetime import UTC, datetime
@@ -116,23 +117,58 @@ class TestCameraBaseline:
 
 
 class TestXmpSidecar:
-    """XMP sidecar output is valid XML with the expected darktable tags."""
+    """XMP sidecar output is darktable's real history stack (the only format
+    ``darktable-cli`` actually applies — the previous flat-attribute schema was a
+    silent no-op, caught by the step-22 render integration test)."""
 
-    def test_produces_valid_xml_with_expected_tags(self, tmp_path: Path) -> None:
+    def _dt(self, name: str) -> str:
+        return f"{{{_NAMESPACES['darktable']}}}{name}"
+
+    def _entries(self, out_path: Path) -> dict[str, ET.Element]:
+        root = ET.parse(out_path).getroot()  # raises if invalid XML
+        seq = root.find(f".//{{{_NAMESPACES['darktable']}}}history/rdf:Seq", _NAMESPACES)
+        assert seq is not None
+        return {li.get(self._dt("operation")) or "": li for li in seq}
+
+    def test_maps_all_knobs_to_darktable_module_entries(self, tmp_path: Path) -> None:
         tone = ToneParams(exposure_ev=0.5, temp_shift_k=150.0, shadows=0.2, highlights=-0.3)
         out_path = tmp_path / "IMG_0001.jpg.xmp"
 
         write_xmp_sidecar(out_path, tone)
 
         assert out_path.exists()
-        tree = ET.parse(out_path)  # raises if invalid XML
-        root = tree.getroot()
-        description = root.find(".//rdf:Description", _NAMESPACES)
-        assert description is not None
-        assert description.get(f"{{{_NAMESPACES['darktable']}}}exposure") == "0.5"
-        assert description.get(f"{{{_NAMESPACES['darktable']}}}temperature_offset") == "150.0"
-        assert description.get(f"{{{_NAMESPACES['darktable']}}}shadows") == "0.2"
-        assert description.get(f"{{{_NAMESPACES['darktable']}}}highlights") == "-0.3"
+        entries = self._entries(out_path)
+        # One module entry per non-zero knob (shadows+highlights share `shadhi`).
+        assert set(entries) == {"exposure", "temperature", "shadhi"}
+        exposure = entries["exposure"]
+        assert exposure.get(self._dt("enabled")) == "1"
+        assert exposure.get(self._dt("modversion")) == "6"
+        assert exposure.get(self._dt("blendop_params"))  # every entry needs a blendop
+
+        # The exposure EV round-trips through the real binary params blob.
+        mode, black, ev, pct, target, bias = struct.unpack(
+            "<iffffi", bytes.fromhex(exposure.get(self._dt("params")) or "")
+        )
+        assert ev == pytest.approx(0.5)
+        assert (mode, black, pct, target, bias) == (0, pytest.approx(0.0), 50.0, -4.0, 0)
+
+    def test_shadhi_scales_knobs_to_darktable_range(self, tmp_path: Path) -> None:
+        out_path = tmp_path / "IMG_0002.jpg.xmp"
+        write_xmp_sidecar(out_path, ToneParams(shadows=0.2, highlights=-0.3))
+
+        shadhi = self._entries(out_path)["shadhi"]
+        fields = struct.unpack("<IffffffffIfI", bytes.fromhex(shadhi.get(self._dt("params")) or ""))
+        # our [-1, 1] shadows/highlights land on darktable's [-100, 100].
+        assert fields[2] == pytest.approx(20.0)  # shadows 0.2 -> 20
+        assert fields[4] == pytest.approx(-30.0)  # highlights -0.3 -> -30
+
+    def test_zero_knobs_produce_empty_history(self, tmp_path: Path) -> None:
+        # An all-zero tone is a true no-op; no module entries are emitted.
+        out_path = tmp_path / "IMG_0003.jpg.xmp"
+        write_xmp_sidecar(out_path, ToneParams())
+
+        assert ET.parse(out_path)  # still valid XML
+        assert self._entries(out_path) == {}
 
 
 class TestEnhanceStage:
