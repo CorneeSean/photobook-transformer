@@ -1,11 +1,22 @@
-from collections.abc import Iterator
-from datetime import UTC, datetime
+"""Shared pytest fixtures: an in-memory SQLite session and object factories.
+
+The ``make_album`` / ``make_segment`` / ``make_photo`` fixtures are **factory
+fixtures** (quality-practices.md §2.3) — each yields a builder callable (from
+``tests.factories``) with sensible defaults, so a test requests exactly the
+builders it uses and gets consistent, DI-provided construction. During the
+class-based test retrofit some files still import the builders directly from
+``tests.factories``; both paths resolve to the same callables.
+"""
+
+from collections.abc import Callable, Iterator
 
 import pytest
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session
 
 from album.db.models import Album, Base, Photo, Segment
+
+from . import factories
 
 
 @pytest.fixture
@@ -24,32 +35,16 @@ def session() -> Iterator[Session]:
     engine.dispose()
 
 
-def make_album(**overrides: object) -> Album:
-    defaults: dict[str, object] = {
-        "slug": "honeymoon-2026",
-        "title": "Our Honeymoon",
-    }
-    defaults.update(overrides)
-    return Album(**defaults)  # pyright: ignore[reportArgumentType]
+@pytest.fixture
+def make_album() -> Callable[..., Album]:
+    return factories.make_album
 
 
-def make_segment(album: Album, **overrides: object) -> Segment:
-    defaults: dict[str, object] = {
-        "album": album,
-        "position": 1,
-        "label": "Day 1",
-        "start_at": datetime(2026, 1, 1, tzinfo=UTC),
-        "end_at": datetime(2026, 1, 2, tzinfo=UTC),
-    }
-    defaults.update(overrides)
-    return Segment(**defaults)  # pyright: ignore[reportArgumentType]
+@pytest.fixture
+def make_segment() -> Callable[..., Segment]:
+    return factories.make_segment
 
 
-def make_photo(album: Album, **overrides: object) -> Photo:
-    defaults: dict[str, object] = {
-        "album": album,
-        "immich_asset_id": "asset-1",
-        "filename": "IMG_0001.jpg",
-    }
-    defaults.update(overrides)
-    return Photo(**defaults)  # pyright: ignore[reportArgumentType]
+@pytest.fixture
+def make_photo() -> Callable[..., Photo]:
+    return factories.make_photo

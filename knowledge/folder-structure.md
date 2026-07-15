@@ -33,8 +33,9 @@ photo-album-pipeline/
 │       ├── __init__.py
 │       ├── config.py             # pydantic-settings, reads .env
 │       ├── cli.py                # `album run --album honeymoon-2026`
-│       ├── flow.py               # Prefect @flow(album_slug); wraps stages as @tasks
+│       ├── flow.py               # Prefect @flow(album_slug); builds stage classes, wraps .run as @tasks
 │       ├── definition.py         # loads/validates album.yml → Album + Segments
+│       ├── photo_analyzer.py     # PhotoAnalyzer: shared one-vision-call collaborator (enhance + caption)
 │       │
 │       ├── db/
 │       │   ├── models.py         # Album, Segment, Photo
@@ -55,7 +56,7 @@ photo-album-pipeline/
 │       ├── agents/               # PydanticAI: output model + Agent (swap for TestModel)
 │       │   └── analysis.py       # ONE agent; output = bounded tone deltas + caption
 │       │
-│       └── stages/               # pure functions; all take album_id first
+│       └── stages/               # one class per stage (run(album_id, session, …)); album_id first
 │           ├── sync.py
 │           ├── quality.py
 │           ├── cluster.py        # segment assignment + scene detection
@@ -83,7 +84,9 @@ photo-album-pipeline/
 │           └── rendered/
 │
 └── tests/
-    ├── conftest.py               # in-memory SQLite + Album/Segment/Photo factories
+    ├── conftest.py               # session fixture + make_album/segment/photo factory fixtures
+    ├── factories.py              # the object builders the factory fixtures wrap
+    ├── doubles.py                # shared test doubles (FakeThumbnails, analysis TestModels)
     ├── fixtures/
     │   ├── albums/               # album.yml samples: with segments, without, wedding
     │   ├── images/               # small known-blurry / known-overexposed samples
@@ -95,30 +98,44 @@ photo-album-pipeline/
     ├── test_similarity.py        # pgvector queries, against a Postgres testcontainer
     ├── test_quality.py
     ├── test_immich_client.py
-    ├── test_agents.py            # PydanticAI TestModel
+    ├── test_analysis.py          # PydanticAI TestModel (the shared vision agent)
+    ├── test_photo_analyzer.py    # the shared one-vision-call collaborator
     └── test_assemble.py
 ```
 
+(Test modules are grouped into `class Test…:` suites with parametrization and
+scoped fixtures — see [quality practices](/quality-practices.md) §2.)
+
 ## Structure rules
 
-- **Every stage function takes `album_id` as its first argument.** No stage may
-  assume it's the only album in the database.
+- **Every stage's entry point takes `album_id` as its first argument** (a stage
+  class's `run`, or a trivial stage's function). No stage may assume it's the only
+  album in the database.
 - **No stage may assume segments exist.** Every stage that reads segments must
   have a tested fallback path for an album with none. This is the main genericity
   guard — enforce it in tests, not just in prose.
 - **Nothing in `src/` may reference trips, itineraries, days, or any
   occasion-specific concept.** If a stage needs to know an album is a trip, the
   abstraction has leaked.
-- **`stages/*.py` contain plain functions with no Prefect imports.** `flow.py` is
-  the only module that knows Prefect exists — it wraps stage functions as
-  `@task`s. Keeps business logic unit-testable without an orchestrator, which is
-  what makes the TDD loop fast.
+- **`stages/*.py` contain no Prefect imports.** `flow.py` is the only module that
+  knows Prefect exists — it instantiates each stage and wraps its `run` method (or,
+  for a trivial stage, the bare function) as a `@task`. Keeps business logic
+  unit-testable without an orchestrator, which is what makes the TDD loop fast.
+- **A stage is a class when it has a collaborator or several helpers; a plain
+  function only when genuinely trivial** (the hybrid rule in
+  [quality practices](/quality-practices.md) — under which all nine current stages
+  are classes). Either way, the public entry point (`Stage.run` / the function)
+  **takes `album_id` first, then the `Session`** — request-scoped state is never a
+  constructor dependency; injected collaborators (clients, similarity, printer,
+  renderer, vision model) and tunables are.
 - **`agents/*.py` define a Pydantic output model + an `Agent`**, kept out of
   `stages/` so they can be swapped for `TestModel` in tests. The vision work is
-  **one combined agent** producing tone deltas *and* caption in a single call;
-  [`enhance`](/stages/enhance.md) and [`caption`](/stages/caption.md) consume its
-  persisted output rather than each calling the model, so a selected photo costs
-  exactly one vision round-trip.
+  **one combined agent** producing tone deltas *and* caption in a single call.
+  The shared, idempotent trigger for that call lives in one injected collaborator,
+  `photo_analyzer.PhotoAnalyzer`, which **both** [`enhance`](/stages/enhance.md)
+  and [`caption`](/stages/caption.md) receive in their constructors — so a
+  selected photo costs exactly one vision round-trip, enforced against the DB
+  rather than a stage importing a function from the other.
 - **`config.py` is the only place that reads env vars.**
 - **`docker-compose.yml`** holds our own services (`app`, `db`, `prefect-server`)
   and pulls in Immich's stack via the top-level `include:` element rather than

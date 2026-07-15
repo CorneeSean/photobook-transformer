@@ -20,3 +20,12 @@ repos:
         language: system
         types: [python]
         pass_filenames: false
+      - id: xenon
+        name: xenon (complexity gate)
+        # Fast, import-free static metric check, so it belongs with the per-commit
+        # static gates (ruff/basedpyright) rather than the pre-push/`poe check`
+        # tier where pytest lives. Same thresholds as the `check` poe task.
+        entry: uv run xenon --max-absolute B --max-modules B --max-average A src
+        language: system
+        types: [python]
+        pass_filenames: false

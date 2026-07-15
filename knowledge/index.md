@@ -14,6 +14,7 @@ manual work. This bundle is the project's source of truth.
 * [Domain model](/domain-model.md) - The `Album` + `Segment` abstraction that keeps the pipeline generic.
 * [Architecture](/architecture.md) - Batch pipeline over Immich + Postgres, Prefect orchestration, PydanticAI, with rationale.
 * [Working agreement](/working-agreement.md) - TDD, static typing, the git commit gate, and local workflow commands.
+* [Quality practices](/quality-practices.md) - How code is shaped: classes with injected dependencies, encapsulation, and class-based tests with scoped fixtures.
 
 ## Reference
 

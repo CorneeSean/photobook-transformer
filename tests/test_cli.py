@@ -16,52 +16,59 @@ import pytest
 from album.cli import main
 
 
-def test_run_calls_pipeline_with_the_given_album_slug(monkeypatch: pytest.MonkeyPatch) -> None:
-    calls: list[str] = []
-    monkeypatch.setattr("album.cli.pipeline", lambda album_slug: calls.append(album_slug))
-    monkeypatch.setattr(sys, "argv", ["album", "run", "--album", "honeymoon-2026"])
+class TestCli:
+    """`main`: argument wiring and expected-vs-unexpected error handling."""
 
-    main()
+    def test_run_calls_pipeline_with_the_given_album_slug(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        calls: list[str] = []
+        monkeypatch.setattr("album.cli.pipeline", lambda album_slug: calls.append(album_slug))
+        monkeypatch.setattr(sys, "argv", ["album", "run", "--album", "honeymoon-2026"])
 
-    assert calls == ["honeymoon-2026"]
-
-
-@pytest.mark.parametrize(
-    "error", [FileNotFoundError("no album.yml at ..."), ValueError("no album")]
-)
-def test_run_prints_a_clean_message_and_exits_for_expected_errors(
-    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str], error: Exception
-) -> None:
-    def _raise(album_slug: str) -> None:
-        raise error
-
-    monkeypatch.setattr("album.cli.pipeline", _raise)
-    monkeypatch.setattr(sys, "argv", ["album", "run", "--album", "honeymoon-2026"])
-
-    with pytest.raises(SystemExit) as exc_info:
         main()
 
-    assert exc_info.value.code == 1
-    assert str(error) in capsys.readouterr().err
+        assert calls == ["honeymoon-2026"]
 
+    @pytest.mark.parametrize(
+        "error",
+        [FileNotFoundError("no album.yml at ..."), ValueError("no album")],
+        ids=["file-not-found", "value-error"],
+    )
+    def test_run_prints_a_clean_message_and_exits_for_expected_errors(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        capsys: pytest.CaptureFixture[str],
+        error: Exception,
+    ) -> None:
+        def _raise(album_slug: str) -> None:
+            raise error
 
-def test_run_lets_unexpected_errors_propagate(monkeypatch: pytest.MonkeyPatch) -> None:
-    def _raise(album_slug: str) -> None:
-        raise RuntimeError("something genuinely unexpected")
+        monkeypatch.setattr("album.cli.pipeline", _raise)
+        monkeypatch.setattr(sys, "argv", ["album", "run", "--album", "honeymoon-2026"])
 
-    monkeypatch.setattr("album.cli.pipeline", _raise)
-    monkeypatch.setattr(sys, "argv", ["album", "run", "--album", "honeymoon-2026"])
+        with pytest.raises(SystemExit) as exc_info:
+            main()
 
-    with pytest.raises(RuntimeError, match="something genuinely unexpected"):
-        main()
+        assert exc_info.value.code == 1
+        assert str(error) in capsys.readouterr().err
 
+    def test_run_lets_unexpected_errors_propagate(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        def _raise(album_slug: str) -> None:
+            raise RuntimeError("something genuinely unexpected")
 
-def test_missing_album_argument_is_rejected_by_argparse(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    monkeypatch.setattr(sys, "argv", ["album", "run"])
+        monkeypatch.setattr("album.cli.pipeline", _raise)
+        monkeypatch.setattr(sys, "argv", ["album", "run", "--album", "honeymoon-2026"])
 
-    with pytest.raises(SystemExit) as exc_info:
-        main()
+        with pytest.raises(RuntimeError, match="something genuinely unexpected"):
+            main()
 
-    assert exc_info.value.code == 2  # argparse's usage-error exit code
+    def test_missing_album_argument_is_rejected_by_argparse(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setattr(sys, "argv", ["album", "run"])
+
+        with pytest.raises(SystemExit) as exc_info:
+            main()
+
+        assert exc_info.value.code == 2  # argparse's usage-error exit code

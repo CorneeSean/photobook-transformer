@@ -14,10 +14,11 @@ timestamp: 2026-07-12
 | Dependency management | uv |
 | Lint + format | ruff |
 | Static type checking | basedpyright (migrate to Astral `ty` once it's stable) |
+| Complexity / maintainability gate | radon (metrics) enforced by xenon; ruff mccabe (`C90`) as a cheap complement |
 | Testing | pytest (+ `respx`/`vcrpy` for HTTP, `testcontainers` for Postgres) |
 | Task runner | poethepoet — workflow commands as `uv run poe <task>` |
 | VCS | git — one branch per build step, squash-merged to `main` (never commit to `main`) |
-| Git hooks | pre-commit — `no-commit-to-branch` (protects `main`) + ruff + basedpyright |
+| Git hooks | pre-commit — `no-commit-to-branch` (protects `main`) + ruff + basedpyright + xenon |
 | App image | Docker (multi-stage; `uv sync` in build stage) |
 | Local environment | docker-compose (app + Postgres + Immich stack + Prefect server) |
 | Photo storage / ingest / dedup | Immich (self-hosted) |

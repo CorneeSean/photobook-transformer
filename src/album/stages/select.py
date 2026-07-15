@@ -20,7 +20,7 @@ stubbed (see [build step 8](/build-order.md)).
 
 Idempotent: resets ``selected`` for the album up front, so re-running recomputes
 from scratch rather than compounding. No Prefect imports (folder-structure.md
-rule). Every stage takes ``album_id`` first.
+rule). :class:`SelectStage`'s ``run`` takes ``album_id`` first.
 """
 
 from __future__ import annotations
@@ -45,64 +45,74 @@ class SelectResult:
     scenes: int = 0
 
 
-def select(
-    album_id: int,
-    session: Session,
-    similarity: SimilaritySearch,
-    *,
-    threshold: float = _DEFAULT_SIMILARITY_THRESHOLD,
-) -> SelectResult:
-    """Pick the best, diverse photos per scene in ``album_id``. Idempotent."""
-    if session.get(Album, album_id) is None:
-        raise ValueError(f"no album with id {album_id}")
+class SelectStage:
+    """`select` — diversity-aware best-of-scene via MMR. Idempotent.
 
-    # order_by(Photo.id): deterministic tie-breaking when aesthetic scores are equal.
-    photos = list(
-        session.scalars(sa_select(Photo).where(Photo.album_id == album_id).order_by(Photo.id))
-    )
-    for photo in photos:  # reset so a re-run is deterministic
-        photo.selected = False
+    The ``pgvector`` similarity query sits behind the substitutable
+    :class:`~album.db.similarity.SimilaritySearch`, injected here (with the
+    near-duplicate ``threshold`` as construction-time config) so the stage is
+    unit-testable on in-memory SQLite with similarity stubbed. ``run`` takes the
+    request-scoped ``album_id`` + ``Session``.
+    """
 
-    by_scene: dict[int, list[Photo]] = {}
-    for photo in photos:
-        if photo.scene_id is None:  # unclustered — never selected
-            continue
-        by_scene.setdefault(photo.scene_id, []).append(photo)
+    def __init__(
+        self,
+        similarity: SimilaritySearch,
+        *,
+        threshold: float = _DEFAULT_SIMILARITY_THRESHOLD,
+    ) -> None:
+        self._similarity = similarity
+        self._threshold = threshold
 
-    result = SelectResult(scenes=len(by_scene))
-    for scene_id in sorted(by_scene):
-        result.selected += _select_scene(by_scene[scene_id], session, similarity, threshold)
+    def run(self, album_id: int, session: Session) -> SelectResult:
+        """Pick the best, diverse photos per scene in ``album_id``. Idempotent."""
+        if session.get(Album, album_id) is None:
+            raise ValueError(f"no album with id {album_id}")
 
-    session.flush()
-    return result
-
-
-def _select_scene(
-    candidates: list[Photo], session: Session, similarity: SimilaritySearch, threshold: float
-) -> int:
-    """Greedy MMR over one scene's candidates. Returns the number picked."""
-
-    def score(p: Photo) -> float:
-        return p.aesthetic_score if p.aesthetic_score is not None else float("-inf")
-
-    ranked = sorted(candidates, key=score, reverse=True)
-    picked: list[Photo] = []
-    picked_dup_groups: set[str] = set()
-    for candidate in ranked:
-        already_picked_dup = (
-            candidate.duplicate_group_id is not None
-            and candidate.duplicate_group_id in picked_dup_groups
+        # order_by(Photo.id): deterministic tie-breaking when aesthetic scores are equal.
+        photos = list(
+            session.scalars(sa_select(Photo).where(Photo.album_id == album_id).order_by(Photo.id))
         )
-        if already_picked_dup:
-            continue
-        if picked:
-            max_sim = similarity.max_similarity(
-                session, candidate.clip_embedding, [p.id for p in picked]
-            )
-            if max_sim > threshold:
+        for photo in photos:  # reset so a re-run is deterministic
+            photo.selected = False
+
+        by_scene: dict[int, list[Photo]] = {}
+        for photo in photos:
+            if photo.scene_id is None:  # unclustered — never selected
                 continue
-        candidate.selected = True
-        picked.append(candidate)
-        if candidate.duplicate_group_id is not None:
-            picked_dup_groups.add(candidate.duplicate_group_id)
-    return len(picked)
+            by_scene.setdefault(photo.scene_id, []).append(photo)
+
+        result = SelectResult(scenes=len(by_scene))
+        for scene_id in sorted(by_scene):
+            result.selected += self._select_scene(by_scene[scene_id], session)
+
+        session.flush()
+        return result
+
+    def _select_scene(self, candidates: list[Photo], session: Session) -> int:
+        """Greedy MMR over one scene's candidates. Returns the number picked."""
+
+        def score(p: Photo) -> float:
+            return p.aesthetic_score if p.aesthetic_score is not None else float("-inf")
+
+        ranked = sorted(candidates, key=score, reverse=True)
+        picked: list[Photo] = []
+        picked_dup_groups: set[str] = set()
+        for candidate in ranked:
+            already_picked_dup = (
+                candidate.duplicate_group_id is not None
+                and candidate.duplicate_group_id in picked_dup_groups
+            )
+            if already_picked_dup:
+                continue
+            if picked:
+                max_sim = self._similarity.max_similarity(
+                    session, candidate.clip_embedding, [p.id for p in picked]
+                )
+                if max_sim > self._threshold:
+                    continue
+            candidate.selected = True
+            picked.append(candidate)
+            if candidate.duplicate_group_id is not None:
+                picked_dup_groups.add(candidate.duplicate_group_id)
+        return len(picked)

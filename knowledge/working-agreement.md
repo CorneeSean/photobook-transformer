@@ -34,6 +34,13 @@ and run? does darktable actually produce a corrected JPEG?). Those steps are
 "done" when **manually verified**, with the verification written into the commit
 body. Don't fake a test just to have one; don't skip the verification either.
 
+The table above governs *what layer* each stage is tested at. How tests are
+*organized* — class-based groups, parametrization within them, and factory
+fixtures scoped to the tests that need them — is standardized in
+[quality practices](/quality-practices.md), alongside how the production code
+those tests exercise is shaped (stage classes with constructor-injected
+dependencies).
+
 ## Static typing
 
 The codebase is heavily typed — SQLAlchemy 2.0 `Mapped[...]` columns, Pydantic v2
@@ -69,15 +76,19 @@ bar a step must clear before it can be finalized.
   via its branch merge — not one big dump at the end, and never a direct commit to
   `main`.
 - A step is "successfully completed" only when **all** of:
-  - `ruff check .` and `ruff format --check .` pass
+  - `ruff check .` and `ruff format --check .` pass (ruff includes the mccabe
+    `C90` complexity smell check)
   - `basedpyright` reports no errors (static type check)
+  - `xenon` passes the complexity/maintainability gate — no block worse than B,
+    no module averaging worse than B, whole-codebase average A (see
+    [quality practices](/quality-practices.md))
   - `pytest` passes — *all* tests, not just the new ones (no regressions)
   - If the step has no automated test: the manual verification described in that
     step has been performed, and its result noted
   - The review sub-agent has no remaining comments, **and the user has approved**
     (see the [implementation workflow](/implementation-workflow.md))
 
-  The first three are bundled into `uv run poe check` — the one command that gates
+  The first four are bundled into `uv run poe check` — the one command that gates
   a commit.
 - Commit message format: `<stage>: <what changed>`, verification in the body:
 
@@ -101,8 +112,11 @@ including subcommits on a step branch — so nothing slips through:
 - **`no-commit-to-branch`** — blocks direct commits to `main`, backing up the
   "never commit to `main`" rule at the tooling level. (Landing a step is a
   fast-forward merge, which creates no commit and so passes the hook.)
-- **ruff** — `ruff check --fix` and `ruff format`.
+- **ruff** — `ruff check --fix` (incl. the mccabe `C90` complexity check) and `ruff format`.
 - **basedpyright** — the static type check.
+- **xenon** — the complexity/maintainability gate; a fast, import-free static
+  metric check, so it runs per-commit with the other static gates rather than in
+  the slower `pytest`/`poe check` tier.
 
 The full `pytest` suite is *not* run per-commit (too slow for fast subcommits); it
 runs in `uv run poe check` before a step is finalized, and in CI. Optionally add
@@ -119,8 +133,10 @@ without memorizing raw invocations. At minimum:
 | `uv run poe lint` | `ruff check .` |
 | `uv run poe format` | `ruff format .` (write) |
 | `uv run poe typecheck` | `basedpyright` |
+| `uv run poe complexity` | `xenon` complexity/maintainability gate (absolute C / modules B / average A) |
+| `uv run poe metrics` | non-gating radon report: cyclomatic complexity + maintainability index per module |
 | `uv run poe test` | `pytest` |
-| `uv run poe check` | lint + `ruff format --check .` + typecheck + test — **the commit gate** |
+| `uv run poe check` | lint + `ruff format --check .` + typecheck + complexity + test — **the commit gate** |
 | `uv run poe up` / `uv run poe down` | `docker compose up` / `down` (full local stack) |
 | `uv run poe migrate` | `alembic upgrade head` |
 | `uv run poe makemigration -- -m "..."` | `alembic revision --autogenerate` |

@@ -26,24 +26,31 @@ from album.db.models import Album, Segment
 from album.flow import get_or_create_album
 
 
-def test_the_shipped_wedding_album_bootstraps_with_the_expected_shape(session: Session) -> None:
-    album_id = get_or_create_album(session, "smith-wedding")
+class TestGenericity:
+    """The shipped wedding album must bootstrap from YAML alone — no code change."""
 
-    album = session.get(Album, album_id)
-    assert album is not None
-    assert album.slug == "smith-wedding"
-    assert album.immich_album_id == "immich-smith-wedding-2026"
+    def test_the_shipped_wedding_album_bootstraps_with_the_expected_shape(
+        self, session: Session
+    ) -> None:
+        album_id = get_or_create_album(session, "smith-wedding")
 
-    segments = session.query(Segment).filter_by(album_id=album_id).order_by(Segment.position).all()
-    assert [s.label for s in segments] == ["Getting ready", "Ceremony", "Reception"]
-    assert [s.place for s in segments] == ["The Old Rectory", "St. Mary's", "The Barn"]
+        album = session.get(Album, album_id)
+        assert album is not None
+        assert album.slug == "smith-wedding"
+        assert album.immich_album_id == "immich-smith-wedding-2026"
 
-    # Hour-scale, not day-scale like honeymoon-2026's segments.
-    for segment in segments:
-        assert (segment.end_at - segment.start_at).total_seconds() < 24 * 3600
+        segments = (
+            session.query(Segment).filter_by(album_id=album_id).order_by(Segment.position).all()
+        )
+        assert [s.label for s in segments] == ["Getting ready", "Ceremony", "Reception"]
+        assert [s.place for s in segments] == ["The Old Rectory", "St. Mary's", "The Barn"]
 
-    # A single day, not several.
-    assert {s.start_at.date() for s in segments} == {datetime(2026, 8, 15, tzinfo=UTC).date()}
+        # Hour-scale, not day-scale like honeymoon-2026's segments.
+        for segment in segments:
+            assert (segment.end_at - segment.start_at).total_seconds() < 24 * 3600
 
-    # Europe/London (+01:00 in August) normalized to UTC.
-    assert segments[0].start_at == datetime(2026, 8, 15, 8, 0, 0, tzinfo=UTC)
+        # A single day, not several.
+        assert {s.start_at.date() for s in segments} == {datetime(2026, 8, 15, tzinfo=UTC).date()}
+
+        # Europe/London (+01:00 in August) normalized to UTC.
+        assert segments[0].start_at == datetime(2026, 8, 15, 8, 0, 0, tzinfo=UTC)

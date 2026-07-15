@@ -39,10 +39,12 @@ dev = [
     "poethepoet>=0.48.0",
     "pre-commit>=4.6.0",
     "pytest>=9.1.1",
+    "radon>=6.0.1",
     "respx>=0.23.1",
     "ruff>=0.15.21",
     "testcontainers[postgres]>=4.14.2",
     "types-pyyaml>=6.0.12.20260518",
+    "xenon>=0.9.3",
 ]
 
 [tool.ruff]
@@ -50,7 +52,14 @@ target-version = "py314"
 line-length = 100
 
 [tool.ruff.lint]
-select = ["E", "F", "I", "UP", "B"]
+select = ["E", "F", "I", "UP", "B", "C90"]
+
+[tool.ruff.lint.mccabe]
+# Cheap, dependency-free complexity smell check (Sonar-style), complementing the
+# radon/xenon gate below. 10 is ruff's conventional ceiling and is green today;
+# mccabe scores a touch more leniently than radon CC, so this catches regressions
+# early while xenon holds the harder per-block/module/average line.
+max-complexity = 10
 
 [tool.basedpyright]
 include = ["src", "tests"]
@@ -73,11 +82,25 @@ lint = "ruff check ."
 format = "ruff format ."
 typecheck = "basedpyright"
 test = "pytest"
+# Complexity/maintainability gate (radon metrics, enforced by xenon). Thresholds:
+# no single block worse than B (CC>10), no module averaging worse than B, and the
+# whole-codebase average stays A. Tightened to B after the stage-class refactor
+# split the two former grade-C blocks (assemble, enhance._enhance_scene).
+complexity = "xenon --max-absolute B --max-modules B --max-average A src"
 up = "docker compose up --build"
 down = "docker compose down"
 migrate = "alembic upgrade head"
 makemigration = "alembic revision --autogenerate"
 run = "album run"
+
+[tool.poe.tasks.metrics]
+# Non-gating human report: cyclomatic complexity (with average) + maintainability
+# index per module. `poe complexity` is the gate; this is for eyeballing where the
+# hotspots are.
+sequence = [
+    { cmd = "radon cc src -s -a" },
+    { cmd = "radon mi src -s" },
+]
 
 [tool.poe.tasks.check]
 # pytest exits 5 when it collects zero tests; that's an expected state before
@@ -86,5 +109,6 @@ sequence = [
     { cmd = "ruff check ." },
     { cmd = "ruff format --check ." },
     { cmd = "basedpyright" },
+    { cmd = "xenon --max-absolute B --max-modules B --max-average A src" },
     { shell = "pytest || [ \"$?\" = \"5\" ]" },
 ]

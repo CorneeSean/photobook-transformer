@@ -57,17 +57,18 @@ from album.db.session import new_session
 from album.db.similarity import PgVectorSimilarity, SimilaritySearch
 from album.definition import load_album_definition
 from album.immich.client import ImmichClient
+from album.photo_analyzer import PhotoAnalyzer
 from album.printers.base import Printer
 from album.printers.html import HtmlPrinter
-from album.stages.assemble import assemble
-from album.stages.caption import caption
-from album.stages.cluster import cluster
-from album.stages.enhance import enhance
-from album.stages.fulfill import fulfill
-from album.stages.quality import AestheticScorer, Embedder, quality
-from album.stages.render import DarktableRenderer, Renderer, render
-from album.stages.select import select
-from album.stages.sync import sync
+from album.stages.assemble import AssembleStage
+from album.stages.caption import CaptionStage
+from album.stages.cluster import ClusterStage
+from album.stages.enhance import EnhanceStage
+from album.stages.fulfill import FulfillStage
+from album.stages.quality import AestheticScorer, Embedder, QualityStage
+from album.stages.render import DarktableRenderer, Renderer, RenderStage
+from album.stages.select import SelectStage
+from album.stages.sync import SyncStage
 
 _log = logging.getLogger(__name__)
 
@@ -122,7 +123,7 @@ def get_or_create_album(session: Session, album_slug: str, albums_dir: Path = _A
 
 @task(name="sync")
 def _sync_task(album_id: int, session: Session, client: ImmichClient) -> None:
-    sync(album_id, session, client)
+    SyncStage(client).run(album_id, session)
     session.commit()
 
 
@@ -134,19 +135,19 @@ def _quality_task(
     aesthetic: AestheticScorer,
     embedder: Embedder,
 ) -> None:
-    quality(album_id, session, client, aesthetic, embedder=embedder)
+    QualityStage(client, aesthetic, embedder=embedder).run(album_id, session)
     session.commit()
 
 
 @task(name="cluster")
 def _cluster_task(album_id: int, session: Session) -> None:
-    cluster(album_id, session)
+    ClusterStage().run(album_id, session)
     session.commit()
 
 
 @task(name="select")
 def _select_task(album_id: int, session: Session, similarity: SimilaritySearch) -> None:
-    select(album_id, session, similarity)
+    SelectStage(similarity).run(album_id, session)
     session.commit()
 
 
@@ -154,13 +155,13 @@ def _select_task(album_id: int, session: Session, similarity: SimilaritySearch) 
 def _enhance_task(
     album_id: int, session: Session, client: ImmichClient, model: Model | None
 ) -> None:
-    enhance(album_id, session, client, model)
+    EnhanceStage(PhotoAnalyzer(client, model=model), client).run(album_id, session)
     session.commit()
 
 
 @task(name="render")
 def _render_task(album_id: int, session: Session, client: ImmichClient, renderer: Renderer) -> None:
-    render(album_id, session, client, renderer)
+    RenderStage(client, renderer).run(album_id, session)
     session.commit()
 
 
@@ -168,19 +169,19 @@ def _render_task(album_id: int, session: Session, client: ImmichClient, renderer
 def _caption_task(
     album_id: int, session: Session, client: ImmichClient, model: Model | None
 ) -> None:
-    caption(album_id, session, client, model)
+    CaptionStage(PhotoAnalyzer(client, model=model)).run(album_id, session)
     session.commit()
 
 
 @task(name="assemble")
 def _assemble_task(album_id: int, session: Session) -> None:
-    assemble(album_id, session, _ALBUMS_DIR)
+    AssembleStage(_ALBUMS_DIR).run(album_id, session)
     session.commit()
 
 
 @task(name="fulfill")
 def _fulfill_task(album_id: int, session: Session, printer: Printer) -> None:
-    fulfill(album_id, session, printer)
+    FulfillStage(printer).run(album_id, session)
     session.commit()
 
 

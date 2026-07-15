@@ -36,8 +36,8 @@ double an album's disk footprint alongside the real artifact (the rendered
 JPEG). A failed render intentionally leaves its staged original in place, so
 a retry doesn't re-fetch it.
 
-No Prefect imports (folder-structure.md rule). ``album_id`` is always the
-first argument.
+No Prefect imports (folder-structure.md rule). :class:`RenderStage`'s ``run``
+takes ``album_id`` first.
 """
 
 from __future__ import annotations
@@ -115,74 +115,84 @@ class RenderResult:
     not_ready: int = 0
 
 
-def _originals_path(data_root: Path, album_slug: str, filename: str) -> Path:
-    return data_root / album_slug / "originals" / filename
+class RenderStage:
+    """`render` — darktable-cli batch over the XMP sidecars. Idempotent.
 
-
-def _xmp_path(data_root: Path, album_slug: str, filename: str) -> Path:
-    return data_root / album_slug / "xmp" / f"{filename}.xmp"
-
-
-def _rendered_path(data_root: Path, album_slug: str, filename: str) -> Path:
-    return data_root / album_slug / "rendered" / filename
-
-
-def render(
-    album_id: int,
-    session: Session,
-    originals: OriginalSource,
-    renderer: Renderer,
-    *,
-    data_root: Path = _DEFAULT_DATA_ROOT,
-    force: bool = False,
-) -> RenderResult:
-    """Render every ``selected`` photo in ``album_id`` that has an XMP
-    sidecar (``xmp_written=True``) into a corrected JPEG via ``renderer``.
-    Idempotent unless ``force``.
+    Two collaborators, injected: the :class:`OriginalSource` (Immich, for the
+    full-resolution originals darktable-cli needs — XMP carries edits, not pixels)
+    and the :class:`Renderer` (the real one shells out to ``darktable-cli``).
+    ``data_root`` is construction-time config; ``run`` takes ``album_id`` first.
     """
-    album = session.get(Album, album_id)
-    if album is None:
-        raise ValueError(f"no album with id {album_id}")
 
-    photos = list(
-        session.scalars(
-            select(Photo)
-            .where(Photo.album_id == album_id, Photo.selected == True)  # noqa: E712
-            .order_by(Photo.id)
-        )
-    )
+    def __init__(
+        self,
+        originals: OriginalSource,
+        renderer: Renderer,
+        *,
+        data_root: Path = _DEFAULT_DATA_ROOT,
+    ) -> None:
+        self._originals = originals
+        self._renderer = renderer
+        self._data_root = data_root
 
-    result = RenderResult()
-    for photo in photos:
-        if not photo.xmp_written:
-            # Selected but enhance hasn't produced a sidecar yet — nothing for
-            # darktable-cli to read. Flagged, not silently dropped.
-            _log.warning(
-                "photo %s (%s) is selected but has no XMP sidecar yet — skipping render",
-                photo.id,
-                photo.filename,
+    def run(self, album_id: int, session: Session, *, force: bool = False) -> RenderResult:
+        """Render every ``selected`` photo in ``album_id`` that has an XMP
+        sidecar (``xmp_written=True``) into a corrected JPEG. Idempotent unless
+        ``force``.
+        """
+        album = session.get(Album, album_id)
+        if album is None:
+            raise ValueError(f"no album with id {album_id}")
+
+        photos = list(
+            session.scalars(
+                select(Photo)
+                .where(Photo.album_id == album_id, Photo.selected == True)  # noqa: E712
+                .order_by(Photo.id)
             )
-            result.not_ready += 1
-            continue
+        )
 
-        already_done = photo.rendered_path is not None and not force
-        if already_done:
-            result.skipped += 1
-            continue
+        result = RenderResult()
+        for photo in photos:
+            if not photo.xmp_written:
+                # Selected but enhance hasn't produced a sidecar yet — nothing for
+                # darktable-cli to read. Flagged, not silently dropped.
+                _log.warning(
+                    "photo %s (%s) is selected but has no XMP sidecar yet — skipping render",
+                    photo.id,
+                    photo.filename,
+                )
+                result.not_ready += 1
+                continue
 
+            already_done = photo.rendered_path is not None and not force
+            if already_done:
+                result.skipped += 1
+                continue
+
+            output_path = self._render_photo(photo, album.slug, result)
+            if output_path is not None:
+                photo.rendered_path = str(output_path)
+                result.rendered += 1
+
+        session.flush()
+        return result
+
+    def _render_photo(self, photo: Photo, album_slug: str, result: RenderResult) -> Path | None:
+        """Stage the original, invoke the renderer, and clean up. Returns the
+        output path on success, or ``None`` (counting a failure) if isolated."""
+        input_path = self._originals_path(album_slug, photo.filename)
+        xmp_path = self._xmp_path(album_slug, photo.filename)
+        output_path = self._rendered_path(album_slug, photo.filename)
         try:
-            input_path = _originals_path(data_root, album.slug, photo.filename)
-            xmp_path = _xmp_path(data_root, album.slug, photo.filename)
-            output_path = _rendered_path(data_root, album.slug, photo.filename)
-
             # Reuse an already-staged original (e.g. a retry after darktable-cli
             # failed downstream) rather than re-fetching it from Immich every
             # time — the fetch is the expensive, network-bound part.
             if not input_path.exists():
                 input_path.parent.mkdir(parents=True, exist_ok=True)
-                input_path.write_bytes(originals.get_original(photo.immich_asset_id))
+                input_path.write_bytes(self._originals.get_original(photo.immich_asset_id))
 
-            renderer.render(input_path, xmp_path, output_path)
+            self._renderer.render(input_path, xmp_path, output_path)
             if not output_path.exists():
                 # Renderer's contract is "raise on failure" (a non-zero
                 # darktable-cli exit), but a crashed/killed process could in
@@ -195,24 +205,28 @@ def render(
             # crashed darktable-cli invocation) must not sink the whole album.
             _log.warning("failed to render photo %s (%s)", photo.id, photo.filename, exc_info=True)
             result.failed += 1
-            continue
+            return None
 
         # The staged original was only needed as darktable-cli's input; the
         # rendered JPEG is the artifact worth keeping, so don't let a
         # full-resolution copy of every photo accumulate on disk forever.
         input_path.unlink(missing_ok=True)
+        return output_path
 
-        photo.rendered_path = str(output_path)
-        result.rendered += 1
+    def _originals_path(self, album_slug: str, filename: str) -> Path:
+        return self._data_root / album_slug / "originals" / filename
 
-    session.flush()
-    return result
+    def _xmp_path(self, album_slug: str, filename: str) -> Path:
+        return self._data_root / album_slug / "xmp" / f"{filename}.xmp"
+
+    def _rendered_path(self, album_slug: str, filename: str) -> Path:
+        return self._data_root / album_slug / "rendered" / filename
 
 
 __all__ = [
     "DarktableRenderer",
     "OriginalSource",
-    "Renderer",
     "RenderResult",
-    "render",
+    "RenderStage",
+    "Renderer",
 ]
