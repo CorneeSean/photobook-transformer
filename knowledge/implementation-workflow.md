@@ -1,7 +1,7 @@
 ---
 type: Playbook
 title: Implementation workflow (per-step handoff)
-description: How an agent implements one build step at a time — branch, TDD, sub-agent review (≤3 broad-scope agents), user review, checks, squash, merge.
+description: How an agent implements one build step at a time — branch, TDD, sub-agent review (≤3 broad-scope agents), user review, checks, squash, merge, push.
 tags: [workflow, process, review, git, branching, handoff]
 timestamp: 2026-07-12
 ---
@@ -12,7 +12,7 @@ This is the loop an implementing agent follows to deliver the project **one
 [build step](/build-order.md) at a time**. It is mandatory. The
 [working agreement](/working-agreement.md) defines the *quality* gate (TDD,
 typing, `uv run poe check`); this document defines the *delivery* gate (branch,
-review chain, squash, merge) around it.
+review chain, squash, merge, push) around it.
 
 ## Hard rules
 
@@ -89,9 +89,11 @@ review chain, squash, merge) around it.
    short of opening a whole second branch for it.
 10. **Merge.** Merge the step branch into `main` via **fast-forward** (linear
     history, no merge commit — which also keeps the `no-commit-to-branch`
-    pre-commit hook satisfied), then delete the branch. Never force-push `main`.
-    `main` now has both the step commit and the tracker/log commit.
-11. **Next.** Return to step 1 for the following build step.
+    pre-commit hook satisfied), then delete the branch. `main` now has both the
+    step commit and the tracker/log commit.
+11. **Push.** Push `main` to `origin` (`git push origin main`) so the merged step
+    is published. Never force-push `main`.
+12. **Next.** Return to step 1 for the following build step.
 
 If a step cannot be completed cleanly, **stop and surface the problem** (mark it
 `blocked` in the tracker with a note) rather than committing partial work or
@@ -126,4 +128,4 @@ A step is `done` only when **all** are true:
 - [ ] [Progress tracker](/progress.md) and [`log.md`](/log.md) updated **on the
       step branch**, in a commit on top of the squashed step commit (not after
       merging — `main` can't take a direct commit).
-- [ ] Branch merged into `main`, branch deleted.
+- [ ] Branch merged into `main`, branch deleted, and `main` pushed to `origin`.

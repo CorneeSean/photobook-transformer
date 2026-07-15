@@ -10,7 +10,7 @@ migration chain. It also asserts the migrations create step-17/17b's
 faces/people columns and round-trip cleanly (automating the by-hand check done
 each schema step).
 
-Marked ``integration`` (needs Docker); ``poe test-fast`` skips it.
+Marked ``integration`` (needs Docker); ``poe test-unit`` skips it.
 """
 
 from __future__ import annotations
@@ -33,9 +33,8 @@ from album.db.models import Album, Base, Person, Photo
 from album.db.similarity import PgVectorSimilarity
 from album.stages.select import SelectStage
 from alembic import command
-
-from .pgvector_support import PGVECTOR_IMAGE
-from .pgvector_support import vector as _vector
+from tests.pgvector_support import PGVECTOR_IMAGE
+from tests.pgvector_support import vector as _vector
 
 pytestmark = pytest.mark.integration
 

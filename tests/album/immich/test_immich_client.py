@@ -17,7 +17,11 @@ import respx
 
 from album.immich.client import ImmichClient
 
-_FIXTURES = Path(__file__).parent / "fixtures" / "immich"
+# Exercises the real HTTP client at its transport boundary (respx-mocked), not
+# pure logic — grouped with `integration` so `poe test-unit` skips it.
+pytestmark = pytest.mark.integration
+
+_FIXTURES = Path(__file__).parent.parent.parent / "fixtures" / "immich"
 _BASE_URL = "http://immich.test/api"
 
 

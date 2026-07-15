@@ -25,8 +25,7 @@ from sqlalchemy.orm import Session
 from album.db.models import Album, Photo, Segment
 from album.photo_analyzer import PhotoAnalyzer
 from album.stages.caption import CaptionResult, CaptionStage
-
-from .doubles import FakeThumbnails, analysis_test_model, counting_analysis_model
+from tests.doubles import FakeThumbnails, analysis_test_model, counting_analysis_model
 
 
 class RaisingThumbnails:

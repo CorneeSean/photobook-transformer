@@ -31,7 +31,7 @@ from album.stages.assemble import (
     spine_width_in,
 )
 
-_FIXTURE_IMAGE = str(Path(__file__).parent / "fixtures" / "images" / "sharp.jpg")
+_FIXTURE_IMAGE = str(Path(__file__).parent.parent.parent / "fixtures" / "images" / "sharp.jpg")
 
 # PDF points per inch (a "PDF point" is always 1/72in — this is a unit
 # conversion for the assertion, not a Lulu-specific constant).
@@ -318,7 +318,7 @@ class TestAssembleStage:
     ) -> None:
         """`_render_pdf`'s `base_url` must resolve `Photo.rendered_path` against the
         process's working directory, not the templates directory."""
-        repo_root = Path(__file__).parent.parent
+        repo_root = Path(__file__).parent.parent.parent.parent
         monkeypatch.chdir(repo_root)
         relative_image = "tests/fixtures/images/sharp.jpg"
 

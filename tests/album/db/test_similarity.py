@@ -18,9 +18,8 @@ from testcontainers.postgres import PostgresContainer
 
 from album.db.models import Album, Base, Photo
 from album.db.similarity import PgVectorSimilarity
-
-from .pgvector_support import PGVECTOR_IMAGE
-from .pgvector_support import vector as _vector
+from tests.pgvector_support import PGVECTOR_IMAGE
+from tests.pgvector_support import vector as _vector
 
 
 @pytest.fixture(scope="module")

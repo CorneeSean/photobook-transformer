@@ -16,8 +16,7 @@ from sqlalchemy.orm import Session
 
 from album.db.models import Album, Photo
 from album.photo_analyzer import PhotoAnalyzer
-
-from .doubles import FakeThumbnails, analysis_test_model, counting_analysis_model
+from tests.doubles import FakeThumbnails, analysis_test_model, counting_analysis_model
 
 
 class TestPhotoAnalyzer:

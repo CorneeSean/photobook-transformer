@@ -17,7 +17,7 @@ nothing (a no-op render), which this test would now catch as "not brighter"
 (see stages/render.md / enhance.py's XMP-schema note).
 
 Needs Docker and **builds the app image** (slow on first run, layer-cached
-after). Marked ``integration``, so ``poe test-fast`` skips it. It shells out to
+after). Marked ``integration``, so ``poe test-unit`` skips it. It shells out to
 the ``docker`` CLI rather than the docker-py SDK on purpose: this sandbox's
 ``~/.docker`` points at a ``docker-credential-gcloud`` helper that crashes under
 Python 3.14 (``No module named 'imp'``), which breaks docker-py's image build —
@@ -37,7 +37,7 @@ from album.stages.enhance import ToneParams, write_xmp_sidecar
 
 pytestmark = pytest.mark.integration
 
-_REPO_ROOT = Path(__file__).resolve().parent.parent
+_REPO_ROOT = Path(__file__).resolve().parent.parent.parent.parent
 _IMAGE_TAG = "album-render-integration:latest"
 
 # Runs the real DarktableRenderer inside the container — the same code path

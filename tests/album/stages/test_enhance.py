@@ -36,8 +36,7 @@ from album.stages.enhance import (
     reconcile_tone,
     write_xmp_sidecar,
 )
-
-from .doubles import FakeThumbnails, analysis_test_model
+from tests.doubles import FakeThumbnails, analysis_test_model
 
 
 def _solid_jpeg_bytes(value: int) -> bytes:

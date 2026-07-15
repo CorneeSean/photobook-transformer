@@ -67,7 +67,8 @@ re-runs what precedes it. In short:
 7. **Squash** subcommits into one `<stage>: <what changed>` commit, **then update
    the tracker + `log.md`** in a commit on top of that (still on the step branch
    — `main` is commit-protected, so this can't happen after the merge), **then
-   fast-forward merge** to `main` and delete the branch.
+   fast-forward merge** to `main`, **push `main` to `origin`**, and delete the
+   branch.
 
 Commit to `main` **only** when checks are green, the sub-agent is satisfied, and
 the user has approved — in that order.
@@ -81,7 +82,9 @@ Once scaffolded, workflow actions are `poethepoet` tasks run via `uv run poe`:
 | `uv run poe check` | ruff + `ruff format --check` + basedpyright + pytest — **the commit gate** |
 | `uv run poe lint` / `poe format` | `ruff check .` / `ruff format .` |
 | `uv run poe typecheck` | `basedpyright` |
-| `uv run poe test` | `pytest` |
+| `uv run poe test` | `pytest` — the whole suite (unit + integration) |
+| `uv run poe test-unit` | `pytest -m "not integration"` — pure-logic tests only (fast) |
+| `uv run poe test-integration` | `pytest -m integration` — containers + real HTTP-client boundary |
 | `uv run poe up` / `poe down` | `docker compose up` / `down` (app + Postgres + Immich + Prefect) |
 | `uv run poe migrate` | `alembic upgrade head` |
 | `uv run poe run -- --album <slug>` | run the pipeline flow for one album |
@@ -124,8 +127,8 @@ just prose.
 - **Static typing is a gate.** The code is heavily typed (SQLAlchemy 2.0
   `Mapped[...]`, Pydantic v2). `basedpyright` must be clean before commit.
   (Astral's `ty` is the planned future checker — don't assume a specific one.)
-- **One squashed commit per build step, on a branch, merged to `main`** — never a
-  direct commit to `main`, never one big dump. A step is done only when
+- **One squashed commit per build step, on a branch, merged to `main` and pushed
+  to `origin`** — never a direct commit to `main`, never one big dump. A step is done only when
   `uv run poe check` is green (or the manual verification is performed), **then**
   the review sub-agent is satisfied, **then** the user has approved — in that
   order, re-running checks after each round. Put the verification in the commit

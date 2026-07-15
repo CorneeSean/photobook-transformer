@@ -16,7 +16,7 @@ from sqlalchemy.orm import Session
 from album.db.models import Album, Photo
 from album.stages.quality import QualityResult, QualityStage, compute_blur_score
 
-_IMAGES = Path(__file__).parent / "fixtures" / "images"
+_IMAGES = Path(__file__).parent.parent.parent / "fixtures" / "images"
 _SHARP = (_IMAGES / "sharp.jpg").read_bytes()
 _BLURRY = (_IMAGES / "blurry.jpg").read_bytes()
 

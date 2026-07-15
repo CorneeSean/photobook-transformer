@@ -87,24 +87,52 @@ photo-album-pipeline/
     ├── conftest.py               # session fixture + make_album/segment/photo factory fixtures
     ├── factories.py              # the object builders the factory fixtures wrap
     ├── doubles.py                # shared test doubles (FakeThumbnails, analysis TestModels)
+    ├── pgvector_support.py       # shared pgvector testcontainer helpers
     ├── fixtures/
     │   ├── albums/               # album.yml samples: with segments, without, wedding
     │   ├── images/               # small known-blurry / known-overexposed samples
-    │   └── immich/               # recorded API responses
-    ├── test_models.py            # Album/Segment/Photo creation + relationships, in-memory SQLite
-    ├── test_definition.py        # album.yml parsing/validation
-    ├── test_cluster.py           # incl. the no-segments and no-GPS fallback paths
-    ├── test_select.py            # MMR logic, with similarity stubbed
-    ├── test_similarity.py        # pgvector queries, against a Postgres testcontainer
-    ├── test_quality.py
-    ├── test_immich_client.py
-    ├── test_analysis.py          # PydanticAI TestModel (the shared vision agent)
-    ├── test_photo_analyzer.py    # the shared one-vision-call collaborator
-    └── test_assemble.py
+    │   ├── immich/               # recorded Immich API responses
+    │   └── lulu/                 # recorded Lulu API responses
+    └── album/                    # mirrors src/album/ — a test module sits at the same
+        │                         # path as the code it covers, so the two navigate alike
+        ├── test_config.py            # album/config.py
+        ├── test_cli.py               # album/cli.py
+        ├── test_flow.py              # album/flow.py — Prefect wiring, all stages faked
+        ├── test_definition.py        # album/definition.py — album.yml parsing/validation
+        ├── test_photo_analyzer.py    # album/photo_analyzer.py — shared one-vision-call collaborator
+        ├── test_genericity.py        # cross-cutting: the shipped wedding album bootstraps
+        ├── db/
+        │   ├── test_models.py             # Album/Segment/Photo creation + relationships, SQLite
+        │   ├── test_similarity.py         # pgvector queries, against a Postgres testcontainer
+        │   └── test_pgvector_integration.py
+        ├── agents/
+        │   └── test_analysis.py           # PydanticAI TestModel (the shared vision agent)
+        ├── immich/
+        │   └── test_immich_client.py      # respx against recorded fixtures
+        ├── lulu/
+        │   └── test_lulu_client.py        # respx against recorded fixtures
+        ├── printers/
+        │   ├── test_html_printer.py
+        │   └── test_lulu_printer.py
+        └── stages/                        # one test module per stage
+            ├── test_sync.py
+            ├── test_quality.py
+            ├── test_cluster.py            # incl. the no-segments and no-GPS fallback paths
+            ├── test_select.py             # MMR logic, with similarity stubbed
+            ├── test_lead_faces.py
+            ├── test_enhance.py
+            ├── test_render.py
+            ├── test_render_integration.py
+            ├── test_caption.py
+            ├── test_assemble.py
+            └── test_fulfill.py
 ```
 
-(Test modules are grouped into `class Test…:` suites with parametrization and
-scoped fixtures — see [quality practices](/quality-practices.md) §2.)
+Shared helpers and fixtures live at the `tests/` root (imported absolutely, e.g.
+`from tests.doubles import …`); everything under `tests/album/` mirrors
+`src/album/` package-for-package. Test modules are grouped into `class Test…:`
+suites with parametrization and scoped fixtures — see
+[quality practices](/quality-practices.md) §2.
 
 ## Structure rules
 

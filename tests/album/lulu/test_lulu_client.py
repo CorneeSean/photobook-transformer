@@ -18,7 +18,11 @@ import respx
 
 from album.lulu.client import LuluClient, PrintJobRequest, ShippingAddress
 
-_FIXTURES = Path(__file__).parent / "fixtures" / "lulu"
+# Exercises the real HTTP client at its transport boundary (respx-mocked), not
+# pure logic — grouped with `integration` so `poe test-unit` skips it.
+pytestmark = pytest.mark.integration
+
+_FIXTURES = Path(__file__).parent.parent.parent / "fixtures" / "lulu"
 _BASE_URL = "https://api.lulu.test"
 _TOKEN_URL = f"{_BASE_URL}/auth/realms/glasstree/protocol/openid-connect/token"
 

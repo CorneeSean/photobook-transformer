@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 from album.db.models import Album
 from album.definition import load_album_definition, load_lead_faces
 
-FIXTURES = Path(__file__).parent / "fixtures" / "albums"
+FIXTURES = Path(__file__).parent.parent / "fixtures" / "albums"
 
 
 class TestLoadAlbumDefinition:

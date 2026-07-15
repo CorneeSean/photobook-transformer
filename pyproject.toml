@@ -69,12 +69,15 @@ reportMissingTypeStubs = false
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-# `integration` marks tests that need a real container (Postgres/pgvector,
-# darktable-cli) rather than in-memory SQLite + doubles. They still run in the
-# default gate (`poe check`/`poe test`) since Docker is available; `poe test-fast`
-# (-m "not integration") skips them for a quick SQLite-only local loop.
+# `integration` marks tests that exercise a real boundary rather than pure logic
+# with in-memory SQLite + doubles: a real container (Postgres/pgvector,
+# darktable-cli) OR the real HTTP client driven through its transport layer
+# (respx-mocked Immich/Lulu clients). They still run in the default gate
+# (`poe check`/`poe test`) since Docker is available; `poe test-unit`
+# (-m "not integration") skips them for a quick pure-logic local loop, and
+# `poe test-integration` runs only them.
 markers = [
-    "integration: needs a real service container (Postgres/pgvector, darktable-cli)",
+    "integration: exercises a real boundary — a service container (Postgres/pgvector, darktable-cli) or the real HTTP client via respx — not pure logic",
 ]
 
 [tool.poe]
@@ -89,8 +92,10 @@ lint = "ruff check ."
 format = "ruff format ."
 typecheck = "basedpyright"
 test = "pytest"
-# Quick local loop: everything except the container-backed integration tests.
-test-fast = "pytest -m 'not integration'"
+# Quick local loop: pure-logic tests only, skipping the integration-marked ones.
+test-unit = "pytest -m 'not integration'"
+# Only the integration-marked tests (containers + real HTTP client boundary).
+test-integration = "pytest -m 'integration'"
 # Complexity/maintainability gate (radon metrics, enforced by xenon). Thresholds:
 # no single block worse than B (CC>10), no module averaging worse than B, and the
 # whole-codebase average stays A. Tightened to B after the stage-class refactor

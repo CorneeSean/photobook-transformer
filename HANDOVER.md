@@ -141,7 +141,8 @@ to future deferred-item or new-feature work too, if it splits similarly.
   commit to `main`.
 - **Order is fixed:** checks green → sub-agent (automated) review → commit. The
   human-review gate is skipped per the user's standing instruction; merge
-  autonomously once checks + sub-agent review are clean. Re-run checks after every
+  autonomously once checks + sub-agent review are clean, then **push `main` to
+  `origin`**. Re-run checks after every
   change round — **including immediately before the commit** (a `ruff`/py314 bug
   can silently reintroduce invalid syntax; see log 2026-07-13).
 - Update `knowledge/progress.md` and `knowledge/log.md` **on the working
