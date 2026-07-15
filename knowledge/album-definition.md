@@ -56,6 +56,30 @@ segments:
 
 **Adding an album requires: this YAML file + an Immich album. Nothing else.**
 
+## Lead faces (optional priority subjects)
+
+An optional `lead_faces` block names the key people — the couple, the baby, the
+guest of honour — so [`select`](/stages/select.md) prioritizes photos of them.
+Set **exactly one** of three inputs (see [Immich enrichment](/immich-enrichment.md)):
+
+```yaml
+lead_faces:
+  reference_image: leads.jpg          # PRIMARY — a local photo of the leads,
+                                      # resolved next to album.yml, uploaded to
+                                      # Immich, then its detected faces name them.
+  # reference_asset_id: 3fa85f64-...  # or an asset already in Immich (no upload)
+  # person_ids: [3fa85f64-..., ...]   # or the Immich people, named directly
+```
+
+We never run our own face model: Immich already recognizes library faces into
+`Person`s; the reference is just a way to *name* which people are the leads.
+Resolution (upload + waiting out Immich's async face detection, then reading the
+faces) happens in [`stages/lead_faces.py`](/stages/index.md), which marks the
+matching `Person` rows `is_lead=True`. Omit the block entirely for an album with
+no priority subjects — every stage then behaves exactly as before. A reference
+face that Immich hasn't assigned to a named person is surfaced as a warning (the
+person must be confirmed once in Immich's UI), not silently dropped.
+
 ## Timezone convention
 
 - Segment `start_at` / `end_at` should carry an **explicit UTC offset** in the

@@ -14,6 +14,7 @@ number — numbering drifts as stages get added or split. See
 ## Our pipeline
 
 * [sync](/stages/sync.md) - The boundary — pull Immich asset list, EXIF, duplicate groups, and faces/people into our DB.
+* lead_faces - Resolve `album.yml`'s optional priority subjects (the couple, the baby) to Immich person IDs and mark `Person.is_lead`. Runs after `sync`; no-op when unconfigured. See [Immich enrichment](/immich-enrichment.md).
 * [quality](/stages/quality.md) - Score blur and aesthetics; compute embeddings if Immich doesn't expose them.
 * [cluster](/stages/cluster.md) - Assign photos to segments and detect scenes; degrades gracefully.
 * [select](/stages/select.md) - Diversity-aware best-of-scene via MMR.

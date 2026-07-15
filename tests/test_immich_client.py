@@ -116,6 +116,24 @@ class TestImmichClient:
         assert faces[3].person_name == "Sam"
 
     @respx.mock
+    def test_upload_asset_posts_multipart_and_returns_id(
+        self, client: ImmichClient, tmp_path: Path
+    ) -> None:
+        ref = tmp_path / "leads.jpg"
+        ref.write_bytes(b"\xff\xd8\xff-jpeg-bytes")
+        route = respx.post(f"{_BASE_URL}/assets").mock(
+            return_value=httpx.Response(201, json={"id": "ref-asset-1", "status": "created"})
+        )
+
+        asset_id = client.upload_asset(ref)
+
+        assert asset_id == "ref-asset-1"
+        request = route.calls[0].request
+        assert request.method == "POST"
+        # Sent as multipart form-data (the file part), not JSON.
+        assert request.headers["content-type"].startswith("multipart/form-data")
+
+    @respx.mock
     def test_get_thumbnail_returns_bytes(self, client: ImmichClient) -> None:
         route = respx.get(f"{_BASE_URL}/assets/asset-1/thumbnail").mock(
             return_value=httpx.Response(200, content=b"\xff\xd8\xff-jpeg-bytes")

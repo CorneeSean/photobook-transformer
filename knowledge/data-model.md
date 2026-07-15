@@ -53,6 +53,11 @@ class Album(Base):
     # e.g. {"occasion": "honeymoon", "names": ["Alex", "Sam"]}
     meta: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
 
+    # Immich asset id of an uploaded `lead_faces.reference_image`, cached so
+    # re-running lead resolution reuses it rather than re-uploading. NULL until a
+    # reference image has been uploaded (or if leads are named another way).
+    lead_reference_asset_id: Mapped[str | None]
+
     photos: Mapped[list["Photo"]] = relationship(back_populates="album")
     segments: Mapped[list["Segment"]] = relationship(
         back_populates="album", order_by="Segment.position"

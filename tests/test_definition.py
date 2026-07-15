@@ -6,7 +6,7 @@ from pydantic import ValidationError
 from sqlalchemy.orm import Session
 
 from album.db.models import Album
-from album.definition import load_album_definition
+from album.definition import load_album_definition, load_lead_faces
 
 FIXTURES = Path(__file__).parent / "fixtures" / "albums"
 
@@ -78,3 +78,45 @@ class TestLoadAlbumDefinition:
 
         fetched = session.query(Album).filter_by(slug="honeymoon-2026").one()
         assert len(fetched.segments) == 2
+
+
+class TestLoadLeadFaces:
+    """`load_lead_faces`: the optional priority-subjects block on album.yml."""
+
+    def _write(self, tmp_path: Path, lead_block: str) -> Path:
+        yml = tmp_path / "album.yml"
+        yml.write_text(f"slug: s\ntitle: T\n{lead_block}")
+        return yml
+
+    def test_absent_lead_faces_is_none(self, tmp_path: Path) -> None:
+        assert load_lead_faces(self._write(tmp_path, "")) is None
+
+    def test_person_ids_form(self, tmp_path: Path) -> None:
+        block = "lead_faces:\n  person_ids: [p-alex, p-sam]\n"
+        lead = load_lead_faces(self._write(tmp_path, block))
+        assert lead is not None
+        assert lead.person_ids == ["p-alex", "p-sam"]
+        assert lead.reference_image is None
+
+    def test_reference_image_form(self, tmp_path: Path) -> None:
+        block = "lead_faces:\n  reference_image: leads.jpg\n"
+        lead = load_lead_faces(self._write(tmp_path, block))
+        assert lead is not None
+        assert lead.reference_image == "leads.jpg"
+
+    def test_reference_asset_id_form(self, tmp_path: Path) -> None:
+        block = "lead_faces:\n  reference_asset_id: asset-42\n"
+        lead = load_lead_faces(self._write(tmp_path, block))
+        assert lead is not None
+        assert lead.reference_asset_id == "asset-42"
+
+    def test_more_than_one_input_raises(self, tmp_path: Path) -> None:
+        block = "lead_faces:\n  reference_image: leads.jpg\n  person_ids: [p-alex]\n"
+        with pytest.raises(ValidationError, match="exactly one"):
+            load_lead_faces(self._write(tmp_path, block))
+
+    def test_empty_lead_faces_block_raises(self, tmp_path: Path) -> None:
+        # Present but names no one — a config mistake, not a no-op.
+        block = "lead_faces: {}\n"
+        with pytest.raises(ValidationError, match="exactly one"):
+            load_lead_faces(self._write(tmp_path, block))

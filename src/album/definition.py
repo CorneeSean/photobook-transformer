@@ -23,6 +23,44 @@ class SegmentYAML(BaseModel):
     end_at: datetime
 
 
+class LeadFacesYAML(BaseModel):
+    """The optional ``lead_faces`` block — who the priority subjects are.
+
+    Exactly one input identifies the leads (see knowledge/immich-enrichment.md):
+
+    - ``reference_image`` — a local photo of the leads, resolved next to
+      ``album.yml``, uploaded to Immich so its detected faces name the people;
+    - ``reference_asset_id`` — an asset already in Immich (no upload);
+    - ``person_ids`` — the Immich people named directly (no photo).
+
+    Resolution to Immich person IDs (and the upload/async-detection wait for
+    ``reference_image``) happens later, in ``stages/lead_faces.py`` — this model
+    only parses and validates the shape.
+    """
+
+    reference_image: str | None = None
+    reference_asset_id: str | None = None
+    person_ids: list[str] | None = None
+
+    @model_validator(mode="after")
+    def _exactly_one_input(self) -> LeadFacesYAML:
+        provided = [
+            name
+            for name, value in (
+                ("reference_image", self.reference_image),
+                ("reference_asset_id", self.reference_asset_id),
+                ("person_ids", self.person_ids),
+            )
+            if value
+        ]
+        if len(provided) != 1:
+            raise ValueError(
+                "lead_faces must set exactly one of reference_image, "
+                f"reference_asset_id, person_ids (got: {provided or 'none'})"
+            )
+        return self
+
+
 class AlbumYAML(BaseModel):
     slug: str
     title: str
@@ -30,6 +68,7 @@ class AlbumYAML(BaseModel):
     timezone: str | None = None
     meta: dict[str, Any] = Field(default_factory=dict)
     segments: list[SegmentYAML] = Field(default_factory=list)
+    lead_faces: LeadFacesYAML | None = None
 
     @model_validator(mode="after")
     def _normalize_and_validate_segments(self) -> AlbumYAML:
@@ -100,3 +139,14 @@ def load_album_definition(path: Path) -> Album:
         for position, segment in enumerate(parsed.segments, start=1)
     ]
     return album
+
+
+def load_lead_faces(path: Path) -> LeadFacesYAML | None:
+    """Parse just the ``lead_faces`` block from an ``album.yml``.
+
+    Returned separately from :func:`load_album_definition` because leads are a
+    resolution *input* (resolved via Immich in ``stages/lead_faces.py``), not
+    persisted ``Album`` state. ``None`` when the album declares no leads.
+    """
+    raw = yaml.safe_load(path.read_text())
+    return AlbumYAML.model_validate(raw).lead_faces

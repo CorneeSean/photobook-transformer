@@ -44,6 +44,7 @@ from album.printers.html import HtmlPrinter
 # wrapper. Patching these decouples the wiring tests from stage construction.
 _STAGE_NAMES: tuple[str, ...] = (
     "sync",
+    "resolve_leads",
     "quality",
     "cluster",
     "select",

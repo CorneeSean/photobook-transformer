@@ -6,6 +6,13 @@ meta:
   occasion: wedding
   names: [Anna, Tom]
 
+# Priority subjects — `select` prioritizes photos of these people. Optional;
+# set exactly one input. See knowledge/album-definition.md.
+# lead_faces:
+#   reference_image: leads.jpg          # a photo of Anna & Tom, next to this file
+#   # reference_asset_id: 3fa85f64-...   # or an asset already in Immich
+#   # person_ids: [3fa85f64-..., ...]    # or the Immich people, named directly
+
 segments:
   - label: "Getting ready"
     place: "The Old Rectory"

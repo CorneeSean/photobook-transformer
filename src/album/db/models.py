@@ -51,6 +51,12 @@ class Album(Base):
     # order — the name and semantics are agreed across both stages; don't rename.
     assembled_pdf_path: Mapped[str | None] = mapped_column(default=None)
 
+    # --- populated by lead-face resolution (stages/lead_faces.py) ---
+    # Immich asset id of the uploaded `lead_faces.reference_image`, cached so a
+    # re-run reuses it instead of re-uploading. NULL until (and unless) a
+    # reference image has been uploaded for this album.
+    lead_reference_asset_id: Mapped[str | None] = mapped_column(default=None)
+
     photos: Mapped[list[Photo]] = relationship(back_populates="album")
     segments: Mapped[list[Segment]] = relationship(
         back_populates="album", order_by="Segment.position"

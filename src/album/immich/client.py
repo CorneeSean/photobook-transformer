@@ -17,7 +17,8 @@ building this (see knowledge/immich-api.md):
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import UTC, datetime
+from pathlib import Path
 from types import TracebackType
 from typing import Any, Self
 
@@ -153,6 +154,33 @@ class ImmichClient:
         response = self._client.get("/duplicates")
         response.raise_for_status()
         return [ImmichDuplicate.model_validate(group) for group in response.json()]
+
+    def upload_asset(self, path: Path) -> str:
+        """Upload a local file to Immich via ``POST /assets``; return its asset id.
+
+        Used for ``lead_faces.reference_image`` — a photo of the priority
+        subjects whose Immich-detected faces name the leads (see
+        knowledge/immich-enrichment.md). Immich dedupes by content: re-uploading
+        identical bytes returns ``status="duplicate"`` with the *existing*
+        asset's id, so this is safe to retry.
+        """
+        stat = path.stat()
+        created_at = datetime.fromtimestamp(stat.st_mtime, tz=UTC).isoformat()
+        with path.open("rb") as handle:
+            response = self._client.post(
+                "/assets",
+                data={
+                    # deviceAssetId must be stable for the same file so Immich's
+                    # own upload dedupe can recognize a repeat.
+                    "deviceAssetId": f"{path.name}-{stat.st_size}",
+                    "deviceId": "photobook-transformer",
+                    "fileCreatedAt": created_at,
+                    "fileModifiedAt": created_at,
+                },
+                files={"assetData": (path.name, handle, "application/octet-stream")},
+            )
+        response.raise_for_status()
+        return response.json()["id"]
 
     def get_faces(self, asset_id: str) -> list[ImmichFace]:
         """Detected faces for an asset, via ``GET /faces?id={asset_id}``.

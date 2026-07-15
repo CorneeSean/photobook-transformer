@@ -55,7 +55,7 @@ from sqlalchemy.orm import Session
 from album.db.models import Album
 from album.db.session import new_session
 from album.db.similarity import PgVectorSimilarity, SimilaritySearch
-from album.definition import load_album_definition
+from album.definition import load_album_definition, load_lead_faces
 from album.immich.client import ImmichClient
 from album.photo_analyzer import PhotoAnalyzer
 from album.printers.base import Printer
@@ -65,6 +65,7 @@ from album.stages.caption import CaptionStage
 from album.stages.cluster import ClusterStage
 from album.stages.enhance import EnhanceStage
 from album.stages.fulfill import FulfillStage
+from album.stages.lead_faces import LeadFaceResolver
 from album.stages.quality import AestheticScorer, Embedder, QualityStage
 from album.stages.render import DarktableRenderer, Renderer, RenderStage
 from album.stages.select import SelectStage
@@ -124,6 +125,19 @@ def get_or_create_album(session: Session, album_slug: str, albums_dir: Path = _A
 @task(name="sync")
 def _sync_task(album_id: int, session: Session, client: ImmichClient) -> None:
     SyncStage(client).run(album_id, session)
+    session.commit()
+
+
+@task(name="resolve-leads")
+def _resolve_leads_task(
+    album_id: int, session: Session, client: ImmichClient, album_slug: str
+) -> None:
+    # lead_faces is a resolution input (not persisted Album state), so read it
+    # from album.yml here rather than the DB; absent file/block ⇒ a clean no-op.
+    album_dir = _ALBUMS_DIR / album_slug
+    album_yml = album_dir / "album.yml"
+    config = load_lead_faces(album_yml) if album_yml.exists() else None
+    LeadFaceResolver(client).run(album_id, config, album_dir, session)
     session.commit()
 
 
@@ -226,6 +240,7 @@ def pipeline(
             db_session.commit()
 
             _sync_task(album_id, db_session, client)
+            _resolve_leads_task(album_id, db_session, client, album_slug)
             deferred_quality_model = _UnavailableQualityModel()
             _quality_task(
                 album_id,
