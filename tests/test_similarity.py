@@ -19,21 +19,15 @@ from testcontainers.postgres import PostgresContainer
 from album.db.models import Album, Base, Photo
 from album.db.similarity import PgVectorSimilarity
 
-_DIM = 768
-
-
-def _vector(*nonzero: tuple[int, float]) -> list[float]:
-    v = [0.0] * _DIM
-    for index, value in nonzero:
-        v[index] = value
-    return v
+from .pgvector_support import PGVECTOR_IMAGE
+from .pgvector_support import vector as _vector
 
 
 @pytest.fixture(scope="module")
 def pg_session() -> Iterator[Session]:
     """A shared Postgres+pgvector container for the whole file — expensive, so
     module-scoped and read-mostly (quality-practices.md §2.3)."""
-    with PostgresContainer("pgvector/pgvector:pg17", driver="psycopg") as pg:
+    with PostgresContainer(PGVECTOR_IMAGE, driver="psycopg") as pg:
         engine = create_engine(pg.get_connection_url())
         with engine.begin() as conn:
             conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
@@ -43,6 +37,7 @@ def pg_session() -> Iterator[Session]:
         engine.dispose()
 
 
+@pytest.mark.integration
 class TestPgVectorSimilarity:
     """`PgVectorSimilarity.max_similarity`: the real indexed cosine-distance query."""
 

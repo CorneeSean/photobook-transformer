@@ -69,6 +69,13 @@ reportMissingTypeStubs = false
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+# `integration` marks tests that need a real container (Postgres/pgvector,
+# darktable-cli) rather than in-memory SQLite + doubles. They still run in the
+# default gate (`poe check`/`poe test`) since Docker is available; `poe test-fast`
+# (-m "not integration") skips them for a quick SQLite-only local loop.
+markers = [
+    "integration: needs a real service container (Postgres/pgvector, darktable-cli)",
+]
 
 [tool.poe]
 # So `uv run poe migrate`/`makemigration` pick up DATABASE_URL (and any other
@@ -82,6 +89,8 @@ lint = "ruff check ."
 format = "ruff format ."
 typecheck = "basedpyright"
 test = "pytest"
+# Quick local loop: everything except the container-backed integration tests.
+test-fast = "pytest -m 'not integration'"
 # Complexity/maintainability gate (radon metrics, enforced by xenon). Thresholds:
 # no single block worse than B (CC>10), no module averaging worse than B, and the
 # whole-codebase average stays A. Tightened to B after the stage-class refactor
