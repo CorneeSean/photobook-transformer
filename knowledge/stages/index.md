@@ -17,7 +17,7 @@ number — numbering drifts as stages get added or split. See
 * lead_faces - Resolve `album.yml`'s optional priority subjects (the couple, the baby) to Immich person IDs and mark `Person.is_lead`. Runs after `sync`; no-op when unconfigured. See [Immich enrichment](/immich-enrichment.md).
 * [quality](/stages/quality.md) - Score blur and aesthetics; compute embeddings if Immich doesn't expose them.
 * [cluster](/stages/cluster.md) - Assign photos to segments and detect scenes; degrades gracefully.
-* [select](/stages/select.md) - Diversity-aware best-of-scene via MMR.
+* [select](/stages/select.md) - Diversity-aware, people/lead-aware best-of-scene via MMR (guarantees leads appear).
 * [enhance](/stages/enhance.md) - AI estimates bounded tone parameters; classical code applies them via XMP.
 * [render](/stages/render.md) - Batch darktable-cli over the XMP sidecars.
 * [caption](/stages/caption.md) - Grounded captions from the shared analysis call.

@@ -19,7 +19,7 @@ import pytest
 from sqlalchemy import select as sa_select
 from sqlalchemy.orm import Session
 
-from album.db.models import Album, Photo
+from album.db.models import Album, Person, Photo
 from album.stages.select import SelectResult, SelectStage
 
 # Unit-ish vectors chosen so cosine similarity is easy to reason about:
@@ -74,6 +74,7 @@ class TestSelect:
             aesthetic_score: float | None,
             duplicate_group_id: str | None = None,
             clip_embedding: list[float] | None = None,
+            person_ids: list[str] | None = None,
         ) -> Photo:
             return make_photo(
                 album,
@@ -83,6 +84,7 @@ class TestSelect:
                 aesthetic_score=aesthetic_score,
                 duplicate_group_id=duplicate_group_id,
                 clip_embedding=clip_embedding,
+                person_ids=person_ids,
             )
 
         return _make
@@ -311,3 +313,311 @@ class TestSelect:
     def test_raises_for_unknown_album(self, session: Session) -> None:
         with pytest.raises(ValueError, match="no album"):
             SelectStage(StubSimilarity()).run(999, session)
+
+
+class TestPeopleAwareSelect:
+    """`select` step 18: people/lead-aware ranking, coverage, and the genericity guard.
+
+    Faces (``Photo.person_ids``) and leads (``Person.is_lead``) add opt-in
+    behaviors that must all reduce to the plain MMR result when a scene has no
+    recognized faces. Similarity is the same numpy :class:`StubSimilarity`; the
+    vectors ``_A``/``_A_NEAR`` are near-duplicates, ``_B`` is dissimilar.
+    """
+
+    def _persist(self, session: Session, album: Album) -> int:
+        session.add(album)
+        session.commit()
+        assert album.id is not None
+        return album.id
+
+    def _by_asset(self, session: Session) -> dict[str, Photo]:
+        return {p.immich_asset_id: p for p in session.scalars(sa_select(Photo))}
+
+    @pytest.fixture
+    def photo(self, make_photo: Callable[..., Photo]) -> Callable[..., Photo]:
+        def _make(
+            album: Album,
+            asset: str,
+            *,
+            scene_id: int = 1,
+            aesthetic_score: float | None,
+            clip_embedding: list[float] | None = None,
+            person_ids: list[str] | None = None,
+        ) -> Photo:
+            return make_photo(
+                album,
+                immich_asset_id=asset,
+                filename=f"{asset}.jpg",
+                scene_id=scene_id,
+                aesthetic_score=aesthetic_score,
+                clip_embedding=clip_embedding,
+                person_ids=person_ids,
+            )
+
+        return _make
+
+    @staticmethod
+    def _lead(album: Album, *person_ids: str) -> None:
+        for person_id in person_ids:
+            album.people.append(Person(immich_person_id=person_id, is_lead=True))
+
+    def test_group_shot_wins_tiebreak_when_scores_close(
+        self, session: Session, make_album: Callable[..., Album], photo: Callable[..., Photo]
+    ) -> None:
+        # All-similar scene ⇒ exactly one pick; equal aesthetic ⇒ the group shot
+        # (more recognized people) edges out the incidental solo.
+        album = make_album(immich_album_id="immich-abc")
+        solo = photo(album, "solo", aesthetic_score=0.8, clip_embedding=_A, person_ids=["p1"])
+        group = photo(
+            album, "group", aesthetic_score=0.8, clip_embedding=_A, person_ids=["p1", "p2"]
+        )
+        album.photos = [solo, group]
+        album_id = self._persist(session, album)
+
+        # Explicit boosts so the test doesn't silently depend on the module defaults.
+        result = SelectStage(StubSimilarity(), group_boost=0.01).run(album_id, session)
+
+        photos = self._by_asset(session)
+        assert photos["group"].selected is True
+        assert photos["solo"].selected is False
+        assert result.selected == 1
+
+    def test_clearly_better_solo_beats_group_shot(
+        self, session: Session, make_album: Callable[..., Album], photo: Callable[..., Photo]
+    ) -> None:
+        # The tie-break is small: a clearly higher-aesthetic solo still wins over a
+        # lower group shot (they're near-dups, so only one is picked).
+        album = make_album(immich_album_id="immich-abc")
+        solo = photo(album, "solo", aesthetic_score=0.9, clip_embedding=_A, person_ids=["p1"])
+        group = photo(
+            album, "group", aesthetic_score=0.7, clip_embedding=_A, person_ids=["p2", "p3"]
+        )
+        album.photos = [solo, group]
+        album_id = self._persist(session, album)
+
+        SelectStage(StubSimilarity()).run(album_id, session)
+
+        photos = self._by_asset(session)
+        assert photos["solo"].selected is True
+        assert photos["group"].selected is False
+
+    def test_lead_guaranteed_coverage_even_as_near_dup_of_nonlead(
+        self, session: Session, make_album: Callable[..., Album], photo: Callable[..., Photo]
+    ) -> None:
+        # The best shot is a non-lead; the lead only appears in a near-duplicate of
+        # it. The lead must still be selected — never culled as a near-dup of a
+        # non-lead.
+        album = make_album(immich_album_id="immich-abc")
+        nonlead = photo(
+            album, "nonlead", aesthetic_score=0.9, clip_embedding=_A, person_ids=["p-x"]
+        )
+        lead = photo(
+            album, "lead", aesthetic_score=0.5, clip_embedding=_A_NEAR, person_ids=["p-lead"]
+        )
+        album.photos = [nonlead, lead]
+        self._lead(album, "p-lead")
+        album_id = self._persist(session, album)
+
+        result = SelectStage(StubSimilarity(), threshold=0.9).run(album_id, session)
+
+        photos = self._by_asset(session)
+        assert photos["nonlead"].selected is True
+        assert photos["lead"].selected is True  # rescued by lead coverage
+        assert result.selected == 2
+
+    def test_multiple_leads_each_get_coverage(
+        self, session: Session, make_album: Callable[..., Album], photo: Callable[..., Photo]
+    ) -> None:
+        # A couple: two leads whose only photos are near-duplicates of each other.
+        # Each lead must be covered — the second isn't culled just for resembling
+        # the first.
+        album = make_album(immich_album_id="immich-abc")
+        me = photo(album, "me", aesthetic_score=0.9, clip_embedding=_A, person_ids=["p-me"])
+        wife = photo(
+            album, "wife", aesthetic_score=0.85, clip_embedding=_A_NEAR, person_ids=["p-wife"]
+        )
+        album.photos = [me, wife]
+        self._lead(album, "p-me", "p-wife")
+        album_id = self._persist(session, album)
+
+        result = SelectStage(StubSimilarity(), threshold=0.9).run(album_id, session)
+
+        photos = self._by_asset(session)
+        assert photos["me"].selected is True
+        assert photos["wife"].selected is True
+        assert result.selected == 2
+
+    def test_lead_boost_outranks_group_tiebreak(
+        self, session: Session, make_album: Callable[..., Album], photo: Callable[..., Photo]
+    ) -> None:
+        # All-similar scene: a single-lead photo beats a larger non-lead group shot.
+        album = make_album(immich_album_id="immich-abc")
+        group = photo(
+            album, "group", aesthetic_score=0.8, clip_embedding=_A, person_ids=["p1", "p2", "p3"]
+        )
+        lead = photo(album, "lead", aesthetic_score=0.8, clip_embedding=_A, person_ids=["p-lead"])
+        album.photos = [group, lead]
+        self._lead(album, "p-lead")
+        album_id = self._persist(session, album)
+
+        # lead_boost (0.05) must beat group_boost * 3 people (0.03).
+        result = SelectStage(StubSimilarity(), lead_boost=0.05, group_boost=0.01).run(
+            album_id, session
+        )
+
+        photos = self._by_asset(session)
+        assert photos["lead"].selected is True
+        assert photos["group"].selected is False
+        assert result.selected == 1
+
+    def test_more_leads_wins_among_similar_but_original_scene_still_selected(
+        self, session: Session, make_album: Callable[..., Album], photo: Callable[..., Photo]
+    ) -> None:
+        # Among near-duplicates, the frame with MORE leads wins (both of a couple
+        # over just one). A distinct/"original" composition with fewer leads and a
+        # low score is still selected — MMR keeps it for its diversity.
+        album = make_album(immich_album_id="immich-abc")
+        two_lead = photo(
+            album, "two_lead", aesthetic_score=0.8, clip_embedding=_A, person_ids=["p-me", "p-wife"]
+        )
+        one_lead = photo(
+            album, "one_lead", aesthetic_score=0.8, clip_embedding=_A, person_ids=["p-me"]
+        )
+        original = photo(
+            album, "original", aesthetic_score=0.3, clip_embedding=_B, person_ids=["p-me"]
+        )
+        album.photos = [two_lead, one_lead, original]
+        self._lead(album, "p-me", "p-wife")
+        album_id = self._persist(session, album)
+
+        result = SelectStage(
+            StubSimilarity(), threshold=0.9, lead_boost=0.05, group_boost=0.01
+        ).run(album_id, session)
+
+        photos = self._by_asset(session)
+        # Among the near-dups, the two-lead frame wins; the one-lead near-dup loses.
+        assert photos["two_lead"].selected is True
+        assert photos["one_lead"].selected is False
+        # The dissimilar, low-score original scene is still kept for diversity.
+        assert photos["original"].selected is True
+        assert result.selected == 2
+
+    def test_non_lead_seen_only_in_near_dup_stays_unselected(
+        self, session: Session, make_album: Callable[..., Album], photo: Callable[..., Photo]
+    ) -> None:
+        # Strict posture: there is no generic coverage phase, so a non-lead person
+        # appearing only in a near-duplicate of a pick is NOT rescued — the book
+        # isn't padded with a look-alike just to make a face appear.
+        album = make_album(immich_album_id="immich-abc")
+        best = photo(album, "best", aesthetic_score=0.9, clip_embedding=_A, person_ids=["p1"])
+        near = photo(album, "near", aesthetic_score=0.8, clip_embedding=_A_NEAR, person_ids=["p2"])
+        album.photos = [best, near]
+        album_id = self._persist(session, album)  # no leads
+
+        result = SelectStage(StubSimilarity(), threshold=0.9).run(album_id, session)
+
+        photos = self._by_asset(session)
+        assert photos["best"].selected is True
+        assert photos["near"].selected is False  # p2 stays uncovered — guard honored
+        assert result.selected == 1
+
+    def test_group_boost_is_configurable(
+        self, session: Session, make_album: Callable[..., Album], photo: Callable[..., Photo]
+    ) -> None:
+        # With the group tie-break disabled (group_boost=0), the earlier (lower-id)
+        # solo wins the tie instead of the group shot — proving the kwarg is wired.
+        album = make_album(immich_album_id="immich-abc")
+        solo = photo(album, "solo", aesthetic_score=0.8, clip_embedding=_A, person_ids=["p1"])
+        group = photo(
+            album, "group", aesthetic_score=0.8, clip_embedding=_A, person_ids=["p1", "p2"]
+        )
+        album.photos = [solo, group]
+        album_id = self._persist(session, album)
+
+        SelectStage(StubSimilarity(), group_boost=0.0).run(album_id, session)
+
+        photos = self._by_asset(session)
+        assert photos["solo"].selected is True  # tie-break gone ⇒ deterministic id order wins
+        assert photos["group"].selected is False
+
+    def test_lead_boost_is_configurable(
+        self, session: Session, make_album: Callable[..., Album], photo: Callable[..., Photo]
+    ) -> None:
+        # A strong non-lead and a weaker lead as near-duplicates. At the default
+        # boost the non-lead ranks first (kept) and the lead is added by coverage;
+        # a large lead_boost makes the lead outrank and *replace* the non-lead as
+        # the scene's representative (non-leads get no coverage) — so the injected
+        # boost observably changes the selection.
+        album = make_album(immich_album_id="immich-abc")
+        nonlead = photo(
+            album, "nonlead", aesthetic_score=0.9, clip_embedding=_A, person_ids=["p-x"]
+        )
+        lead = photo(
+            album, "lead", aesthetic_score=0.7, clip_embedding=_A_NEAR, person_ids=["p-lead"]
+        )
+        album.photos = [nonlead, lead]
+        self._lead(album, "p-lead")
+        album_id = self._persist(session, album)
+
+        default = SelectStage(StubSimilarity(), threshold=0.9).run(album_id, session)
+        photos = self._by_asset(session)
+        assert (photos["nonlead"].selected, photos["lead"].selected) == (True, True)
+        assert default.selected == 2
+
+        boosted = SelectStage(StubSimilarity(), threshold=0.9, lead_boost=0.5).run(
+            album_id, session
+        )
+        photos = self._by_asset(session)
+        # The lead now outranks; the non-lead is dropped as its near-dup (no coverage).
+        assert (photos["lead"].selected, photos["nonlead"].selected) == (True, False)
+        assert boosted.selected == 1
+
+    def test_face_free_album_unaffected_by_lead_config(
+        self, session: Session, make_album: Callable[..., Album], photo: Callable[..., Photo]
+    ) -> None:
+        # Genericity guard: photos with no recognized faces select exactly by plain
+        # MMR (best kept, dissimilar kept, near-dup dropped) even when the album has
+        # leads configured — the people-aware phases must be inert without faces.
+        album = make_album(immich_album_id="immich-abc")
+        a = photo(album, "a", aesthetic_score=0.9, clip_embedding=_A)  # person_ids default None
+        b = photo(album, "b", aesthetic_score=0.8, clip_embedding=_B)  # dissimilar
+        c = photo(album, "c", aesthetic_score=0.7, clip_embedding=_A_NEAR)  # near-dup of a
+        album.photos = [a, b, c]
+        self._lead(album, "p-ghost")  # a lead present in no photo
+        album_id = self._persist(session, album)
+
+        result = SelectStage(StubSimilarity(), threshold=0.9).run(album_id, session)
+
+        photos = self._by_asset(session)
+        assert photos["a"].selected is True
+        assert photos["b"].selected is True
+        assert photos["c"].selected is False  # near-dup of a, dropped exactly as plain MMR
+        assert result.selected == 2
+
+    def test_lead_in_another_album_does_not_leak(
+        self, session: Session, make_album: Callable[..., Album], photo: Callable[..., Photo]
+    ) -> None:
+        # is_lead is album-scoped: a person who is a lead in another album must not
+        # be treated as a lead here (which would rescue their near-dup photo).
+        other = make_album(slug="other", immich_album_id="immich-other")
+        other.photos = [
+            photo(other, "o1", aesthetic_score=0.9, clip_embedding=_A, person_ids=["p-shared"])
+        ]
+        self._lead(other, "p-shared")
+        self._persist(session, other)
+
+        target = make_album(slug="target", immich_album_id="immich-target")
+        t_best = photo(target, "t_best", aesthetic_score=0.9, clip_embedding=_A, person_ids=["p-x"])
+        t_shared = photo(
+            target, "t_shared", aesthetic_score=0.5, clip_embedding=_A_NEAR, person_ids=["p-shared"]
+        )
+        target.photos = [t_best, t_shared]
+        target_id = self._persist(session, target)
+
+        result = SelectStage(StubSimilarity(), threshold=0.9).run(target_id, session)
+
+        photos = self._by_asset(session)
+        assert photos["t_best"].selected is True
+        # p-shared isn't a lead in `target`, so its near-dup is NOT rescued.
+        assert photos["t_shared"].selected is False
+        assert result.selected == 1
