@@ -9,15 +9,15 @@ timestamp: 2026-07-12
 # Implementation workflow (per-step handoff)
 
 This is the loop an implementing agent follows to deliver the project **one
-[build step](/build-order.md) at a time**. It is mandatory. The
-[working agreement](/working-agreement.md) defines the *quality* gate (TDD,
+[build step](/build/build-order.md) at a time**. It is mandatory. The
+[working agreement](/process/working-agreement.md) defines the *quality* gate (TDD,
 typing, `uv run poe check`); this document defines the *delivery* gate (branch,
 review chain, squash, merge, push) around it.
 
 ## Hard rules
 
 - **One step at a time.** Do not start step N+1 until step N is merged and marked
-  `done` in the [progress tracker](/progress.md).
+  `done` in the [progress tracker](/build/progress.md).
 - **Never work on or commit to `main`.** Every step is done on its own branch and
   merged. `main` only ever advances by merging a reviewed, approved step branch.
 - **Commit to `main` (via merge) only when ALL of these hold:** the review
@@ -32,7 +32,7 @@ review chain, squash, merge, push) around it.
   before returning to the user).
 - **`main` is commit-protected, full stop — including bookkeeping.** The
   `no-commit-to-branch` hook blocks *any* direct commit to `main`, not just code
-  changes. This means the [progress tracker](/progress.md) and [`log.md`](/log.md)
+  changes. This means the [progress tracker](/build/progress.md) and [`log.md`](/log.md)
   updates for a step **cannot be done after that step's merge** without opening a
   second branch just to land a docs commit. Do the tracker/log update **on the
   step branch, before the fast-forward merge** (see step 9 below) — the fast
@@ -41,18 +41,18 @@ review chain, squash, merge, push) around it.
 ## The loop for one step
 
 1. **Select the step.** Take the lowest-numbered step whose status is `todo` in
-   the [progress tracker](/progress.md). Steps are strictly ordered.
+   the [progress tracker](/build/progress.md). Steps are strictly ordered.
 2. **Branch off `main`.** `git switch main && git pull` (if a remote exists), then
    `git switch -c step-NN-<slug>` (e.g. `step-02-data-model`). Update the tracker:
    set the step `in-progress` and record the branch name.
 3. **Load the context** (see "Context to load" below) so the work respects the
-   established design and the [non-negotiable rules](/folder-structure.md).
-4. **Implement test-first.** Follow the [TDD loop](/working-agreement.md): failing
+   established design and the [non-negotiable rules](/reference/folder-structure.md).
+4. **Implement test-first.** Follow the [TDD loop](/process/working-agreement.md): failing
    test → minimum implementation → refactor. Make as many **subcommits** as help;
    they will be squashed.
 5. **Self-check — the gate for every review.** Run `uv run poe check` (ruff +
    basedpyright + pytest) until green. For a step with no automated test, perform
-   the manual verification the [build step](/build-order.md) describes and write
+   the manual verification the [build step](/build/build-order.md) describes and write
    down the result. **No review starts until checks are green.**
 6. **Sub-agent review (only on green checks).** Invoke a **review sub-agent** on
    the step's diff (`main..HEAD`) — e.g. via the repo's code-review tooling —
@@ -76,12 +76,12 @@ review chain, squash, merge, push) around it.
    to the user. Only a clear user approval advances the step.
 8. **Finalize.** With user approval in hand and `uv run poe check` green (and
    manual verification done, if any): **squash** the branch's subcommits into one
-   commit using the [commit format](/working-agreement.md)
+   commit using the [commit format](/process/working-agreement.md)
    (`<stage>: <what changed>`, verification in the body). Note its hash
    (`git rev-parse --short HEAD`) — for a fast-forward merge this *is* the hash
    the commit will have on `main`.
 9. **Record — still on the step branch, before merging.** Update the
-   [progress tracker](/progress.md) (status `done`, the hash just noted, the
+   [progress tracker](/build/progress.md) (status `done`, the hash just noted, the
    date) and add a dated entry to [`log.md`](/log.md), as one small commit on
    top of the squashed step commit. Doing this now, rather than after the merge,
    is required: `main` is commit-protected (see hard rules above), so there is
@@ -104,15 +104,15 @@ moving on.
 For step N, read, in this order:
 
 1. This workflow document (the loop and the hard rules).
-2. The step's entry in the [build order](/build-order.md) — and **every concept
-   document it links** (the relevant stage doc, [data model](/data-model.md),
-   [domain model](/domain-model.md), etc.). Those links are the step's context.
-3. The [non-negotiable structure rules](/folder-structure.md) and the
-   [working agreement](/working-agreement.md) (TDD table, typing gate, commit
+2. The step's entry in the [build order](/build/build-order.md) — and **every concept
+   document it links** (the relevant stage doc, [data model](/reference/data-model.md),
+   [domain model](/foundations/domain-model.md), etc.). Those links are the step's context.
+3. The [non-negotiable structure rules](/reference/folder-structure.md) and the
+   [working agreement](/process/working-agreement.md) (TDD table, typing gate, commit
    gate).
-4. The [progress tracker](/progress.md) — what is already `done`, and any notes
+4. The [progress tracker](/build/progress.md) — what is already `done`, and any notes
    on `blocked` items.
-5. Any [open questions](/open-questions.md) the step is tasked with resolving.
+5. Any [open questions](/build/open-questions.md) the step is tasked with resolving.
 
 ## Definition of done for a step
 
@@ -125,7 +125,7 @@ A step is `done` only when **all** are true:
 - [ ] The user has explicitly approved.
 - [ ] Subcommits squashed into one `<stage>: <what changed>` commit with the
       verification in the body.
-- [ ] [Progress tracker](/progress.md) and [`log.md`](/log.md) updated **on the
+- [ ] [Progress tracker](/build/progress.md) and [`log.md`](/log.md) updated **on the
       step branch**, in a commit on top of the squashed step commit (not after
       merging — `main` can't take a direct commit).
 - [ ] Branch merged into `main`, branch deleted, and `main` pushed to `origin`.

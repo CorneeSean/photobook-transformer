@@ -31,7 +31,7 @@ no recognized faces (``person_ids`` empty ⇒ byte-for-byte the old result):
   though still not as an exact Immich dup-group repeat.
 - *Strict on everyone else* — there is deliberately **no** coverage phase for
   non-leads. Honoring the near-dup guard strictly (the chosen posture — see
-  knowledge/immich-enrichment.md), a non-lead who appears only in near-duplicates
+  knowledge/build/enrichment.md), a non-lead who appears only in near-duplicates
   of already-picked photos simply stays unselected, so the book isn't padded with
   look-alikes just to make a face appear. Only **leads** bypass that guard.
 
@@ -43,7 +43,7 @@ Photos with no ``scene_id`` (unclustered — see [`cluster`](./cluster.py)) are
 never selected. Pure logic over data already in the DB — the ``pgvector``
 similarity query sits behind the substitutable :class:`~album.db.similarity.SimilaritySearch`
 interface, so this module is unit-testable on in-memory SQLite with similarity
-stubbed (see [build step 8](/build-order.md)).
+stubbed (see [build step 8](/build/build-order.md)).
 
 Idempotent: resets ``selected`` for the album up front, so re-running recomputes
 from scratch rather than compounding. No Prefect imports (folder-structure.md

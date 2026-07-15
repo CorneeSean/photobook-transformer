@@ -19,21 +19,21 @@ captioned, print-ready photo book, submitted to a print API — with minimal
 manual work. It is **event-type agnostic**: trips, weddings, a baby's first
 year, a festival are all just *albums*. The abstraction is `Album` + optional
 `Segment` (a named, time-bounded, optionally-placed period). See
-[`knowledge/domain-model.md`](./knowledge/domain-model.md) before touching
+[`knowledge/foundations/domain-model.md`](./knowledge/foundations/domain-model.md) before touching
 anything that reasons about structure.
 
 ## Current state
 
-All 16 steps of the numbered [**Build order**](./knowledge/build-order.md) are
+All 16 steps of the numbered [**Build order**](./knowledge/build/build-order.md) are
 done and merged to `main` — every stage (`sync` through `fulfill`) is
 implemented, wired into one Prefect flow, and step 16 confirmed the
 `Album`/`Segment` abstraction needs no code change for a structurally
 different album. Since then (post-step-16, user-directed) `fulfill` was
 generalized to a pluggable `Printer` (`src/album/printers/`), with a browsable
 HTML book (`HtmlPrinter`) as the default output and Lulu opt-in — see
-[`knowledge/progress.md`](./knowledge/progress.md)'s Notes / blockers section.
+[`knowledge/build/progress.md`](./knowledge/build/progress.md)'s Notes / blockers section.
 See [`HANDOVER.md`](./HANDOVER.md) for a full summary and
-[`knowledge/progress.md`](./knowledge/progress.md)'s Notes / blockers section
+[`knowledge/build/progress.md`](./knowledge/build/progress.md)'s Notes / blockers section
 for what's still deferred (live-Immich/Claude/Lulu/darktable-cli checks — this
 sandbox has no reachable instances of any of them, so those are the live
 follow-ups, not new build steps). There is no more build-order work queued;
@@ -44,15 +44,15 @@ squash-merge).
 ## How a step is implemented (read before writing any code)
 
 Deliver **one build step at a time**, following
-[`knowledge/implementation-workflow.md`](./knowledge/implementation-workflow.md),
-and keep [`knowledge/progress.md`](./knowledge/progress.md) current. The order is
+[`knowledge/process/implementation-workflow.md`](./knowledge/process/implementation-workflow.md),
+and keep [`knowledge/build/progress.md`](./knowledge/build/progress.md) current. The order is
 fixed — **checks → sub-agent review → user review → commit** — and any change
 re-runs what precedes it. In short:
 
-1. Take the next `todo` step from the [progress tracker](./knowledge/progress.md).
+1. Take the next `todo` step from the [progress tracker](./knowledge/build/progress.md).
 2. **Branch off `main`** (`step-NN-<slug>`) — **never work on or commit to `main`**
    (a `no-commit-to-branch` pre-commit hook enforces this).
-3. Load the step's context (its [build-order](./knowledge/build-order.md) entry +
+3. Load the step's context (its [build-order](./knowledge/build/build-order.md) entry +
    every doc it links) and implement **test-first**. Subcommits are fine.
 4. **Get `uv run poe check` green first** (ruff + basedpyright + pytest), or do
    the step's manual verification. No review starts until checks are green.
@@ -121,7 +121,7 @@ just prose.
   it fail for the right reason, then implement the minimum to pass, then
   refactor. Pure-logic stages are the highest-value tests — write them
   thoroughly. See the per-stage testing table in
-  [`knowledge/working-agreement.md`](./knowledge/working-agreement.md) for what to
+  [`knowledge/process/working-agreement.md`](./knowledge/process/working-agreement.md) for what to
   use (in-memory SQLite, `testcontainers` for `pgvector`, `respx`/`vcrpy` for the
   Immich client, PydanticAI `TestModel` for agents).
 - **Static typing is a gate.** The code is heavily typed (SQLAlchemy 2.0
@@ -133,13 +133,13 @@ just prose.
   the review sub-agent is satisfied, **then** the user has approved — in that
   order, re-running checks after each round. Put the verification in the commit
   body. Commit format: `<stage>: <what changed>`. See
-  [`implementation-workflow.md`](./knowledge/implementation-workflow.md).
+  [`implementation-workflow.md`](./knowledge/process/implementation-workflow.md).
 - **If a step can't be completed cleanly, do not commit and move on.** Stop and
   surface the problem.
 
 ## Layout (target)
 
-See [`knowledge/folder-structure.md`](./knowledge/folder-structure.md) for the
+See [`knowledge/reference/folder-structure.md`](./knowledge/reference/folder-structure.md) for the
 full tree and rules. In brief:
 
 ```

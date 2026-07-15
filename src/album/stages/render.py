@@ -25,7 +25,7 @@ rather than hitting the real thing in tests:
 
 Sidecar path convention matches ``enhance.py``:
 ``<data_root>/<album.slug>/xmp/<photo.filename>.xmp``. Output JPEGs go to
-``<data_root>/<album.slug>/rendered/<photo.filename>`` (folder-structure.md).
+``<data_root>/<album.slug>/rendered/<photo.filename>`` (reference/folder-structure.md).
 The fetched original is staged at
 ``<data_root>/<album.slug>/originals/<photo.filename>`` as darktable-cli's
 input file — it needs a real file on disk, not bytes in memory. That staged
@@ -36,7 +36,7 @@ double an album's disk footprint alongside the real artifact (the rendered
 JPEG). A failed render intentionally leaves its staged original in place, so
 a retry doesn't re-fetch it.
 
-No Prefect imports (folder-structure.md rule). :class:`RenderStage`'s ``run``
+No Prefect imports (reference/folder-structure.md rule). :class:`RenderStage`'s ``run``
 takes ``album_id`` first.
 """
 
@@ -85,7 +85,7 @@ class DarktableRenderer:
 
     Not exercised by the unit tests (no ``darktable-cli`` binary on this host
     or in CI — it lives only in the Docker app image, see
-    folder-structure.md/build-order.md step 1); covered instead by build step
+    reference/folder-structure.md/build/build-order.md step 1); covered instead by build step
     11's manual verification.
     """
 

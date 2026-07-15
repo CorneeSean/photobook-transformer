@@ -9,19 +9,19 @@ timestamp: 2026-07-12
 # Build order
 
 Each step is delivered on its own branch following the
-[implementation workflow](/implementation-workflow.md) — TDD, a sub-agent review,
+[implementation workflow](/process/implementation-workflow.md) — TDD, a sub-agent review,
 then user review, then squash-merge to `main` (never commit to `main` directly) —
-and its status is tracked in the [progress tracker](/progress.md). Each step ends
+and its status is tracked in the [progress tracker](/build/progress.md). Each step ends
 with `uv run poe check` green (ruff clean → basedpyright clean → pytest green)
 plus those reviews before it lands; steps with no automated test end with a
 written-down manual verification instead. Tests come *before* implementation
-within each step. See the [Working agreement](/working-agreement.md) for the full
+within each step. See the [Working agreement](/process/working-agreement.md) for the full
 commit gate.
 
 **0. Scaffold.** `git init`. `uv init`, Python 3.14. Configure ruff,
 `basedpyright`, and pytest in `pyproject.toml`; define the `poethepoet` tasks
 (`[tool.poe.tasks]`) and the `album` console entry point (`[project.scripts]`).
-Create the [folder structure](/folder-structure.md). Write a first-pass
+Create the [folder structure](/reference/folder-structure.md). Write a first-pass
 **`README.md`** (human-readable: what the project is, prerequisites, how to
 initialize it, how to bring the local stack up, and the `uv run poe` workflow
 commands) and **`AGENTS.md`** (agent orientation — pointing at this knowledge
@@ -40,14 +40,14 @@ UI is reachable; `docker compose run app darktable-cli --version` works;
 `CREATE EXTENSION vector;` succeeds on our database. **Commit** with the
 verification in the body.
 
-**2. Data model + migrations.** [`db/models.py`](/data-model.md) (Album, Segment,
+**2. Data model + migrations.** [`db/models.py`](/reference/data-model.md) (Album, Segment,
 Photo) and the first alembic migration — which must `CREATE EXTENSION IF NOT
 EXISTS vector` before creating the embedding column. *Test first:* in-memory
 SQLite fixture; an album with segments and an album *without* any can both be
 created and related. **Commit.**
 
 **3. Album definition loading.** `config.py` + `definition.py`
-([`album.yml`](/album-definition.md) → `Album` + `Segment` rows), normalizing all
+([`album.yml`](/reference/album-definition.md) → `Album` + `Segment` rows), normalizing all
 segment times to **UTC** on load (explicit offset wins; otherwise apply
 `Album.timezone`). *Test first:* a trip-shaped YAML, a wedding-shaped YAML, and a
 segment-less YAML all load correctly; a time with an offset and a time relying on
@@ -57,7 +57,7 @@ clearly. **Commit.**
 
 **4. Immich client.** *Test first*, against recorded HTTP fixtures: asset
 listing, EXIF parsing, duplicate groups, thumbnail fetch. **Resolve
-[open question #1](/open-questions.md) here** — does Immich expose CLIP
+[open question #1](/build/open-questions.md) here** — does Immich expose CLIP
 embeddings? Record the answer. **Commit.**
 
 **5. [`sync`](/stages/sync.md) stage.** Immich → DB, scoped to `album_id`,
@@ -118,7 +118,7 @@ captioned without a second API call; a segment-less album still gets a caption.
 names become section headers when present. *Test first:* page count and photo
 placement given fixture data, **including a segment-less album**. *Manually
 verify:* the PDF opens with correct trim/bleed. **Resolve
-[open question #4](/open-questions.md) (Lulu's spec) first** — it drives template
+[open question #4](/build/open-questions.md) (Lulu's spec) first** — it drives template
 dimensions. **Commit.**
 
 **14. Wire the flow.** `flow.py` + `cli.py`. *Manually verify:* `album run
@@ -142,4 +142,4 @@ abstraction — fix it, don't work around it. **Commit.**
 
 Steps **17+** (adopting Immich API surface that didn't exist at steps 4–5 —
 faces/people, lead-face prioritization, rating/OCR/geocoding) are broken out into
-their own playbook: [Immich enrichment](/immich-enrichment.md).
+their own playbook: [Immich enrichment](/build/enrichment.md).

@@ -2,7 +2,7 @@
 
 Caches the Immich asset id of an uploaded ``lead_faces.reference_image`` so a
 re-run of lead-face resolution (stages/lead_faces.py) reuses it rather than
-re-uploading the reference photo. See knowledge/immich-enrichment.md step 17b.
+re-uploading the reference photo. See knowledge/build/enrichment.md step 17b.
 
 Revision ID: d4a1c7b93e56
 Revises: c3d9e5a1f742

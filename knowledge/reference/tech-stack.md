@@ -38,6 +38,6 @@ timestamp: 2026-07-12
 | Output (default) | `HtmlPrinter` — static page-by-page webpage (Jinja2 + Tailwind CDN) |
 | Print fulfillment (opt-in) | `LuluPrinter` → Lulu Print API |
 
-See [Working agreement](/working-agreement.md) for how the tooling choices are
+See [Working agreement](/process/working-agreement.md) for how the tooling choices are
 exercised (typing gate, commit gate, `uv run poe` tasks) and
-[Architecture](/architecture.md) for why Postgres, Prefect, and PydanticAI.
+[Architecture](/foundations/architecture.md) for why Postgres, Prefect, and PydanticAI.

@@ -5,7 +5,7 @@ Immich's REST API now exposes detected faces and recognized people
 built at steps 4-5. `sync` fetches faces per asset to populate ``face_count`` /
 ``person_ids`` on photos and to cache the album's recognized people, giving
 `select` a coverage signal and `caption` name grounding — with no local
-face-detection dependency. See knowledge/immich-enrichment.md.
+face-detection dependency. See knowledge/build/enrichment.md.
 
 Revision ID: c3d9e5a1f742
 Revises: b7f2c1a4e8d0

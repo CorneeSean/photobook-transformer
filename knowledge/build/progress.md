@@ -8,8 +8,8 @@ timestamp: 2026-07-12
 
 # Build progress
 
-Living status of the [build order](/build-order.md), maintained by the
-implementing agent as part of the [implementation workflow](/implementation-workflow.md).
+Living status of the [build order](/build/build-order.md), maintained by the
+implementing agent as part of the [implementation workflow](/process/implementation-workflow.md).
 Update this file whenever a step changes state. Steps are delivered strictly in
 order, one at a time.
 
@@ -36,7 +36,7 @@ order, one at a time.
 | 15 | `fulfill` stage | step-15-fulfill (merged, deleted) | done | 92a7d4c | Lulu Print API client (OAuth2 client-credentials); reads `Album.assembled_pdf_path`, wrote `Album.lulu_order_id` (renamed to `output_ref` post-step-16 when `fulfill` became printer-pluggable — see Notes); real Lulu sandbox order deferred (no credentials); no PDF-hosting/upload mechanism yet — see notes below |
 | 16 | Prove genericity | step-16-prove-genericity (merged, deleted) | done | d7e903d | adds `data/albums/smith-wedding/album.yml` (wedding-shaped: hour-scale segments, single day) + `tests/test_genericity.py`; zero `src/` files touched — confirmed the abstraction; live run hits the same no-reachable-Immich boundary as step 14 |
 
-### Enrichment playbook (post-build-order — see [immich-enrichment.md](/immich-enrichment.md))
+### Enrichment playbook (post-build-order — see [enrichment.md](/build/enrichment.md))
 
 | # | Step | Branch | Status | Commit | Notes |
 |---|------|--------|--------|--------|-------|
@@ -46,12 +46,12 @@ order, one at a time.
 | 19 | Name-grounded `caption` (optional) | — | todo | — | pass `Person.name`s into the shared analysis call |
 | 20 | Rating / OCR / geocoded place (optional) | — | todo | — | `rating` + `exifInfo.city/state/country` + OCR into nullable columns |
 
-### TestContainers playbook (see [testcontainers-integration.md](/testcontainers-integration.md))
+### TestContainers playbook (see [testcontainers.md](/build/testcontainers.md))
 
 | # | Step | Branch | Status | Commit | Notes |
 |---|------|--------|--------|--------|-------|
 | 21 | pgvector schema + integration harness | step-21-pgvector-integration (merged, deleted) | done | ac2cd14 | alembic-migrated pgvector container fixture; `select` over the real `PgVectorSimilarity` (near-dup skip, idempotent; lead coverage with a negative control + `person_ids` JSON round-trip); migrations reach head + no drift; migration round-trip; `integration` marker + `poe test-fast`. 2-agent review (fixed a fileConfig/caplog cross-test leak). 211 tests |
-| 22 | darktable-cli render integration | step-22-darktable-render (merged, deleted) | done | 8aac81b | real `DarktableRenderer` inside the shipped app image renders a real `write_xmp_sidecar` sidecar → asserts output JPEG exists, decodes, **visibly brighter** (`tests/test_render_integration.py`). **Found + fixed a real bug:** `enhance`'s flat-attribute XMP was silently ignored by darktable (every render a no-op) — rewrote `write_xmp_sidecar` to darktable's real binary history stack (exposure/shadhi/temperature, structs pinned to darktable 5.0.1). Closes step-11's deferred manual check. Shells to `docker` CLI (docker-py build breaks on the py3.14 gcloud cred-helper landmine). |
+| 22 | darktable-cli render integration | step-22-darktable-render (merged, deleted) | done | 8aac81b | real `DarktableRenderer` inside the shipped app image renders a real `write_xmp_sidecar` sidecar → asserts output JPEG exists, decodes, **visibly brighter** (`tests/test_render_integration.py`). Validated the darktable XMP history-stack format — see [enhance.md](/stages/enhance.md). Closes step-11's deferred manual check. Shells to `docker` CLI (docker-py build breaks on the py3.14 gcloud cred-helper landmine). |
 | 23 | DB-backed flow smoke test (optional) | — | todo | — | whole flow on real Postgres, Immich/Claude/Lulu as doubles |
 | 24 | Immich ML integration (deferred optional) | — | todo | — | needs internet CLIP/face models or a pre-baked model-cache image — see the playbook |
 
@@ -83,7 +83,7 @@ order, one at a time.
   shows it dominating sync time.
 - **Printer abstraction + HTML default output (2026-07-14, post-step-16,
   user-directed):** `fulfill` was generalized from a Lulu-only submitter to a
-  pluggable [`Printer`](../src/album/printers/base.py) — the output *medium* is
+  pluggable [`Printer`](../../src/album/printers/base.py) — the output *medium* is
   now swappable. New `src/album/printers/` package: `base.py` (the `Printer`
   protocol + `iter_book_pages` shared page reader), `html.py`
   (`HtmlPrinter`, the new **default** — a self-contained page-by-page webpage
@@ -118,11 +118,6 @@ order, one at a time.
   LAION/open_clip quality scorer (step 6's deferral, still open — see
   `flow.py`'s `_UnavailableQualityModel`). Re-run `album run --album
   honeymoon-2026` once all of these are available to close this out.
-- **No PDF-hosting/upload mechanism (step 15, still open — now Lulu-only):**
-  since HTML is the default printer, a real run is no longer blocked here; only
-  the **opt-in** `LuluPrinter` needs it. `LuluPrinter.print` raises
-  `UnreachablePdfError` until something serves `assembled_pdf_path` at a
-  fetchable `http(s)://` URL.
 - **Real LAION/open_clip scorer still not wired (step 6, resurfaced at step
   14):** `flow.py`'s `_UnavailableQualityModel` is a raising placeholder —
   `quality()`'s per-photo failure isolation turns that into every photo
@@ -135,17 +130,10 @@ order, one at a time.
   (2026-07-15):** `tests/test_render_integration.py` now runs the real
   `DarktableRenderer` inside the shipped app Docker image over a real source
   JPEG + a real `write_xmp_sidecar` sidecar and asserts the output is visibly
-  corrected — the automated form of the build-11 manual check. **This surfaced
-  a real bug:** `enhance`'s XMP used a made-up *flat* `darktable:exposure="…"`
-  attribute schema that `darktable-cli` **silently ignores**, so every render
-  was a no-op and no tone correction ever reached the image. Fixed by rewriting
-  `write_xmp_sidecar` to emit darktable's real binary *history stack*
-  (exposure / shadhi / temperature; struct `modversion`s pinned to the app
-  image's darktable 5.0.1 — a darktable major upgrade may need them updated, the
-  integration test guards it). Note the temperature knob (`temp_shift_k`) is a
-  bounded Kelvin→multiplier approximation; exposure and shadows/highlights map
-  cleanly. Still deferred: a real end-to-end run against a live Immich (the
-  originals source) — same boundary as steps 4-5/14.
+  corrected — the automated form of the build-11 manual check. The integration
+  test also surfaced and validated a fix to `enhance`'s XMP sidecar format — see
+  [enhance.md](/stages/enhance.md) History note. Still deferred: a real end-to-end run
+  against a live Immich (the originals source) — same boundary as steps 4-5/14.
 - **Deferred manual caption spot-check (step 12):** no `ANTHROPIC_API_KEY` in
   this environment, so `caption` is tested only via PydanticAI `TestModel`/
   `FunctionModel` — the build order's "spot-check ~20 captions for accuracy
@@ -163,12 +151,12 @@ order, one at a time.
   and updated this tracker/`log.md` centrally to avoid the three branches
   conflicting on shared docs. This is a deliberate, user-approved exception to
   the "steps are delivered strictly in order" rule above — not a new default.
-- **No PDF-hosting/upload mechanism yet (step 15):** `Album.assembled_pdf_path`
-  is a local disk path; Lulu's `source_url` needs a fetchable `http(s)://` URL.
-  `LuluPrinter.print` (post-step-16; was `LuluPrintJobAdapter.submit`) raises
-  `UnreachablePdfError` rather than submitting a path Lulu can't reach. Needs
-  real hosting (static file serving, S3, etc.) wired in — only for the opt-in
-  Lulu path, since the default `HtmlPrinter` needs no hosting.
+- **No PDF-hosting/upload mechanism yet (step 15, still open — Lulu-only):**
+  `Album.assembled_pdf_path` is a local disk path; Lulu's `source_url` needs a
+  fetchable `http(s)://` URL. `LuluPrinter.print` raises `UnreachablePdfError`
+  rather than submitting a path Lulu can't reach. Needs real hosting (static file
+  serving, S3, etc.) wired in — only for the opt-in `LuluPrinter`, since the
+  default `HtmlPrinter` needs no hosting.
 - **Deferred live-Lulu check (step 15):** no Lulu sandbox credentials in this
   environment, so `LuluClient`/`fulfill` are tested only against recorded
   fixtures — the build order's "manually verify with a single-copy test order"
@@ -193,7 +181,7 @@ order, one at a time.
   clauses or `# fmt: skip`. See [log](/log.md) 2026-07-13.
 - **Deferred live checks:** steps 4–5 fixtures/sync were built without a reachable
   Immich stack; re-verify against a live instance + the honeymoon album on the
-  first real sync (see [Immich API notes](/immich-api.md)).
+  first real sync (see [Immich API notes](/reference/immich-api.md)).
 - **Ryuk landmine (step 8) — RESOLVED 2026-07-15:** the Ryuk reaper now starts
   fine and the full suite is green with **no** `TESTCONTAINERS_RYUK_DISABLED`
   (plain `uv run poe check`). The earlier failure (`error while creating mount

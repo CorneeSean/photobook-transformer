@@ -1,6 +1,6 @@
 """``quality`` — score each photo's blur and aesthetics, scoped by ``album_id``.
 
-Two kinds of score, written back to the [`Photo`](/data-model.md) row:
+Two kinds of score, written back to the [`Photo`](/reference/data-model.md) row:
 
 - **blur** — Laplacian variance (OpenCV) over the thumbnail; low variance = blurry.
   Computed here for real (cheap, deterministic).

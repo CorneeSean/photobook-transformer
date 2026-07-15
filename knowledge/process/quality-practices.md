@@ -9,8 +9,8 @@ timestamp: 2026-07-14
 # Quality practices — code structure & testing
 
 This document is the project's standard for *how code is shaped*, on top of the
-[working agreement](/working-agreement.md)'s *when-is-it-done* gate (TDD, typing,
-`uv run poe check`) and the [folder structure](/folder-structure.md)'s
+[working agreement](/process/working-agreement.md)'s *when-is-it-done* gate (TDD, typing,
+`uv run poe check`) and the [folder structure](/reference/folder-structure.md)'s
 *where-does-it-live* rules. Where those documents and this one overlap, this one
 is the more specific authority on structure and test organization, and they have
 been amended to point here.
@@ -121,7 +121,7 @@ class shape:
 - **A shared collaborator used by two stages is its own injected object**, not a
   function one stage imports from another. The current `enhance`/`caption` pair
   shares `ensure_analysis` (the "one combined vision call" design — see
-  [architecture](/architecture.md)); under this standard that shared trigger
+  [architecture](/foundations/architecture.md)); under this standard that shared trigger
   becomes a small injected collaborator (e.g. a `PhotoAnalyzer` holding the
   thumbnail source + vision model, with an `ensure(session, photo, *, force)`
   method) that **both** `EnhanceStage` and `CaptionStage` receive in their
@@ -257,7 +257,7 @@ keeps the helper's visibility matched to its single consumer and lets it read
 
 ### 2.6 What doesn't change
 
-The [working agreement](/working-agreement.md)'s test-*strategy* table stands: in-memory
+The [working agreement](/process/working-agreement.md)'s test-*strategy* table stands: in-memory
 SQLite for pure-logic stages, a Postgres testcontainer for `pgvector`, recorded
 HTTP for the Immich client, PydanticAI `TestModel`/`FunctionModel` for agents,
 committed fixture images for image ops, manual verification for
@@ -296,9 +296,7 @@ method rather than raising the threshold.
 
 ## See also
 
-- [Working agreement](/working-agreement.md) — the TDD loop and the `uv run poe check` commit gate.
-- [Folder structure](/folder-structure.md) — where each unit lives and the genericity/structure rules.
-- [Architecture](/architecture.md) — why the collaborators are injected (idempotent stages, one combined vision call, Prefect only in `flow.py`).
-- [Implementation workflow](/implementation-workflow.md) — the branch → review → squash → merge delivery loop this change goes through.
-</content>
-</invoke>
+- [Working agreement](/process/working-agreement.md) — the TDD loop and the `uv run poe check` commit gate.
+- [Folder structure](/reference/folder-structure.md) — where each unit lives and the genericity/structure rules.
+- [Architecture](/foundations/architecture.md) — why the collaborators are injected (idempotent stages, one combined vision call, Prefect only in `flow.py`).
+- [Implementation workflow](/process/implementation-workflow.md) — the branch → review → squash → merge delivery loop this change goes through.

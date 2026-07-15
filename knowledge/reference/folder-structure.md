@@ -132,7 +132,7 @@ Shared helpers and fixtures live at the `tests/` root (imported absolutely, e.g.
 `from tests.doubles import …`); everything under `tests/album/` mirrors
 `src/album/` package-for-package. Test modules are grouped into `class Test…:`
 suites with parametrization and scoped fixtures — see
-[quality practices](/quality-practices.md) §2.
+[quality practices](/process/quality-practices.md) §2.
 
 ## Structure rules
 
@@ -151,7 +151,7 @@ suites with parametrization and scoped fixtures — see
   unit-testable without an orchestrator, which is what makes the TDD loop fast.
 - **A stage is a class when it has a collaborator or several helpers; a plain
   function only when genuinely trivial** (the hybrid rule in
-  [quality practices](/quality-practices.md) — under which all nine current stages
+  [quality practices](/process/quality-practices.md) — under which all nine current stages
   are classes). Either way, the public entry point (`Stage.run` / the function)
   **takes `album_id` first, then the `Session`** — request-scoped state is never a
   constructor dependency; injected collaborators (clients, similarity, printer,

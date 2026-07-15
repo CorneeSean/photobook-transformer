@@ -3,7 +3,7 @@
 Photo Album Pipeline: a resumable batch pipeline that turns a raw photo dump into
 a printed, curated photo book. **All 16 build steps are done and merged to
 `main` — the original build order is complete.** A follow-on **[Immich
-enrichment playbook](./knowledge/immich-enrichment.md) (steps 17-20)** is now
+enrichment playbook](./knowledge/build/enrichment.md) (steps 17-20)** is now
 underway: **steps 17 (faces/people in the client + `sync`), 17b (lead-face
 resolution), and 18 (people/lead-aware `select`) are done and merged**; the
 remaining playbook steps are the *optional* **19 (name-grounded `caption`)** and
@@ -11,7 +11,7 @@ remaining playbook steps are the *optional* **19 (name-grounded `caption`)** and
 (214 tests; the Ryuk reaper works now, so `TESTCONTAINERS_RYUK_DISABLED` is no
 longer needed — resolved 2026-07-15, see Golden rules). What's left is either the next enrichment step, **closing a
 deferred live-integration check** (see
-[`knowledge/progress.md`](./knowledge/progress.md)'s Notes / blockers section —
+[`knowledge/build/progress.md`](./knowledge/build/progress.md)'s Notes / blockers section —
 read it in full, it's long), or new, user-directed work.
 
 ## How to start the conversation
@@ -20,7 +20,7 @@ There's no fixed next build step anymore, so there's no one canonical prompt.
 For closing a deferred item or new work, a fresh agent should still:
 
 > Read `AGENTS.md`, then `knowledge/index.md` and
-> `knowledge/implementation-workflow.md`. Read `knowledge/progress.md`'s
+> `knowledge/process/implementation-workflow.md`. Read `knowledge/build/progress.md`'s
 > **Notes / blockers** section in full — it lists everything still deferred
 > (live Immich/Claude/Lulu/darktable-cli checks) and any new work the user
 > describes. Follow the same workflow used for every build step (branch off
@@ -33,17 +33,17 @@ For closing a deferred item or new work, a fresh agent should still:
 
 1. [`AGENTS.md`](./AGENTS.md) — orientation and the non-negotiable rules.
 2. [`knowledge/index.md`](./knowledge/index.md) — source of truth (OKF bundle).
-3. [`knowledge/implementation-workflow.md`](./knowledge/implementation-workflow.md)
+3. [`knowledge/process/implementation-workflow.md`](./knowledge/process/implementation-workflow.md)
    — the per-step delivery loop (this is mandatory).
-4. [`knowledge/progress.md`](./knowledge/progress.md) — current per-step status
+4. [`knowledge/build/progress.md`](./knowledge/build/progress.md) — current per-step status
    **and its "Notes / blockers" section — read this in full, not just skimmed**;
    it documents every still-open deferred item.
-5. [`knowledge/build-order.md`](./knowledge/build-order.md) — the full,
+5. [`knowledge/build/build-order.md`](./knowledge/build/build-order.md) — the full,
    now-complete step list, for context on how each stage was built.
 
 ## Where things stand
 
-All merged and `done` (see [`knowledge/progress.md`](./knowledge/progress.md)
+All merged and `done` (see [`knowledge/build/progress.md`](./knowledge/build/progress.md)
 and [`knowledge/log.md`](./knowledge/log.md) for full detail — this is a
 summary):
 
@@ -111,7 +111,7 @@ produces a real, viewable deliverable end-to-end. See the tracker's Notes.
 Every remaining gap is the same shape: this sandbox has no reachable live
 Immich instance, `ANTHROPIC_API_KEY`, `darktable-cli` binary (only in the
 Docker app image), or Lulu sandbox credentials. Nothing is blocked on missing
-code — see [`knowledge/progress.md`](./knowledge/progress.md)'s Notes /
+code — see [`knowledge/build/progress.md`](./knowledge/build/progress.md)'s Notes /
 blockers section for the full, current list, including:
 
 - A genuinely full `album run --album <slug>` (real sync → real quality
@@ -145,7 +145,7 @@ to future deferred-item or new-feature work too, if it splits similarly.
   `origin`**. Re-run checks after every
   change round — **including immediately before the commit** (a `ruff`/py314 bug
   can silently reintroduce invalid syntax; see log 2026-07-13).
-- Update `knowledge/progress.md` and `knowledge/log.md` **on the working
+- Update `knowledge/build/progress.md` and `knowledge/log.md` **on the working
   branch, before the fast-forward merge** — `main` is commit-protected, so a
   post-merge docs commit can't land without a second branch.
 - **Ryuk works now (resolved 2026-07-15):** plain `uv run poe check` is green;

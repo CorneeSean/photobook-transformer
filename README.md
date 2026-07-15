@@ -38,7 +38,7 @@ uv run poe migrate # alembic upgrade head
 ## Run a pipeline end-to-end
 
 1. Add `data/albums/<slug>/album.yml` (see
-   [Album definition](./knowledge/album-definition.md)) with a real
+   [Album definition](./knowledge/reference/album-definition.md)) with a real
    `immich_album_id` from Immich's web UI, and set the `.env` credentials it
    needs (`IMMICH_API_KEY`, `ANTHROPIC_API_KEY` — see `.env.example`; the
    `LULU_*` credentials are only needed for the opt-in Lulu printer, below).
@@ -63,7 +63,7 @@ which submits the print-ready PDF to [Lulu](https://api.lulu.com)'s Print API �
 this needs the `LULU_*` credentials and a PDF hosted at a URL Lulu can fetch.
 
 Every dependency `flow.py` wires is real except one, deliberately deferred
-since [build step 6](./knowledge/progress.md): the LAION-style aesthetic
+since [build step 6](./knowledge/build/progress.md): the LAION-style aesthetic
 predictor + CLIP embedder (`open_clip`/`torch` — a heavy, not-yet-added
 dependency). A run still completes without it — `select`'s MMR has a
 documented fallback for missing `aesthetic_score`/`clip_embedding` — just
@@ -87,7 +87,7 @@ The pipeline is also a console entry point: `uv run album run --album <slug>`.
 ## Contributing
 
 See [`AGENTS.md`](./AGENTS.md) and
-[`knowledge/implementation-workflow.md`](./knowledge/implementation-workflow.md)
+[`knowledge/process/implementation-workflow.md`](./knowledge/process/implementation-workflow.md)
 for how a build step is branched, developed test-first, reviewed, and merged.
 `main` is protected by a `no-commit-to-branch` pre-commit hook — work always
 happens on a `step-NN-<slug>` branch.

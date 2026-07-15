@@ -16,7 +16,7 @@ Resolve early; record answers back into this bundle (and note them in
    (OpenAPI v3.0.2) exposes no embeddings — only duplicate groups
    (`GET /duplicates`, `AssetResponseDto.duplicateId`) and smart-search *results*.
    So [`quality`](/stages/quality.md) computes the `clip_embedding` itself via
-   `open_clip`. See [Immich API notes](/immich-api.md).
+   `open_clip`. See [Immich API notes](/reference/immich-api.md).
 
 2. **Confirm the honeymoon photos genuinely lack GPS** — check a few originals
    never shared through messaging apps (which strip EXIF). If some have it, the
@@ -24,15 +24,15 @@ Resolve early; record answers back into this bundle (and note them in
 
 3. **Per-photo source timezone.** The schema decision is settled — everything is
    stored tz-aware in UTC, `album.yml` carries offsets (or an album `timezone`),
-   and `cluster` matches in UTC (see the [data-model notes](/data-model.md)).
+   and `cluster` matches in UTC (see the [data-model notes](/reference/data-model.md)).
    What remains open is narrower: **how reliably can we determine each photo's
    capture zone?** Check whether Immich surfaces the EXIF offset
    (`OffsetTimeOriginal`) or only a bare timestamp; if only the latter, the album
    `timezone` is the fallback, which is wrong for an album that itself spans zones
-   mid-segment. Confirm in [build step 5](/build-order.md) against real honeymoon
+   mid-segment. Confirm in [build step 5](/build/build-order.md) against real honeymoon
    assets. *Partial answer (step 4): Immich **does** expose `exifInfo.timeZone`
    (IANA) + `dateTimeOriginal`, which [`sync`](/stages/sync.md) now uses before
-   falling back to `Album.timezone` — see [Immich API notes](/immich-api.md). The
+   falling back to `Album.timezone` — see [Immich API notes](/reference/immich-api.md). The
    mid-segment zone-span edge and these fields' reliability on real assets still
    need a live check.*
 
@@ -56,7 +56,7 @@ Resolve early; record answers back into this bundle (and note them in
 
 5. **What does the full AI pass cost?** Estimate the Claude API spend for
    ~300–500 selected photos before running it, and confirm it's acceptable. (Note
-   the [single combined vision call](/architecture.md) halves the number of image
+   the [single combined vision call](/foundations/architecture.md) halves the number of image
    uploads versus separate enhance/caption calls.)
 
 6. ~~**Can we offload the local ML (`open_clip` + LAION aesthetic head) to
@@ -74,11 +74,11 @@ Resolve early; record answers back into this bundle (and note them in
    extension migrated pgvecto.rs → pgvector/VectorChord; `smart_search.embedding`
    width changes with the configured model; face embeddings moved
    `asset_faces` → `face_search` across releases), which violates the
-   [architecture](/architecture.md) firewall against touching Immich's schema —
+   [architecture](/foundations/architecture.md) firewall against touching Immich's schema —
    too fragile a coupling to save a forward pass we're keeping anyway. A
    local-ML-free "minimal" variant is *possible* (rank `select` on Immich star
    `rating` + faces + duplicate groups, temporal-only `cluster`) but trades away
    the automated best-of-scene curation that is the pipeline's core value — not
-   taken. The faces/rating/OCR enrichment ([Immich enrichment](/immich-enrichment.md))
+   taken. The faces/rating/OCR enrichment ([Immich enrichment](/build/enrichment.md))
    is unaffected: it's additive and API-only. See the full research write-up in
    [`log.md`](/log.md) 2026-07-14.

@@ -8,14 +8,14 @@ timestamp: 2026-07-15
 
 # Pipeline execution shape
 
-Eleven stages turn Immich assets into a photo book. Today [`flow.py`](/architecture.md)
+Eleven stages turn Immich assets into a photo book. Today [`flow.py`](/foundations/architecture.md)
 runs them **strictly sequentially** on one shared DB `Session`, committed after
 each stage. But the underlying data dependencies form a **DAG** with two
 fan-out groups that could run concurrently. This doc is the map: the shape, why
 it runs as a line today, and the surgical change to parallelise it.
 
 > Companion visual (self-contained, no external deps):
-> `knowledge/pipeline-execution.html` — the same graph hand-drawn, plus the code
+> `knowledge/foundations/pipeline-execution.html` — the same graph hand-drawn, plus the code
 > sketch, styled for both light and dark themes.
 
 ## The dependency graph
@@ -64,7 +64,7 @@ flowchart TD
 ## Two readings
 
 - **As it runs today — a linear chain.** One shared `Session`, committed after
-  every stage ([`flow.py`](/architecture.md), the sole `@flow`). Simple,
+  every stage ([`flow.py`](/foundations/architecture.md), the sole `@flow`). Simple,
   resumable, one DB connection. Each stage already isolates its own per-photo
   failures (try/except+continue over its own loop), so no Prefect-level fan-out
   was needed to be correct — a deliberate choice documented in `flow.py`'s
@@ -78,7 +78,7 @@ flowchart TD
 
 | Group | Stages | Why independent | Joins at |
 |---|---|---|---|
-| **After `sync`** | [`resolve-leads`](/immich-enrichment.md) ‖ [`quality`](/stages/quality.md) ‖ [`cluster`](/stages/cluster.md) | Each reads only `Photo` rows and writes disjoint state — `Person.is_lead`; blur/aesthetic/`clip_embedding`; segment/scene assignment. No stage reads another's output. | [`select`](/stages/select.md) |
+| **After `sync`** | [`resolve-leads`](/build/enrichment.md) ‖ [`quality`](/stages/quality.md) ‖ [`cluster`](/stages/cluster.md) | Each reads only `Photo` rows and writes disjoint state — `Person.is_lead`; blur/aesthetic/`clip_embedding`; segment/scene assignment. No stage reads another's output. | [`select`](/stages/select.md) |
 | **After `select`** | [`enhance`](/stages/enhance.md)→[`render`](/stages/render.md) ‖ [`caption`](/stages/caption.md) | Both consume the `selected=True` set; render makes JPEGs, caption makes text, neither reads the other. `enhance→render` is itself a hard chain (render needs enhance's XMP sidecars). | [`assemble`](/stages/assemble.md) |
 
 **True chains (not parallelisable):** `sync → everything`, the group-1 trio →
@@ -98,12 +98,12 @@ free wall-clock time.
 ## Stage responsibilities
 
 Every stage is `album_id`-scoped and reads from **our** DB; Immich is touched
-only at `sync` (the boundary — see [architecture](/architecture.md)).
+only at `sync` (the boundary — see [architecture](/foundations/architecture.md)).
 
 | Stage | Group | Responsibility | Writes |
 |---|---|---|---|
 | [`sync`](/stages/sync.md) | seq | **The boundary.** Pull the album's assets from Immich, keyed on asset id. Idempotent. | `Photo` |
-| [`resolve-leads`](/immich-enrichment.md) | 1 | Resolve `album.yml` priority subjects to Immich people; mark them lead. | `Person.is_lead` |
+| [`resolve-leads`](/build/enrichment.md) | 1 | Resolve `album.yml` priority subjects to Immich people; mark them lead. | `Person.is_lead` |
 | [`quality`](/stages/quality.md) | 1 | Score blur (Laplacian, real) + aesthetic + CLIP embedding (ML, deferred). | `Photo` scores |
 | [`cluster`](/stages/cluster.md) | 1 | Assign each photo to a segment (by timestamp) and a scene (gap detection). | `segment_id`, `Scene` |
 | [`select`](/stages/select.md) | seq | Diversity- + people-aware best-of-scene via MMR; near-dup suppression via embeddings. | `Photo.selected` |
@@ -184,10 +184,10 @@ The task graph already permits this — these are the real edges to mind.
 
 | Concern | Detail |
 |---|---|
-| **Connection pool** | Concurrency peaks at 3 (group 1). Default `QueuePool` is 5 + 10 overflow = 15, so no change needed now. Size `pool_size` only if a stage's *internal* per-photo loop later becomes Prefect-level fan-out — the standing warning in [`build-order`](/build-order.md) step 14 and `flow.py`'s docstring. |
+| **Connection pool** | Concurrency peaks at 3 (group 1). Default `QueuePool` is 5 + 10 overflow = 15, so no change needed now. Size `pool_size` only if a stage's *internal* per-photo loop later becomes Prefect-level fan-out — the standing warning in [`build-order`](/build/build-order.md) step 14 and `flow.py`'s docstring. |
 | **Failure isolation** | Each task's own `with session_factory()` rolls back independently — one group-1 failure no longer poisons a shared transaction, and `.result()` still surfaces it and aborts before `select`. |
 | **Read-after-write** | Commit the shared session *before* each fan-out so worker threads read committed rows; `expire_all()` after the join so `select`/`assemble` re-read what the workers wrote (fresh `is_lead`, scores, selections). |
-| **Tests** | The in-memory SQLite test session isn't concurrency-safe and can't be shared across threads. Unit tests for ordering/wiring inject a `session_factory` returning independent doubles (or run the runner serially); real concurrency stays covered by the [pgvector TestContainers suite](/testcontainers-integration.md). |
+| **Tests** | The in-memory SQLite test session isn't concurrency-safe and can't be shared across threads. Unit tests for ordering/wiring inject a `session_factory` returning independent doubles (or run the runner serially); real concurrency stays covered by the [pgvector TestContainers suite](/build/testcontainers.md). |
 
 **Net:** the whole change is *own session per concurrent task + two
 `submit`/`result` fences*. The real wall-clock win lands in group 2, where

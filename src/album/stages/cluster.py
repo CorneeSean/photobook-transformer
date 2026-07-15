@@ -1,10 +1,10 @@
 """``cluster`` — assign each photo to a segment and a scene, scoped by ``album_id``.
 
 This is where the album's structure is imposed, and it **degrades gracefully** —
-the [genericity guard](/folder-structure.md):
+the [genericity guard](/reference/folder-structure.md):
 
 - **Segment assignment**: match each photo's UTC timestamp against the album's
-  ordered [segments](/domain-model.md). No segments → one implicit segment over
+  ordered [segments](/foundations/domain-model.md). No segments → one implicit segment over
   the whole album. A photo whose time falls outside every segment is *flagged*
   (returned in ``ClusterResult.out_of_range``), not dropped.
 - **Scene detection** within each segment group:

@@ -4,7 +4,7 @@
 structurally different from the trip-shaped ``honeymoon-2026`` that every
 other stage's tests and the step-14 live run exercised: hour-scale segments
 instead of day-scale, a single day instead of several. Per
-knowledge/domain-model.md and knowledge/build-order.md step 16, adding it must
+knowledge/foundations/domain-model.md and knowledge/build/build-order.md step 16, adding it must
 require *only* this YAML file — no code change. This test loads the real
 shipped file (not a copy under tests/fixtures/) through the same
 ``get_or_create_album`` bootstrap ``flow.pipeline`` uses, so drift between the
@@ -13,7 +13,7 @@ shipped file and the expected shape fails CI.
 The full live run (real Immich sync, real Postgres+Prefect) is covered by
 manual verification in this step's commit body, mirroring step 14 — no
 reachable Immich instance in this environment, same deferral as steps
-4-5/9/11/12/14/15 (see knowledge/progress.md).
+4-5/9/11/12/14/15 (see knowledge/build/progress.md).
 """
 
 from __future__ import annotations

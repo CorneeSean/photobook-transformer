@@ -49,4 +49,4 @@ shape, flexible in meaning.
 A free-form `Album.meta` JSON column is still there as an escape hatch for
 genuinely album-specific extras (e.g. the couple's names, a trip's country) that
 stages don't need to reason about but templates and caption prompts can
-interpolate. See [Data model](/data-model.md).
+interpolate. See [Data model](/reference/data-model.md).

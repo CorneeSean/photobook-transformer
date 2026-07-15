@@ -37,7 +37,7 @@ body. Don't fake a test just to have one; don't skip the verification either.
 The table above governs *what layer* each stage is tested at. How tests are
 *organized* — class-based groups, parametrization within them, and factory
 fixtures scoped to the tests that need them — is standardized in
-[quality practices](/quality-practices.md), alongside how the production code
+[quality practices](/process/quality-practices.md), alongside how the production code
 those tests exercise is shaped (stage classes with constructor-injected
 dependencies).
 
@@ -67,7 +67,7 @@ gate, not an afterthought.
 
 ## Git workflow
 
-Delivery follows the [implementation workflow](/implementation-workflow.md): one
+Delivery follows the [implementation workflow](/process/implementation-workflow.md): one
 build step per branch, reviewed by a sub-agent and then the user, squashed, and
 merged. **Never commit to or work on `main`.** This section defines the quality
 bar a step must clear before it can be finalized.
@@ -81,12 +81,12 @@ bar a step must clear before it can be finalized.
   - `basedpyright` reports no errors (static type check)
   - `xenon` passes the complexity/maintainability gate — no block worse than B,
     no module averaging worse than B, whole-codebase average A (see
-    [quality practices](/quality-practices.md))
+    [quality practices](/process/quality-practices.md))
   - `pytest` passes — *all* tests, not just the new ones (no regressions)
   - If the step has no automated test: the manual verification described in that
     step has been performed, and its result noted
   - The review sub-agent has no remaining comments, **and the user has approved**
-    (see the [implementation workflow](/implementation-workflow.md))
+    (see the [implementation workflow](/process/implementation-workflow.md))
 
   The first four are bundled into `uv run poe check` — the one command that gates
   a commit.
@@ -105,7 +105,7 @@ bar a step must clear before it can be finalized.
 
 ### Pre-commit hooks (local enforcement)
 
-A `.pre-commit-config.yaml` (installed at [scaffold](/build-order.md) via
+A `.pre-commit-config.yaml` (installed at [scaffold](/build/build-order.md) via
 `uv run pre-commit install`) enforces the basics automatically on every commit —
 including subcommits on a step branch — so nothing slips through:
 

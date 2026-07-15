@@ -40,7 +40,7 @@
       beyond `write_xmp_sidecar`; the `Renderer` protocol/orchestration is
       untouched.
 
-* **Doc**: Added [Pipeline execution shape](/pipeline-execution.md) — documents
+* **Doc**: Added [Pipeline execution shape](/foundations/pipeline-execution.md) — documents
   that the pipeline runs as a linear chain today (one shared `Session`, committed
   per stage) but is a **DAG** underneath, with two parallelisable fan-out groups
   (`resolve-leads`‖`quality`‖`cluster` after `sync`; `enhance→render`‖`caption`
@@ -52,7 +52,7 @@
 
 * **TestContainers step 21 — pgvector integration suite** done (`ac2cd14`,
   branch `step-21-pgvector-integration`, merged). First step of the
-  [TestContainers playbook](/testcontainers-integration.md): promotes the DB
+  [TestContainers playbook](/build/testcontainers.md): promotes the DB
   boundary from in-memory SQLite + a numpy `StubSimilarity` to a **real
   Postgres+pgvector container migrated with alembic** (`upgrade head`, not
   `create_all`), joining what `test_select.py` (MMR logic) and
@@ -125,7 +125,7 @@
   `is_lead=True` for `select` (step 18). **No local face model** — Immich already
   recognizes library faces into people; the reference just *names* which are the
   leads (face embeddings aren't exposed over the API, same as CLIP — see
-  [immich-api](/immich-api.md)).
+  [immich-api](/reference/immich-api.md)).
     * **definition:** `LeadFacesYAML` on `AlbumYAML` — **exactly one** of
       `reference_image` / `reference_asset_id` / `person_ids` — plus
       `load_lead_faces()`. Leads are a resolution *input*, not persisted `Album`
@@ -157,15 +157,15 @@
       the flow reading `album.yml` — both kept as defensible (different mutation;
       resolver stays pure/testable with config injected).
       `TESTCONTAINERS_RYUK_DISABLED=true uv run poe check` green, 194 tests.
-    * **Docs updated alongside:** [album-definition](/album-definition.md) (the
-      `lead_faces` block), [data-model](/data-model.md) (new column),
-      [immich-api](/immich-api.md) (`POST /assets` + async detection),
+    * **Docs updated alongside:** [album-definition](/reference/album-definition.md) (the
+      `lead_faces` block), [data-model](/reference/data-model.md) (new column),
+      [immich-api](/reference/immich-api.md) (`POST /assets` + async detection),
       [stages/index](/stages/index.md); a commented `lead_faces` example added to
       the shipped `smith-wedding/album.yml`.
 
 * **Enrichment step 17 — faces/people in the client + `sync` (+schema)** done
   (`c99d319`, branch `step-17-faces-sync`, merged). First step of the
-  [Immich enrichment playbook](/immich-enrichment.md); adopts Immich's
+  [Immich enrichment playbook](/build/enrichment.md); adopts Immich's
   faces/people API (grown since the client was pinned at steps 4-5) for a
   people/coverage signal with **no local face-detection dependency**.
     * **client:** lean `ImmichFace` (a `model_validator(mode="before")` flattens
@@ -205,15 +205,15 @@
       Cleanup flagged `source_type` as unused-but-carried — kept intentionally
       (playbook-specified). `TESTCONTAINERS_RYUK_DISABLED=true uv run poe check`
       green, 177 tests.
-    * **Docs updated alongside:** [data-model](/data-model.md) (new columns +
-      `Person`), [immich-api](/immich-api.md) (faces surface; Open Q1
+    * **Docs updated alongside:** [data-model](/reference/data-model.md) (new columns +
+      `Person`), [immich-api](/reference/immich-api.md) (faces surface; Open Q1
       re-confirmed — still no embeddings/asset-similarity endpoint),
       [stages/sync](/stages/sync.md), [stages/index](/stages/index.md).
 
 ## 2026-07-14
 
 * **Decision: keep the local ML pipeline — do not offload to Immich or read its
-  DB** (user-directed, resolves [open question #6](/open-questions.md)). Deep web
+  DB** (user-directed, resolves [open question #6](/build/open-questions.md)). Deep web
   research into what Immich computes and stores concluded we cannot drop
   `open_clip` (ViT-L/14) + the LAION aesthetic head:
     * **Immich has no aesthetic/quality score** — only a manual/Lightroom-imported
@@ -235,15 +235,15 @@
       the vector extension migrated pgvecto.rs → pgvector/VectorChord, the
       embedding column width changes when the user switches CLIP model, and face
       embeddings moved `asset_faces` → `face_search` across releases (upgrade
-      breakage in the wild). That violates the [architecture](/architecture.md)
+      breakage in the wild). That violates the [architecture](/foundations/architecture.md)
       firewall against touching Immich's schema — too fragile to save a forward
       pass we keep anyway.
     * A **local-ML-free "minimal" variant** is technically possible (rank
       `select` on Immich star `rating` + faces + duplicate groups; temporal-only
       `cluster`; drop CLIP near-dup in favor of Immich duplicate groups) but
       trades away the core curation value — **not taken**. The faces/rating/OCR
-      [enrichment playbook](/immich-enrichment.md) is unaffected (additive,
-      API-only). [Open question #1](/open-questions.md) (no embeddings on the API)
+      [enrichment playbook](/build/enrichment.md) is unaffected (additive,
+      API-only). [Open question #1](/build/open-questions.md) (no embeddings on the API)
       stands, re-confirmed against the current API.
 * **Review process: cap sub-agent review at ≤3 broad-scope agents**
   (user-directed, token-saving): `implementation-workflow.md` step 6 and the
@@ -629,7 +629,7 @@
     * **Open question #1 resolved:** the Immich REST API (OpenAPI v3.0.2) exposes
       **no CLIP embeddings** — grep of the spec finds zero `embedding` fields.
       `quality` will compute its own via `open_clip`. Recorded in the new
-      [Immich API notes](/immich-api.md); also captured a partial answer to
+      [Immich API notes](/reference/immich-api.md); also captured a partial answer to
       open question #3 (Immich *does* surface `exifInfo.timeZone`).
     * **Manual/live verification intentionally skipped** (per user): the live
       Immich stack was unreachable (port 2283 refused, `IMMICH_API_KEY` empty),
@@ -654,7 +654,7 @@
   added in later steps (e.g. a future `LULU__CLIENT_KEY`) don't need this file
   touched again — and `src/album/definition.py`
   (`load_album_definition(path) -> Album`), which parses
-  [`album.yml`](/album-definition.md) via Pydantic (`AlbumYAML`/
+  [`album.yml`](/reference/album-definition.md) via Pydantic (`AlbumYAML`/
   `SegmentYAML`) into unpersisted `Album`/`Segment` ORM rows, normalizing
   every segment time to UTC: an explicit offset wins, otherwise
   `Album.timezone` is used, otherwise it raises. `alembic/env.py` now reads
@@ -678,7 +678,7 @@
 
 * **Build step 2 done** (commit `68ed96f`): added `src/album/db/models.py`
   (`Album`/`Segment`/`Photo` SQLAlchemy 2.0 ORM, mirroring
-  [data-model.md](/data-model.md) exactly) and the first alembic migration,
+  [data-model.md](/reference/data-model.md) exactly) and the first alembic migration,
   which runs `CREATE EXTENSION IF NOT EXISTS vector` before creating the
   `pgvector` `clip_embedding` column. Test-first: an in-memory SQLite fixture
   (`tests/conftest.py`) with an album that has segments and a segment-less
@@ -728,9 +728,9 @@
   album-level `timezone`; `definition.py` and `sync` normalize to UTC. The
   remaining open question is narrowed to determining each photo's source zone
   from EXIF/Immich (Open Question #3).
-* **Process**: Added the per-step [implementation workflow](/implementation-workflow.md)
+* **Process**: Added the per-step [implementation workflow](/process/implementation-workflow.md)
   (branch per step → TDD → sub-agent review → user review → squash → fast-forward
-  merge; never commit to `main`) and a living [progress tracker](/progress.md).
+  merge; never commit to `main`) and a living [progress tracker](/build/progress.md).
 * **Decision**: Added local `pre-commit` hooks at scaffold — `no-commit-to-branch`
   to protect `main`, plus ruff and basedpyright — with the full pytest suite left
   to `uv run poe check` and CI.

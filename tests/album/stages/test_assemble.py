@@ -5,7 +5,7 @@ segment-less album** (the genericity fallback for this stage — no section page
 one implicit group). Structural PDF assertions (page count, page-box dimensions
 matching the resolved Lulu trim+bleed spec) stand in for the build-order's
 "manually verify the PDF opens with correct trim/bleed" line — see
-knowledge/working-agreement.md's per-stage testing table.
+knowledge/process/working-agreement.md's per-stage testing table.
 """
 
 from __future__ import annotations

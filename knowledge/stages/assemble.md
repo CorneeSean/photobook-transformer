@@ -14,6 +14,6 @@ with correct trim size, bleed, and computed spine width. Segment names become
 section headers when present.
 
 Template dimensions depend on Lulu's spec — **resolve
-[open question #4](/open-questions.md) first** (see
-[build step 13](/build-order.md)). Test page count and photo placement given
+[open question #4](/build/open-questions.md) first** (see
+[build step 13](/build/build-order.md)). Test page count and photo placement given
 fixture data, **including a segment-less album**.

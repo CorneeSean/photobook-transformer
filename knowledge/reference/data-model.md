@@ -8,8 +8,8 @@ timestamp: 2026-07-12
 
 # Data model (SQLAlchemy ORM)
 
-The [Postgres datastore](/architecture.md) is the source of truth for everything
-the pipeline computes. See [Album definition](/album-definition.md) for how these
+The [Postgres datastore](/foundations/architecture.md) is the source of truth for everything
+the pipeline computes. See [Album definition](/reference/album-definition.md) for how these
 rows are created from YAML.
 
 # Schema
@@ -196,18 +196,18 @@ class Person(Base):
   id→name cache. Both `Photo` columns are nullable for the usual reason (`NULL` =
   `sync` hasn't fetched faces yet); an album with no recognized faces leaves
   `person_ids=[]` and every people-aware stage reduces to its face-free behavior
-  (genericity guard). See [Immich enrichment](/immich-enrichment.md).
+  (genericity guard). See [Immich enrichment](/build/enrichment.md).
 - **`Album.meta` is deliberately dumb.** No stage branches on its contents; it's
   interpolated into caption prompts and templates only. Anything a stage needs to
   *reason* about belongs in a real column or a `Segment`.
 - **All datetimes are stored timezone-aware, in UTC** (`DateTime(timezone=True)`).
   Segment boundaries in `album.yml` carry an explicit UTC offset (or inherit
-  `Album.timezone`); [`definition.py`](/album-definition.md) converts them to UTC
+  `Album.timezone`); [`definition.py`](/reference/album-definition.md) converts them to UTC
   on load, and [`sync`](/stages/sync.md) normalizes each photo's capture time to
   UTC too. [`cluster`](/stages/cluster.md) therefore compares photo time against
   segment bounds entirely in UTC, so segment-edge assignment is unambiguous even
   when an album spans zones. (The remaining open question is only *how* a photo's
-  source zone is determined — see [Open questions](/open-questions.md) #3.)
+  source zone is determined — see [Open questions](/build/open-questions.md) #3.)
 - Columns are grouped by the stage that populates them — a photo's row fills up
   left-to-right through the pipeline. Nullability is *meaningful*: `NULL` means
   "that stage hasn't run for this photo yet," which is what makes resumability

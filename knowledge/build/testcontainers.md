@@ -8,12 +8,12 @@ timestamp: 2026-07-15
 
 # TestContainers integration testing — build order (steps 21+)
 
-A follow-on to the [build order](/build-order.md) and the
-[Immich enrichment playbook](/immich-enrichment.md). The pipeline's fast test
+A follow-on to the [build order](/build/build-order.md) and the
+[Immich enrichment playbook](/build/enrichment.md). The pipeline's fast test
 suite is in-memory SQLite + injected doubles (`respx` for Immich/Lulu HTTP,
 PydanticAI `TestModel` for the agent, a numpy `StubSimilarity` for pgvector). One
 real container is already used — `tests/test_similarity.py` runs the pgvector
-query against a Postgres [testcontainer](/working-agreement.md). This playbook
+query against a Postgres [testcontainer](/process/working-agreement.md). This playbook
 promotes the **highest-value** boundaries to real containerized integration
 tests, **without depending on any internet-hosted model**.
 
@@ -35,15 +35,15 @@ in scope runs from a pinned container image or a binary we already ship.
 
 ## The steps
 
-Each follows the [implementation workflow](/implementation-workflow.md) (TDD where
+Each follows the [implementation workflow](/process/implementation-workflow.md) (TDD where
 applicable, `uv run poe check` green — or the container run as the manual
 verification, sub-agent review, squash-merge; human-review gate stays waived per
-the step-4-onward note in [progress](/progress.md)). Mark the new tests so the
+the step-4-onward note in [progress](/build/progress.md)). Mark the new tests so the
 fast SQLite suite stays the default and containers run in a separate gate
 (`@pytest.mark.integration`, or a `poe` task that opts in). The Ryuk reaper now
 works, so plain `uv run poe check` is green — `TESTCONTAINERS_RYUK_DISABLED` is
 **no longer needed** (the old sandbox landmine was resolved 2026-07-15; see
-[progress](/progress.md) notes).
+[progress](/build/progress.md) notes).
 
 **21. pgvector schema + integration harness** *(in scope — highest value)*.
 A session-scoped `pgvector` testcontainer fixture that runs **`alembic upgrade
@@ -66,14 +66,8 @@ real `DarktableRenderer` **inside the shipped app Docker image** (which contains
 (`tests/test_render_integration.py`, `@pytest.mark.integration`); asserts the
 output JPEG exists, decodes, and is **visibly brighter** than the source. Closes
 build step 11's deferred *"visibly corrected versus its original"* manual check,
-no internet model.
-- **Found + fixed a real bug:** `enhance`'s XMP sidecars used a made-up *flat*
-  `darktable:exposure="…"` attribute schema that `darktable-cli` **silently
-  ignores** — every render was a no-op, so no tone correction ever reached the
-  image. Fixed by rewriting `write_xmp_sidecar` to emit darktable's real binary
-  *history stack* (exposure / shadhi / temperature modules; struct layouts pinned
-  to the app image's darktable 5.0.1). The "visibly brighter" assertion is the
-  regression guard.
+no internet model. Validated the darktable XMP history-stack format — see
+[enhance.md](/stages/enhance.md) History note.
 - **Landmine:** shells out to the `docker` CLI, not docker-py — this sandbox's
   `~/.docker` credential helper (`docker-credential-gcloud`) crashes under Python
   3.14 (`No module named 'imp'`), breaking docker-py's image build; the CLI is
@@ -99,7 +93,7 @@ image). Until then:
 - keep the `respx`-fixture contract tests for `ImmichClient` (steps 4–5/17/17b);
 - leave live-Immich (faces appearing after the async detection job, real
   lead-reference upload + detection timing) as the standing **manual** deferral
-  already tracked in [progress](/progress.md)'s Notes / blockers.
+  already tracked in [progress](/build/progress.md)'s Notes / blockers.
 Revisit if/when a pre-baked Immich+model-cache image is worth maintaining, or a
 real instance becomes reachable in the dev environment.
 

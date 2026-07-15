@@ -2,7 +2,7 @@
 fixtures (respx, not a live server).
 
 Fixtures under tests/fixtures/immich/ are schema-accurate to the Immich OpenAPI
-spec (v3.0.2); see knowledge/immich-api.md. They should be re-verified against a
+spec (v3.0.2); see knowledge/reference/immich-api.md. They should be re-verified against a
 live instance on the first real sync run.
 """
 

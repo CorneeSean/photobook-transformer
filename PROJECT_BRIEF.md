@@ -9,16 +9,16 @@ this brief now map to concept documents:
 
 | Was a section here | Now lives in |
 |---|---|
-| Goal | [`knowledge/overview.md`](./knowledge/overview.md) |
-| Domain model: `Album` and `Segment` | [`knowledge/domain-model.md`](./knowledge/domain-model.md) |
-| Architecture pattern | [`knowledge/architecture.md`](./knowledge/architecture.md) |
-| Working agreement (TDD, typing, git, commands) | [`knowledge/working-agreement.md`](./knowledge/working-agreement.md) |
-| Data model (SQLAlchemy ORM) | [`knowledge/data-model.md`](./knowledge/data-model.md) |
-| Album definition on disk | [`knowledge/album-definition.md`](./knowledge/album-definition.md) |
-| Tech stack | [`knowledge/tech-stack.md`](./knowledge/tech-stack.md) |
-| Folder structure | [`knowledge/folder-structure.md`](./knowledge/folder-structure.md) |
-| Build order | [`knowledge/build-order.md`](./knowledge/build-order.md) |
+| Goal | [`knowledge/foundations/overview.md`](./knowledge/foundations/overview.md) |
+| Domain model: `Album` and `Segment` | [`knowledge/foundations/domain-model.md`](./knowledge/foundations/domain-model.md) |
+| Architecture pattern | [`knowledge/foundations/architecture.md`](./knowledge/foundations/architecture.md) |
+| Working agreement (TDD, typing, git, commands) | [`knowledge/process/working-agreement.md`](./knowledge/process/working-agreement.md) |
+| Data model (SQLAlchemy ORM) | [`knowledge/reference/data-model.md`](./knowledge/reference/data-model.md) |
+| Album definition on disk | [`knowledge/reference/album-definition.md`](./knowledge/reference/album-definition.md) |
+| Tech stack | [`knowledge/reference/tech-stack.md`](./knowledge/reference/tech-stack.md) |
+| Folder structure | [`knowledge/reference/folder-structure.md`](./knowledge/reference/folder-structure.md) |
+| Build order | [`knowledge/build/build-order.md`](./knowledge/build/build-order.md) |
 | Pipeline stages | [`knowledge/stages/`](./knowledge/stages/index.md) |
-| Open questions | [`knowledge/open-questions.md`](./knowledge/open-questions.md) |
+| Open questions | [`knowledge/build/open-questions.md`](./knowledge/build/open-questions.md) |
 
 See [`knowledge/log.md`](./knowledge/log.md) for the change history.

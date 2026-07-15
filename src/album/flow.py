@@ -3,7 +3,7 @@
 The **only** module that imports Prefect (folder-structure.md rule): every
 ``stages/*.py`` function is a plain, Prefect-free function, wrapped here as a
 ``@task``; :func:`pipeline` is the one ``@flow``. Per
-[Architecture](/architecture.md): "Each stage becomes a ``@task``; the
+[Architecture](/foundations/architecture.md): "Each stage becomes a ``@task``; the
 pipeline is one ``@flow`` taking ``album_slug``." Run it by importing and
 calling it directly — Prefect 3 has no ``prefect run --param`` (that's
 Prefect 1 syntax):
@@ -28,7 +28,7 @@ injectable via keyword arguments, defaulting to the real thing built from
 Postgres, Immich, Claude, darktable-cli, or Lulu. See
 ``tests/test_flow.py``.
 
-**Known gap, deferred (not new to this step — see knowledge/progress.md's
+**Known gap, deferred (not new to this step — see knowledge/build/progress.md's
 step 6 note):** the real LAION-style aesthetic predictor + CLIP embedder
 (``open_clip`` + ``torch`` + pretrained weights) were never wired — a heavy
 dependency explicitly deferred at step 6. :class:`_UnavailableQualityModel`
@@ -86,13 +86,13 @@ class _UnavailableQualityModel:
     def score(self, image: bytes) -> float:
         raise NotImplementedError(
             "real aesthetic scoring (LAION/open_clip) isn't wired yet — see "
-            "knowledge/progress.md's notes for build steps 6 and 14"
+            "knowledge/build/progress.md's notes for build steps 6 and 14"
         )
 
     def embed(self, image: bytes) -> list[float]:
         raise NotImplementedError(
             "real CLIP embedding (open_clip) isn't wired yet — see "
-            "knowledge/progress.md's notes for build steps 6 and 14"
+            "knowledge/build/progress.md's notes for build steps 6 and 14"
         )
 
 

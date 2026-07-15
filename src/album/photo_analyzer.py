@@ -1,6 +1,6 @@
 """``PhotoAnalyzer`` — the shared "one combined vision call" collaborator.
 
-Per [architecture.md](/architecture.md)'s "One combined vision call, not two":
+Per [architecture.md](/foundations/architecture.md)'s "One combined vision call, not two":
 [`enhance`](stages/enhance.py) and [`caption`](stages/caption.py) both need the
 same single agent call per selected photo (bounded tone deltas *and* a caption
 together, because uploading the thumbnail is the expensive part). Rather than one

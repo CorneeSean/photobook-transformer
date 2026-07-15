@@ -24,12 +24,12 @@ storage/dedup.
 
 ## Where to go next
 
-* [Domain model](/domain-model.md) — the `Album` + `Segment` abstraction that
+* [Domain model](/foundations/domain-model.md) — the `Album` + `Segment` abstraction that
   makes the pipeline generic.
-* [Architecture](/architecture.md) — batch pipeline, datastore, orchestration,
+* [Architecture](/foundations/architecture.md) — batch pipeline, datastore, orchestration,
   and LLM decisions with their rationale.
-* [Working agreement](/working-agreement.md) — TDD, typing, git workflow, and
+* [Working agreement](/process/working-agreement.md) — TDD, typing, git workflow, and
   the local commands.
-* [Build order](/build-order.md) — the step-by-step plan, each ending in a
+* [Build order](/build/build-order.md) — the step-by-step plan, each ending in a
   commit.
 * [Pipeline stages](/stages/) — one concept per stage.

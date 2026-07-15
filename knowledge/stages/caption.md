@@ -23,5 +23,5 @@ grounded as the metadata allows:
 - `Album.meta` extras (couple's names, event type) if present
 - Nothing at all → still produces an accurate, if generic, caption
 
-This is the payoff of keeping [`Segment`](/domain-model.md) structured rather than
+This is the payoff of keeping [`Segment`](/foundations/domain-model.md) structured rather than
 opaque: the caption prompt can meaningfully interpolate it.

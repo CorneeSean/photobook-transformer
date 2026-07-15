@@ -1,6 +1,6 @@
 """Loads and validates an ``album.yml`` file into ``Album`` + ``Segment`` rows.
 
-See knowledge/album-definition.md for the on-disk format and timezone rules.
+See knowledge/reference/album-definition.md for the on-disk format and timezone rules.
 """
 
 from __future__ import annotations
@@ -26,7 +26,7 @@ class SegmentYAML(BaseModel):
 class LeadFacesYAML(BaseModel):
     """The optional ``lead_faces`` block — who the priority subjects are.
 
-    Exactly one input identifies the leads (see knowledge/immich-enrichment.md):
+    Exactly one input identifies the leads (see knowledge/build/enrichment.md):
 
     - ``reference_image`` — a local photo of the leads, resolved next to
       ``album.yml``, uploaded to Immich so its detected faces name the people;

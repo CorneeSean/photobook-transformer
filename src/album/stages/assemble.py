@@ -1,7 +1,7 @@
 """``assemble`` — lay out selected photos into Jinja2 page templates and render
 a print-ready PDF via WeasyPrint, scoped by ``album_id``.
 
-Reads ``selected=True`` [photos](/data-model.md), ordered by segment position,
+Reads ``selected=True`` [photos](/reference/data-model.md), ordered by segment position,
 then scene, then timestamp, and lays them into a handful of grid layouts
 (1-up / 2-up / 3-up). **Placement heuristic:** within each (segment, scene)
 group, photos are chunked into pages by cycling through layout capacities
@@ -15,7 +15,7 @@ skips section pages entirely** and treats all its selected photos as one
 implicit group — the genericity fallback for this stage.
 
 Trim size, bleed, and spine width come from Lulu's print spec, resolved as
-[open question 4](/open-questions.md): Square 8.5x8.5in trim, 0.125in bleed on
+[open question 4](/build/open-questions.md): Square 8.5x8.5in trim, 0.125in bleed on
 every edge (rendered page = trim + 2*bleed), spine width =
 ``page_count / 444 + 0.06in`` (444 = Lulu's PPI constant for standard
 softcover perfect-bound paper stock). The spine width is computed and returned

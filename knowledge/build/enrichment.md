@@ -8,7 +8,7 @@ timestamp: 2026-07-14
 
 # Immich enrichment — build order (steps 17+)
 
-A follow-on to the [build order](/build-order.md), which ended at step 16 (build
+A follow-on to the [build order](/build/build-order.md), which ended at step 16 (build
 complete). The Immich REST API has grown since the [Immich client](/stages/sync.md)
 was built at steps 4–5 (pinned then to OpenAPI **v3.0.2**; Immich is now ~v1.126+).
 Three capabilities are now exposed that the pipeline could not use before:
@@ -25,7 +25,7 @@ Three capabilities are now exposed that the pipeline could not use before:
 asset-to-asset visual-similarity endpoint. Smart search only accepts a *text*
 query and returns *assets*; the vector never crosses the wire. So `quality`'s
 `open_clip` computation and the `pgvector` behind `select`/`cluster` stay
-necessary — see [Immich API notes](/immich-api.md) Open Q1. This effort adds
+necessary — see [Immich API notes](/reference/immich-api.md) Open Q1. This effort adds
 *new signals*; it removes no existing custom code except a hypothetical future
 face detector.
 
@@ -93,7 +93,7 @@ prioritize photos they appear in.
 
 **The constraint that shapes the design:** Immich exposes *no face-embedding
 vectors* over the API — face embeddings live in internal tables, exactly like
-CLIP embeddings ([Open Q1](/immich-api.md)). So matching an arbitrary reference
+CLIP embeddings ([Open Q1](/reference/immich-api.md)). So matching an arbitrary reference
 image to library faces *ourselves* would mean adding a face-recognition model
 (ArcFace/InsightFace + weights) — a heavy new dependency, precisely the kind of
 reimplementation this project delegates to Immich. **Don't.**
@@ -171,42 +171,19 @@ Lisbon"*. Names are opt-in grounding, never required.
 > reason-about-able, nullable-for-resumability, genericity-guard-preserving); the
 > exact columns are yours to improve.
 
-Follows the [data model](/data-model.md) philosophy — structured columns stages
+Follows the [data model](/reference/data-model.md) philosophy — structured columns stages
 can *reason about*, not an opaque dict. Two new `Photo` columns plus a small
 album-scoped `Person` cache (so `caption` can resolve id → name, and so a
 person's name surviving an Immich merge/rename is a re-`sync` away). `is_lead`
-marks priority subjects resolved from `album.yml`'s `lead_faces`:
-
-```python
-# --- Photo, populated by `sync` (faces) ---
-face_count: Mapped[int | None]                                   # portrait vs landscape signal
-person_ids: Mapped[list[str] | None] = mapped_column(JSON)       # Immich person UUIDs present (assigned faces only)
-
-# --- new album-scoped cache table ---
-class Person(Base):
-    __tablename__ = "people"
-    __table_args__ = (UniqueConstraint("album_id", "immich_person_id"),)
-    id: Mapped[int] = mapped_column(primary_key=True)
-    album_id: Mapped[int] = mapped_column(ForeignKey("albums.id"), index=True)
-    immich_person_id: Mapped[str]
-    name: Mapped[str | None]                                      # None ⇒ recognized but unnamed in Immich
-    is_lead: Mapped[bool] = mapped_column(default=False)          # a priority subject (from album.yml lead_faces)
-```
-
-`person_ids` is a JSON array of *stable Immich UUIDs* (not names) — the value
-`select` reasons about structurally (set membership / coverage), analogous to
-`duplicate_group_id`. `caption` joins it to `Person.name`. Both new `Photo`
-columns are nullable: `NULL` means `sync` hasn't fetched faces yet
-(resumability invariant preserved). Optional later columns from the same effort:
-`rating` (int, from the asset), `place_city`/`place_state`/`place_country`
-(from `exifInfo`), `ocr_text` (str).
+marks priority subjects resolved from `album.yml`'s `lead_faces`. These columns
+are now live — see the canonical schema in [data model](/reference/data-model.md).
 
 ## The steps
 
-Each follows the [implementation workflow](/implementation-workflow.md) (TDD,
+Each follows the [implementation workflow](/process/implementation-workflow.md) (TDD,
 sub-agent review, `uv run poe check` green, then squash-merge; the human-review
 gate stays waived per the step-4-onward process note in
-[progress](/progress.md)). Delivered in order — 17 and 18 are the core; 19 and 20
+[progress](/build/progress.md)). Delivered in order — 17 and 18 are the core; 19 and 20
 are independent add-ons.
 
 **17. Faces in the client + `sync` (+ schema).** *Test first*, against a recorded
@@ -236,7 +213,7 @@ unassigned in Immich is surfaced as a warning, not a silent miss; no `lead_faces
 key ⇒ no leads, no error. **Commit.**
 
 **18. People-aware + lead-aware `select`.** *Test first, thoroughly* (this is the
-stage the [build order](/build-order.md) calls the most important to test): the
+stage the [build order](/build/build-order.md) calls the most important to test): the
 coverage rule admits a missing person's best shot; the tie-break prefers group
 shots only when aesthetic scores are close; **leads get guaranteed per-scene
 coverage and outrank the generic tie-break**, and a lead is never dropped as a
@@ -261,17 +238,15 @@ skippable. **Commit.**
 
 ## Docs to update alongside
 
-- **[Immich API notes](/immich-api.md)** — it's pinned to the stale v3.0.2
+- **[Immich API notes](/reference/immich-api.md)** — it's pinned to the stale v3.0.2
   snapshot (pre-faces-API). Add the faces/people, rating, OCR, and geocoding
   surface; keep the Open Q1 "no embeddings, no asset-similarity endpoint" answer,
   now re-confirmed 2026-07-14.
-- **[Data model](/data-model.md)** — the new `Photo` columns + `Person` table
+- **[Data model](/reference/data-model.md)** — the new `Photo` columns + `Person` table
   (incl. `is_lead`).
-- **[Album definition](/album-definition.md)** — the new `lead_faces` block in
+- **[Album definition](/reference/album-definition.md)** — the new `lead_faces` block in
   `album.yml`.
 - **[stages/select.md](/stages/select.md)** and **[stages/caption.md](/stages/caption.md)**
   — the new signals.
 - **[stages/index.md](/stages/index.md)** — note faces/people join `dedupe` as
   Immich-provided ML the pipeline consumes rather than computes.
-</content>
-</invoke>

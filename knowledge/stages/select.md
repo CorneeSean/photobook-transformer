@@ -15,7 +15,7 @@ exceeds a threshold, or that Immich flagged as a duplicate. Result: the best
 shots, without five near-identical "good" ones.
 
 **People/lead awareness** (Immich faces, step 17; enrichment step 18 — see
-[Immich enrichment](/immich-enrichment.md)) layers on top, and reduces to plain
+[Immich enrichment](/build/enrichment.md)) layers on top, and reduces to plain
 MMR when a scene has no recognized faces (byte-for-byte):
 
 - The effective score is `aesthetic_score` plus small, tunable boosts:
@@ -34,8 +34,8 @@ MMR when a scene has no recognized faces (byte-for-byte):
   non-leads — honoring the near-dup guard strictly (chosen posture), a non-lead
   seen only in near-duplicates stays unselected rather than padding the book.
 
-Pure logic over data already in the [DB](/data-model.md) — **the single most
+Pure logic over data already in the [DB](/reference/data-model.md) — **the single most
 important stage to test thoroughly.** The `pgvector` similarity query sits behind
 a substitutable interface (`db/similarity.py`) so the MMR logic is testable on
 in-memory SQLite with similarity stubbed, while the real query is covered against
-a Postgres testcontainer (see [build step 8](/build-order.md)).
+a Postgres testcontainer (see [build step 8](/build/build-order.md)).

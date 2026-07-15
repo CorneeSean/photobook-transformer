@@ -10,7 +10,7 @@ they used into a set of Immich person IDs and marks the matching
 ``Person``; a ``reference_image``/``reference_asset_id`` is just a way to *name*
 which people are the leads — we read Immich's own recognition, never run our own
 (face embeddings aren't exposed over the API, exactly like CLIP embeddings; see
-knowledge/immich-api.md and knowledge/immich-enrichment.md). The three inputs:
+knowledge/reference/immich-api.md and knowledge/build/enrichment.md). The three inputs:
 
 - ``person_ids`` — the Immich people, named directly. No Immich call.
 - ``reference_asset_id`` — an asset already in Immich; read its faces.

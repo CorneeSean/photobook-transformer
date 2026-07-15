@@ -9,8 +9,8 @@ timestamp: 2026-07-12
 # Album definition on disk
 
 Each album is defined by one YAML file — no code, no DB fiddling.
-[`definition.py`](/build-order.md) loads it into [`Album` + `Segment`
-rows](/data-model.md), normalizing all segment times to UTC.
+[`definition.py`](/build/build-order.md) loads it into [`Album` + `Segment`
+rows](/reference/data-model.md), normalizing all segment times to UTC.
 
 # Examples
 
@@ -60,7 +60,7 @@ segments:
 
 An optional `lead_faces` block names the key people — the couple, the baby, the
 guest of honour — so [`select`](/stages/select.md) prioritizes photos of them.
-Set **exactly one** of three inputs (see [Immich enrichment](/immich-enrichment.md)):
+Set **exactly one** of three inputs (see [Immich enrichment](/build/enrichment.md)):
 
 ```yaml
 lead_faces:
@@ -88,4 +88,4 @@ person must be confirmed once in Immich's UI), not silently dropped.
   to interpret it.
 - A time with neither an offset nor an album `timezone` is an error at load time.
 - Everything is normalized to UTC before it reaches the database — see
-  [Data model](/data-model.md) and [Open questions](/open-questions.md) #3.
+  [Data model](/reference/data-model.md) and [Open questions](/build/open-questions.md) #3.

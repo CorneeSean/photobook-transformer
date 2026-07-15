@@ -17,5 +17,5 @@ Immich doesn't score aesthetics, so this is ours:
 
 Pull thumbnails from the Immich API rather than re-reading originals. If Immich
 doesn't expose its own embeddings, this stage also computes the
-[`clip_embedding`](/data-model.md) (via `open_clip`) that
+[`clip_embedding`](/reference/data-model.md) (via `open_clip`) that
 [`cluster`](./cluster.md) and [`select`](./select.md) depend on.

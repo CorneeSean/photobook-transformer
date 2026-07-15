@@ -22,7 +22,7 @@ honeymoon-2026` runs end-to-end; the Prefect UI shows it") needs a reachable
 Immich instance with real photos, a real `ANTHROPIC_API_KEY`, real
 `darktable-cli` (Docker app image), and real Lulu credentials — none
 available in this environment. Deferred, same pattern as every other
-live-integration check in this project (see knowledge/progress.md).
+live-integration check in this project (see knowledge/build/progress.md).
 """
 
 from __future__ import annotations

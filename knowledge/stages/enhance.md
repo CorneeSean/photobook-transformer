@@ -12,7 +12,7 @@ Core principle: **AI as parameter estimator, never as pixel generator.** No
 invented detail.
 
 1. Ensure the **shared analysis call** (see the "One combined vision call" note
-   in [Architecture](/architecture.md)) has run for each *selected* photo — one
+   in [Architecture](/foundations/architecture.md)) has run for each *selected* photo — one
    agent, one call per photo, producing bounded numeric deltas (exposure EV,
    white-balance shift, shadows, highlights) *alongside* the caption, from a
    single downscaled thumbnail. Bounds enforced by Pydantic

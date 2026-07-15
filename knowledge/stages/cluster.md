@@ -13,10 +13,10 @@ sub-segment burst of related shots). This is where the album's structure gets
 imposed, and it degrades gracefully.
 
 **Segment assignment** — match each photo's timestamp against the album's
-[segments](/domain-model.md) (`start_at`/`end_at`). If the album has no segments,
+[segments](/foundations/domain-model.md) (`start_at`/`end_at`). If the album has no segments,
 every photo belongs to a single implicit segment covering the whole album. Photos
 falling outside every segment are flagged, not silently dropped. Comparison is
-done entirely in UTC (both sides normalized — see [Data model](/data-model.md)),
+done entirely in UTC (both sides normalized — see [Data model](/reference/data-model.md)),
 so segment-edge assignment is unambiguous even across zones.
 
 **Scene detection** within a segment, in order of preference:
@@ -30,5 +30,5 @@ so segment-edge assignment is unambiguous even across zones.
 
 Crucially: **an album with no segments and no GPS still clusters fine** on the
 temporal path alone. Segments and GPS improve the result; neither is required.
-This is the [genericity guard](/folder-structure.md) — enforce it in tests (see
-[build step 7](/build-order.md)).
+This is the [genericity guard](/reference/folder-structure.md) — enforce it in tests (see
+[build step 7](/build/build-order.md)).

@@ -5,7 +5,7 @@ Two responsibilities, per [enhance.md](/stages/enhance.md):
 
 1. **Trigger the shared vision call** via the injected
    :class:`~album.photo_analyzer.PhotoAnalyzer` — the "one combined vision call"
-   design in [architecture.md](/architecture.md): a single agent call per
+   design in [architecture.md](/foundations/architecture.md): a single agent call per
    selected photo produces bounded tone deltas *and* a caption together, because
    uploading the thumbnail is the expensive part. This stage and ``caption`` both
    receive the same kind of analyzer and call its idempotent ``ensure`` (which

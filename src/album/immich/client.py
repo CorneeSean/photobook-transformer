@@ -5,7 +5,7 @@ stage is the boundary that lands Immich data in our DB; everything downstream re
 from the DB, never from here.
 
 Modelled against the Immich OpenAPI spec (v3.0.2). Notable facts pinned down while
-building this (see knowledge/immich-api.md):
+building this (see knowledge/reference/immich-api.md):
 
 - The public REST API exposes **no CLIP embeddings** (resolves open question #1) —
   the ``quality`` stage computes its own via ``open_clip``.
@@ -160,7 +160,7 @@ class ImmichClient:
 
         Used for ``lead_faces.reference_image`` — a photo of the priority
         subjects whose Immich-detected faces name the leads (see
-        knowledge/immich-enrichment.md). Immich dedupes by content: re-uploading
+        knowledge/build/enrichment.md). Immich dedupes by content: re-uploading
         identical bytes returns ``status="duplicate"`` with the *existing*
         asset's id, so this is safe to retry.
         """

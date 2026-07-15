@@ -1,6 +1,6 @@
 """The single combined vision agent: bounded tone deltas + a caption, one call.
 
-Per [Architecture](/architecture.md)'s "one combined vision call" — `enhance`
+Per [Architecture](/foundations/architecture.md)'s "one combined vision call" — `enhance`
 and `caption` both need a downscaled thumbnail of the same selected photo, and
 uploading it is the expensive part, so one agent produces both outputs from
 one request.
@@ -73,7 +73,7 @@ class AnalysisResult(BaseModel):
 @dataclass
 class PhotoContext:
     """Whatever grounding the album has for one photo — all optional, since
-    [`Segment`](/domain-model.md) itself is optional. An album with none of
+    [`Segment`](/foundations/domain-model.md) itself is optional. An album with none of
     this still produces a caption, just a more generic one."""
 
     segment_label: str | None = None
