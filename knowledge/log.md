@@ -2,6 +2,43 @@
 
 ## 2026-07-15
 
+* **Enrichment step 18 — people/lead-aware `select`** done (`f3afc54`, branch
+  `step-18-people-select`, merged). The first consumer of step 17's
+  `Photo.person_ids` and step 17b's `Person.is_lead`; layers people-awareness
+  onto MMR and reduces to the old MMR **byte-for-byte** when a scene has no
+  recognized faces.
+    * **Effective score** = `aesthetic_score` + `group_boost`·people +
+      `lead_boost`·num_leads (both small, tunable like `threshold`): a group shot
+      or lead only wins a *close* aesthetic call; a frame with **more** leads (a
+      whole couple) outranks one with fewer; boosts stay small so a distinct
+      "original" scene is still picked on its own merits.
+    * **Lead guaranteed coverage:** after the greedy pass every lead present in a
+      scene gets a picked photo, bypassing the near-dup guard (a lead is never
+      culled as a near-dup of a non-lead), skipping only exact Immich dup-group
+      repeats; once per *uncovered* lead, so a couple sharing a near-dup frame are
+      each covered. **Multiple leads per album** fully supported (per user Q).
+    * **Strict on non-leads:** deliberately **no** generic-coverage phase — a
+      non-lead seen only in near-dups stays unselected rather than padding the book
+      (the user chose "strict — honor the guard"; the alternative "relaxed —
+      everyone appears" was declined). Defaults: `lead_boost=0.05`,
+      `group_boost=0.01` ("subtle tie-break" per user Q).
+    * **User-driven refinements mid-build:** confirmed multiple leads per album;
+      added "more leads wins among *similar* scenes, but an original scene with a
+      lower lead score is still preferred" — realized as the *per-lead-count*
+      boost (MMR already keeps every dissimilar/original photo, so lead count only
+      breaks ties within near-dup clusters).
+    * **Review:** 3 broad-scope sub-agents. Correctness clean. Cleanup proved a
+      strict generic-coverage phase is **dead code** under the unbounded greedy
+      (it re-applies phase-1's guards against a only-grown pick set, so it can
+      never admit) — removed it and its now-inert helpers/parameter. Tests review
+      drove: boost config-tunability tests (`lead_boost`/`group_boost` varied, not
+      just accepted as kwargs), an explicit face-free genericity test (leads
+      configured but no faces ⇒ plain-MMR result), and making the tie-break tests
+      pass explicit boosts rather than lean on the module defaults.
+      `TESTCONTAINERS_RYUK_DISABLED=true uv run poe check` green, 205 tests (+11
+      select cases). Docs: [stages/select](/stages/select.md),
+      [stages/index](/stages/index.md).
+
 * **Enrichment step 17b — lead-face resolution** done (`06810d7`, branch
   `step-17b-lead-faces`, merged). The user names the priority subjects (couple,
   baby, guest of honour) via `album.yml`'s `lead_faces`; the resolver turns that
