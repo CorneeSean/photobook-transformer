@@ -36,8 +36,29 @@ order, one at a time.
 | 15 | `fulfill` stage | step-15-fulfill (merged, deleted) | done | 92a7d4c | Lulu Print API client (OAuth2 client-credentials); reads `Album.assembled_pdf_path`, wrote `Album.lulu_order_id` (renamed to `output_ref` post-step-16 when `fulfill` became printer-pluggable — see Notes); real Lulu sandbox order deferred (no credentials); no PDF-hosting/upload mechanism yet — see notes below |
 | 16 | Prove genericity | step-16-prove-genericity (merged, deleted) | done | d7e903d | adds `data/albums/smith-wedding/album.yml` (wedding-shaped: hour-scale segments, single day) + `tests/test_genericity.py`; zero `src/` files touched — confirmed the abstraction; live run hits the same no-reachable-Immich boundary as step 14 |
 
+### Enrichment playbook (post-build-order — see [immich-enrichment.md](/immich-enrichment.md))
+
+| # | Step | Branch | Status | Commit | Notes |
+|---|------|--------|--------|--------|-------|
+| 17 | Faces in client + `sync` (+schema) | step-17-faces-sync (merged, deleted) | done | c99d319 | `ImmichFace` + `get_faces` (`GET /faces?id=`); `Photo.face_count`/`person_ids` + album-scoped `Person` table (migration `c3d9e5a1f742`, verified on real Postgres, zero autogenerate drift); per-asset N+1 face fetch, idempotent Person upsert, failure-isolated for both httpx + pydantic ValidationError; genericity guard holds (`person_ids=[]` ⇒ face-free behavior). 3-agent review; 177 tests green |
+| 17b | Lead-face resolution | — | todo | — | `lead_faces` in `album.yml` → mark `Person.is_lead`; `reference_image` upload + await async face detection. `is_lead` column already shipped in step 17 |
+| 18 | People-aware + lead-aware `select` | — | todo | — | coverage + tie-break + lead boost/coverage; genericity guard (byte-for-byte for face-free albums) |
+| 19 | Name-grounded `caption` (optional) | — | todo | — | pass `Person.name`s into the shared analysis call |
+| 20 | Rating / OCR / geocoded place (optional) | — | todo | — | `rating` + `exifInfo.city/state/country` + OCR into nullable columns |
+
 ## Notes / blockers
 
+- **Enrichment step 17 done; live faces re-verification deferred (2026-07-15):**
+  `sync` now fetches Immich faces/people into `Photo.face_count`/`person_ids` +
+  the `Person` cache. Built and tested against recorded `/faces` fixtures and the
+  `FakeImmich` double (schema-accurate to `AssetFaceResponseDto`), the same
+  deferral pattern as steps 4-5/9 — no reachable live Immich in this sandbox, so
+  the `?id=` contract and the async face-detection timing weren't exercised
+  against a real instance. Re-verify the faces path on the first live `sync`,
+  alongside the step-14/16 honeymoon/wedding re-runs. **Next enrichment step:
+  17b (lead-face resolution).** The N+1 `get_faces` (one call per asset) is a
+  known, accepted cost (documented in the playbook) — revisit only if a live run
+  shows it dominating sync time.
 - **Printer abstraction + HTML default output (2026-07-14, post-step-16,
   user-directed):** `fulfill` was generalized from a Lulu-only submitter to a
   pluggable [`Printer`](../src/album/printers/base.py) — the output *medium* is

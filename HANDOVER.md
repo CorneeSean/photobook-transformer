@@ -2,12 +2,16 @@
 
 Photo Album Pipeline: a resumable batch pipeline that turns a raw photo dump into
 a printed, curated photo book. **All 16 build steps are done and merged to
-`main` — the build order is complete.** `main` is clean and `uv run poe check`
-is green (161 tests, run with `TESTCONTAINERS_RYUK_DISABLED=true` in this kind
-of sandbox — see Golden rules). There is no next numbered step; what's left is
-either **closing a deferred live-integration check** (see
+`main` — the original build order is complete.** A follow-on **[Immich
+enrichment playbook](./knowledge/immich-enrichment.md) (steps 17-20)** is now
+underway: **step 17 (faces/people in the client + `sync`) is done and merged**;
+the next numbered step is **17b (lead-face resolution)**, then 18 (people/lead-aware
+`select`), with 19/20 optional. `main` is clean and `uv run poe check` is green
+(177 tests, run with `TESTCONTAINERS_RYUK_DISABLED=true` in this kind of sandbox —
+see Golden rules). What's left is either the next enrichment step, **closing a
+deferred live-integration check** (see
 [`knowledge/progress.md`](./knowledge/progress.md)'s Notes / blockers section —
-read it in full, it's long) or new, user-directed work.
+read it in full, it's long), or new, user-directed work.
 
 ## How to start the conversation
 

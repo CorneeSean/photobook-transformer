@@ -1,5 +1,54 @@
 # Directory Update Log
 
+## 2026-07-15
+
+* **Enrichment step 17 — faces/people in the client + `sync` (+schema)** done
+  (`c99d319`, branch `step-17-faces-sync`, merged). First step of the
+  [Immich enrichment playbook](/immich-enrichment.md); adopts Immich's
+  faces/people API (grown since the client was pinned at steps 4-5) for a
+  people/coverage signal with **no local face-detection dependency**.
+    * **client:** lean `ImmichFace` (a `model_validator(mode="before")` flattens
+      the nested `person.id`/`.name` up to the boundary; `person: null` ⇒ a
+      detected-but-unassigned face with no `person_id`) + `get_faces()` via
+      `GET /faces?id=`, mirroring `get_duplicates`. `sourceType`
+      (machine-learning|exif|manual) is carried per the playbook's model spec and
+      test requirement, even though no stage consumes it yet.
+    * **schema:** `Photo.face_count` (all detected faces) + `Photo.person_ids`
+      (assigned Immich person UUIDs, JSON) — both nullable (NULL = not fetched,
+      distinct from fetched-but-faceless `0`/`[]`) — plus an album-scoped
+      `Person` cache table (`UniqueConstraint(album_id, immich_person_id)`;
+      `is_lead` ships as a column, populated at step 17b). Migration
+      `c3d9e5a1f742`; **verified against real Postgres** (upgrade + downgrade
+      round-trip, and `alembic revision --autogenerate` produced an empty
+      upgrade — zero model/migration drift).
+    * **sync:** per-asset `get_faces` (the accepted N+1) populates the columns and
+      upserts `Person` rows idempotently (keyed on `immich_person_id`; a rename
+      propagates on re-sync; never clobbers a known name with NULL). The
+      album-scoped `Person` cache is loaded once per run and mutated in place, so
+      the same person on two assets doesn't double-insert.
+    * **Failure isolation** matches the ambiguous-timestamp path: a face
+      fetch/parse failing for one asset is logged + recorded in
+      `SyncResult.face_errors`, leaving that photo's columns untouched rather than
+      aborting the album. A correctness sub-agent caught that the first cut only
+      caught `httpx.HTTPError`, so a malformed face payload
+      (`pydantic.ValidationError`, raised inside `get_faces`) would have escaped
+      and aborted the whole album — now both are isolated (two separate `except`
+      clauses, per the py314 ruff landmine below).
+    * **Genericity guard** holds: an album with no recognized faces lands
+      `person_ids=[]`, and every downstream people-aware stage (built later) will
+      reduce to its face-free behavior.
+    * **Review:** 3 broad-scope sub-agents (correctness / cleanup /
+      tests-conventions). Fixed: the ValidationError isolation gap; strengthened
+      `sourceType` variant coverage (all three variants now asserted, incl. a
+      `manual` fixture face); added a `person_ids` dedup test (`dict.fromkeys`).
+      Cleanup flagged `source_type` as unused-but-carried — kept intentionally
+      (playbook-specified). `TESTCONTAINERS_RYUK_DISABLED=true uv run poe check`
+      green, 177 tests.
+    * **Docs updated alongside:** [data-model](/data-model.md) (new columns +
+      `Person`), [immich-api](/immich-api.md) (faces surface; Open Q1
+      re-confirmed — still no embeddings/asset-similarity endpoint),
+      [stages/sync](/stages/sync.md), [stages/index](/stages/index.md).
+
 ## 2026-07-14
 
 * **Decision: keep the local ML pipeline — do not offload to Immich or read its
