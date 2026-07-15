@@ -1,0 +1,358 @@
+<title>Transform pipeline — DAG &amp; parallelisation</title>
+<style>
+  :root{
+    --paper:#F3F5F8; --panel:#FFFFFF; --ink:#131922; --muted:#5B6675; --faint:#8A94A2;
+    --line:#DCE2EA; --accent:#0F6E78; --accent-soft:#0f6e7815;
+    --g1:#3F7C4C; --g1-bg:#E7F0E9; --g1-line:#9CC3A3;
+    --g2:#42589E; --g2-bg:#E8ECF8; --g2-line:#A7B4E6;
+    --amber:#9A6A12; --amber-bg:#F8F0DE;
+    --edge:#AEB8C4;
+    --code-bg:#10171F; --code-panel:#0C1219; --code-fg:#C9D3DF; --code-c:#66748A; --code-line:#243040;
+  }
+  @media (prefers-color-scheme:dark){
+    :root{
+      --paper:#0D131A; --panel:#151D26; --ink:#E7ECF2; --muted:#9AA6B4; --faint:#697683;
+      --line:#242E39; --accent:#3FB8C2; --accent-soft:#3fb8c218;
+      --g1:#7CC08B; --g1-bg:#15241A; --g1-line:#2F5539;
+      --g2:#93A5EF; --g2-bg:#151C31; --g2-line:#313E68;
+      --amber:#E0A94A; --amber-bg:#241D0F;
+      --edge:#3A4653;
+      --code-bg:#0B1118; --code-panel:#080D13; --code-fg:#C9D3DF; --code-c:#5E6C80; --code-line:#1B2531;
+    }
+  }
+  :root[data-theme="light"]{
+    --paper:#F3F5F8; --panel:#FFFFFF; --ink:#131922; --muted:#5B6675; --faint:#8A94A2;
+    --line:#DCE2EA; --accent:#0F6E78; --accent-soft:#0f6e7815;
+    --g1:#3F7C4C; --g1-bg:#E7F0E9; --g1-line:#9CC3A3;
+    --g2:#42589E; --g2-bg:#E8ECF8; --g2-line:#A7B4E6;
+    --amber:#9A6A12; --amber-bg:#F8F0DE; --edge:#AEB8C4;
+    --code-bg:#10171F; --code-panel:#0C1219; --code-fg:#C9D3DF; --code-c:#66748A; --code-line:#243040;
+  }
+  :root[data-theme="dark"]{
+    --paper:#0D131A; --panel:#151D26; --ink:#E7ECF2; --muted:#9AA6B4; --faint:#697683;
+    --line:#242E39; --accent:#3FB8C2; --accent-soft:#3fb8c218;
+    --g1:#7CC08B; --g1-bg:#15241A; --g1-line:#2F5539;
+    --g2:#93A5EF; --g2-bg:#151C31; --g2-line:#313E68;
+    --amber:#E0A94A; --amber-bg:#241D0F; --edge:#3A4653;
+    --code-bg:#0B1118; --code-panel:#080D13; --code-fg:#C9D3DF; --code-c:#5E6C80; --code-line:#1B2531;
+  }
+
+  *{box-sizing:border-box;}
+  body{margin:0; background:var(--paper); color:var(--ink);
+    font:16px/1.65 -apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif;
+    -webkit-font-smoothing:antialiased;}
+  main{max-width:940px; margin:0 auto; padding:56px 24px 120px;}
+
+  .mono{font-family:ui-monospace,"SF Mono",SFMono-Regular,Menlo,Consolas,monospace;}
+  .eyebrow{font-family:ui-monospace,"SF Mono",SFMono-Regular,Menlo,Consolas,monospace;
+    font-size:12px; letter-spacing:.16em; text-transform:uppercase; color:var(--accent); margin:0 0 14px;}
+  h1{font-size:clamp(28px,5vw,42px); line-height:1.08; letter-spacing:-.02em; margin:0 0 18px;
+    text-wrap:balance; font-weight:680;}
+  .lead{font-size:18px; color:var(--muted); max-width:64ch; margin:0;}
+  .lead b{color:var(--ink); font-weight:640;}
+
+  .meta{display:flex; flex-wrap:wrap; gap:0; margin:30px 0 0; border:1px solid var(--line);
+    border-radius:12px; background:var(--panel); overflow:hidden;}
+  .meta div{flex:1 1 150px; padding:16px 20px; border-right:1px solid var(--line);}
+  .meta div:last-child{border-right:0;}
+  .meta .k{font-family:ui-monospace,monospace; font-size:11px; letter-spacing:.12em; text-transform:uppercase; color:var(--faint);}
+  .meta .v{font-size:15px; margin-top:5px; color:var(--ink);}
+  .meta .v .u{color:var(--muted);}
+
+  h2{font-size:14px; font-family:ui-monospace,monospace; letter-spacing:.14em; text-transform:uppercase;
+    color:var(--accent); margin:64px 0 6px; display:flex; align-items:center; gap:12px;}
+  h2::after{content:""; flex:1; height:1px; background:var(--line);}
+  .h2sub{font-size:22px; letter-spacing:-.01em; margin:0 0 22px; font-weight:620; text-wrap:balance;}
+
+  .card{background:var(--panel); border:1px solid var(--line); border-radius:16px; padding:26px 24px;}
+
+  /* diagram */
+  .diagram{padding:14px 10px 6px;}
+  .diagram svg{width:100%; height:auto; display:block;}
+  .gnode rect{stroke-width:1.5;}
+  .gnode text{font-family:ui-monospace,"SF Mono",Menlo,monospace; font-size:14px; fill:var(--ink);
+    dominant-baseline:central; text-anchor:middle; font-weight:500;}
+  .node-seq rect{fill:var(--panel); stroke:var(--muted);}
+  .node-g1 rect{fill:var(--g1-bg); stroke:var(--g1-line);}
+  .node-g2 rect{fill:var(--g2-bg); stroke:var(--g2-line);}
+  .band-g1{fill:var(--g1-bg); opacity:.4; stroke:var(--g1-line); stroke-dasharray:4 4;}
+  .band-g2{fill:var(--g2-bg); opacity:.4; stroke:var(--g2-line); stroke-dasharray:4 4;}
+  .band-label{font-family:ui-monospace,monospace; font-size:11px; letter-spacing:.1em;
+    text-transform:uppercase; dominant-baseline:central;}
+  .band-label.g1{fill:var(--g1);} .band-label.g2{fill:var(--g2);}
+  .join{font-family:ui-monospace,monospace; font-size:10px; letter-spacing:.14em; fill:var(--accent);
+    text-transform:uppercase; dominant-baseline:central;}
+  .edge{fill:none; stroke:var(--edge); stroke-width:1.6;
+    stroke-dasharray:1400; stroke-dashoffset:1400; animation:draw 1.1s ease forwards;}
+  .edge.d1{animation-delay:.05s} .edge.d2{animation-delay:.35s} .edge.d3{animation-delay:.65s} .edge.d4{animation-delay:.9s}
+  @keyframes draw{to{stroke-dashoffset:0;}}
+  @media (prefers-reduced-motion:reduce){ .edge{animation:none; stroke-dashoffset:0;} }
+
+  .legend{display:flex; flex-wrap:wrap; gap:18px; margin-top:16px; padding-top:16px; border-top:1px solid var(--line);
+    font-size:13px; color:var(--muted);}
+  .legend span{display:inline-flex; align-items:center; gap:8px;}
+  .swatch{width:13px; height:13px; border-radius:4px; border:1.5px solid;}
+  .sw-seq{background:var(--panel); border-color:var(--muted);}
+  .sw-g1{background:var(--g1-bg); border-color:var(--g1-line);}
+  .sw-g2{background:var(--g2-bg); border-color:var(--g2-line);}
+
+  /* two-column readings */
+  .cols{display:grid; grid-template-columns:1fr 1fr; gap:16px;}
+  @media (max-width:640px){ .cols{grid-template-columns:1fr;} }
+  .cols .card h3{margin:0 0 4px; font-size:16px;}
+  .cols .card .tag{font-family:ui-monospace,monospace; font-size:11px; letter-spacing:.1em; text-transform:uppercase;}
+  .cols .card p{margin:10px 0 0; font-size:14.5px; color:var(--muted);}
+  .cols .card code{color:var(--ink);}
+
+  /* tables */
+  .scroll{overflow-x:auto; border:1px solid var(--line); border-radius:14px; background:var(--panel);}
+  table{border-collapse:collapse; width:100%; font-size:14px; min-width:520px;}
+  caption{caption-side:top; text-align:left; padding:0 0 12px; color:var(--muted); font-size:13.5px;}
+  th,td{text-align:left; padding:11px 16px; border-bottom:1px solid var(--line); vertical-align:top;}
+  thead th{font-family:ui-monospace,monospace; font-size:11px; letter-spacing:.1em; text-transform:uppercase;
+    color:var(--faint); font-weight:600; background:var(--accent-soft);}
+  tbody tr:last-child td{border-bottom:0;}
+  td .stg{font-family:ui-monospace,monospace; font-weight:600; color:var(--ink);}
+  td.writes{font-family:ui-monospace,monospace; font-size:12.5px; color:var(--muted); white-space:nowrap;}
+  .pill{display:inline-block; font-family:ui-monospace,monospace; font-size:10.5px; letter-spacing:.06em;
+    padding:2px 8px; border-radius:999px; text-transform:uppercase; font-weight:600;}
+  .pill.g1{background:var(--g1-bg); color:var(--g1); border:1px solid var(--g1-line);}
+  .pill.g2{background:var(--g2-bg); color:var(--g2); border:1px solid var(--g2-line);}
+  .pill.seq{background:var(--panel); color:var(--muted); border:1px solid var(--line);}
+
+  /* code */
+  pre{background:var(--code-bg); border:1px solid var(--code-line); border-radius:14px;
+    padding:20px 22px; overflow-x:auto; margin:0;}
+  pre code{font-family:ui-monospace,"SF Mono",Menlo,monospace; font-size:13px; line-height:1.62; color:var(--code-fg);}
+  pre .c{color:var(--code-c); font-style:italic;}
+  pre .ins{display:block; background:#1c3a2a; color:#9fe6b6; margin:0 -22px; padding:0 22px;}
+  .codelabel{font-family:ui-monospace,monospace; font-size:12px; color:var(--muted); margin:0 0 8px;}
+  .codelabel b{color:var(--ink); font-weight:600;}
+  .stack{display:flex; flex-direction:column; gap:22px;}
+  .critical{font-family:ui-monospace,monospace; font-size:13.5px; line-height:1.9; color:var(--ink);
+    background:var(--panel); border:1px solid var(--line); border-left:3px solid var(--accent);
+    border-radius:10px; padding:16px 18px; overflow-x:auto;}
+  .critical .hl{color:var(--accent); font-weight:600;}
+
+  .note{display:flex; gap:14px; background:var(--amber-bg); border:1px solid var(--amber);
+    border-radius:12px; padding:16px 18px; font-size:14.5px; color:var(--ink); margin-top:22px;}
+  .note .badge{font-family:ui-monospace,monospace; font-size:11px; letter-spacing:.1em; text-transform:uppercase;
+    color:var(--amber); font-weight:700; white-space:nowrap; padding-top:2px;}
+
+  p.body{font-size:15px; color:var(--muted); margin:0 0 18px; max-width:70ch;}
+  p.body b, p.body code{color:var(--ink);}
+  code{font-family:ui-monospace,monospace; font-size:.9em;}
+
+  footer{margin-top:72px; padding-top:20px; border-top:1px solid var(--line);
+    font-family:ui-monospace,monospace; font-size:12px; color:var(--faint); display:flex;
+    justify-content:space-between; flex-wrap:wrap; gap:8px;}
+</style>
+
+<main>
+  <p class="eyebrow">Architecture note · photobook-transformer</p>
+  <h1>The transform pipeline is a DAG run as a line.</h1>
+  <p class="lead">Eleven <span class="mono">@task</span> stages turn Immich assets into a photo book. Today they run <b>strictly sequentially</b> on one shared DB session — but the underlying data dependencies form a <b>DAG</b> with two fan-out groups that could run concurrently. Here's the shape, and the Prefect change to unlock it.</p>
+
+  <div class="meta">
+    <div><div class="k">Stages</div><div class="v">11 <span class="u">+ bootstrap</span></div></div>
+    <div><div class="k">Runs as</div><div class="v">Linear chain <span class="u">· 1 session</span></div></div>
+    <div><div class="k">Truly is</div><div class="v">DAG <span class="u">· 2 fan-outs</span></div></div>
+    <div><div class="k">Orchestrator</div><div class="v">Prefect 3</div></div>
+  </div>
+
+  <h2>Dependency graph</h2>
+  <p class="h2sub">Solid edges are hard data dependencies. Dashed regions run independently — one greedy cut point each.</p>
+  <div class="card diagram">
+    <svg viewBox="0 0 760 758" role="img" aria-label="Pipeline dependency DAG from sync to fulfill">
+      <defs>
+        <marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+          <path d="M0,0 L10,5 L0,10 z" fill="var(--edge)"/>
+        </marker>
+      </defs>
+
+      <!-- group bands -->
+      <rect class="band-g1" x="30" y="122" width="700" height="104" rx="14"/>
+      <text class="band-label g1" x="46" y="140">Group 1 · independent after sync</text>
+      <rect class="band-g2" x="150" y="360" width="470" height="176" rx="14"/>
+      <text class="band-label g2" x="166" y="378">Group 2 · independent after select</text>
+
+      <!-- edges -->
+      <path class="edge d1" d="M380,92 C380,126 120,120 120,156" marker-end="url(#arrow)"/>
+      <path class="edge d1" d="M380,92 L380,154" marker-end="url(#arrow)"/>
+      <path class="edge d1" d="M380,92 C380,126 640,120 640,156" marker-end="url(#arrow)"/>
+
+      <path class="edge d2" d="M120,204 C120,242 380,238 380,270" marker-end="url(#arrow)"/>
+      <path class="edge d2" d="M380,204 L380,270" marker-end="url(#arrow)"/>
+      <path class="edge d2" d="M640,204 C640,242 380,238 380,270" marker-end="url(#arrow)"/>
+
+      <path class="edge d3" d="M380,320 C380,352 270,352 270,382" marker-end="url(#arrow)"/>
+      <path class="edge d3" d="M380,320 C380,362 540,376 540,416" marker-end="url(#arrow)"/>
+      <path class="edge d3" d="M270,428 L270,450" marker-end="url(#arrow)"/>
+
+      <path class="edge d4" d="M270,496 C270,540 380,534 380,566" marker-end="url(#arrow)"/>
+      <path class="edge d4" d="M540,462 C540,532 380,534 380,566" marker-end="url(#arrow)"/>
+      <path class="edge d4" d="M380,614 L380,662" marker-end="url(#arrow)"/>
+
+      <!-- nodes -->
+      <g class="gnode node-seq"><rect x="290" y="44" width="180" height="48" rx="9"/><text x="380" y="68">sync</text></g>
+
+      <g class="gnode node-g1"><rect x="44" y="156" width="152" height="48" rx="9"/><text x="120" y="180">resolve-leads</text></g>
+      <g class="gnode node-g1"><rect x="304" y="156" width="152" height="48" rx="9"/><text x="380" y="180">quality</text></g>
+      <g class="gnode node-g1"><rect x="564" y="156" width="152" height="48" rx="9"/><text x="640" y="180">cluster</text></g>
+
+      <g class="gnode node-seq"><rect x="290" y="272" width="180" height="48" rx="9"/><text x="380" y="296">select</text></g>
+      <text class="join" x="482" y="296">◆ join</text>
+
+      <g class="gnode node-g2"><rect x="194" y="384" width="152" height="44" rx="9"/><text x="270" y="406">enhance</text></g>
+      <g class="gnode node-g2"><rect x="194" y="452" width="152" height="44" rx="9"/><text x="270" y="474">render</text></g>
+      <g class="gnode node-g2"><rect x="464" y="416" width="152" height="44" rx="9"/><text x="540" y="438">caption</text></g>
+
+      <g class="gnode node-seq"><rect x="290" y="566" width="180" height="48" rx="9"/><text x="380" y="590">assemble</text></g>
+      <text class="join" x="482" y="590">◆ join</text>
+      <g class="gnode node-seq"><rect x="290" y="662" width="180" height="48" rx="9"/><text x="380" y="686">fulfill</text></g>
+    </svg>
+    <div class="legend">
+      <span><i class="swatch sw-seq"></i> Sequential — shared session</span>
+      <span><i class="swatch sw-g1"></i> Group 1 — parallelisable</span>
+      <span><i class="swatch sw-g2"></i> Group 2 — parallelisable (<span class="mono">enhance→render</span> chained)</span>
+    </div>
+  </div>
+
+  <h2>Two readings</h2>
+  <p class="h2sub">The execution is a line; the dependencies are not.</p>
+  <div class="cols">
+    <div class="card">
+      <span class="tag" style="color:var(--muted)">As it runs today</span>
+      <h3>Linear chain</h3>
+      <p>One shared <code>Session</code>, committed after every stage (<code>flow.py:242</code>). Simple, resumable, one DB connection — each stage isolates its own per-photo failures, so no Prefect-level fan-out was needed to get correct.</p>
+    </div>
+    <div class="card">
+      <span class="tag" style="color:var(--accent)">As data flows</span>
+      <h3>Diamond DAG</h3>
+      <p>Three stages need only <code>sync</code>; two branches feed <code>assemble</code>. Strip away the "one session, one thread" choice and two independent fan-out groups appear, each with a clean join.</p>
+    </div>
+  </div>
+
+  <h2>Where the parallelism is</h2>
+  <p class="h2sub">Two fan-out groups, each writing disjoint state.</p>
+  <div class="scroll">
+    <table>
+      <thead><tr><th>Group</th><th>Stages</th><th>Why independent</th><th>Joins at</th></tr></thead>
+      <tbody>
+        <tr>
+          <td><span class="pill g1">after sync</span></td>
+          <td class="mono">resolve-leads · quality · cluster</td>
+          <td>Each reads only <code>Photo</code> rows and writes disjoint columns — <code>Person.is_lead</code>, blur/aesthetic/embedding, and segment/scene. None reads another's output.</td>
+          <td class="mono">select</td>
+        </tr>
+        <tr>
+          <td><span class="pill g2">after select</span></td>
+          <td class="mono">enhance→render · caption</td>
+          <td>Both consume the <code>selected=True</code> set; render makes JPEGs, caption makes text. <code>enhance→render</code> is itself a hard chain (render needs enhance's XMP sidecars).</td>
+          <td class="mono">assemble</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="critical" style="margin-top:16px">
+    <span style="color:var(--faint)">critical path&nbsp;&nbsp;</span>
+    sync <span class="hl">→</span> ( cluster ‖ <b>quality</b> ‖ leads ) <span class="hl">→</span> select <span class="hl">→</span> <b>enhance → render</b> <span class="hl">→</span> assemble <span class="hl">→</span> fulfill
+  </div>
+  <p class="body" style="margin-top:16px">In group 1 the floor is <b>quality</b> (per-photo ML scoring). In group 2 it's the <code>enhance→render</code> chain — render shells out to <code>darktable-cli</code> — so <b>caption runs in its shadow for free wall-clock time</b>.</p>
+
+  <h2>Stage responsibilities</h2>
+  <p class="h2sub">Every stage is <span class="mono">album_id</span>-scoped and reads from our DB — Immich is touched only at <span class="mono">sync</span>.</p>
+  <div class="scroll">
+    <table>
+      <thead><tr><th>Stage</th><th>Group</th><th>Responsibility</th><th>Writes</th></tr></thead>
+      <tbody>
+        <tr><td><span class="stg">sync</span></td><td><span class="pill seq">seq</span></td><td><b>The boundary.</b> Pull the album's assets from Immich, keyed on asset id. Idempotent.</td><td class="writes">Photo</td></tr>
+        <tr><td><span class="stg">resolve-leads</span></td><td><span class="pill g1">1</span></td><td>Resolve <code>album.yml</code> priority subjects to Immich people; mark them lead.</td><td class="writes">Person.is_lead</td></tr>
+        <tr><td><span class="stg">quality</span></td><td><span class="pill g1">1</span></td><td>Score blur (Laplacian, real) + aesthetic + CLIP embedding (ML, deferred).</td><td class="writes">Photo scores</td></tr>
+        <tr><td><span class="stg">cluster</span></td><td><span class="pill g1">1</span></td><td>Assign each photo to a segment (by timestamp) and a scene (gap detection).</td><td class="writes">segment_id, Scene</td></tr>
+        <tr><td><span class="stg">select</span></td><td><span class="pill seq">seq</span></td><td>Diversity- + people-aware best-of-scene via MMR; near-dup suppression via embeddings.</td><td class="writes">Photo.selected</td></tr>
+        <tr><td><span class="stg">enhance</span></td><td><span class="pill g2">2</span></td><td>Vision call estimates bounded tone deltas; classical code writes XMP sidecars.</td><td class="writes">XMP sidecars</td></tr>
+        <tr><td><span class="stg">render</span></td><td><span class="pill g2">2</span></td><td>Batch <code>darktable-cli</code> over the sidecars → corrected JPEGs.</td><td class="writes">JPEG files</td></tr>
+        <tr><td><span class="stg">caption</span></td><td><span class="pill g2">2</span></td><td>Guarantee every selected photo has a caption (same shared analysis call).</td><td class="writes">Photo.caption</td></tr>
+        <tr><td><span class="stg">assemble</span></td><td><span class="pill seq">seq</span></td><td>Lay photos into Jinja2 grid templates; render a print-ready PDF via WeasyPrint.</td><td class="writes">book PDF</td></tr>
+        <tr><td><span class="stg">fulfill</span></td><td><span class="pill seq">seq</span></td><td>Deliver via a pluggable Printer — HTML book (default) or Lulu order.</td><td class="writes">deliverable</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h2>The change</h2>
+  <p class="h2sub">One structural idea — own session per concurrent task — plus a few <span class="mono">submit()</span> / <span class="mono">result()</span> calls.</p>
+
+  <div class="stack">
+    <div>
+      <p class="codelabel"><b>1 · Session ownership.</b> A shared SQLAlchemy <code>Session</code> isn't thread-safe, so the six grouped stages take a <b>factory</b> and open their own pooled connection.</p>
+<pre><code>SessionFactory = Callable[[], Session]
+
+<span class="c"># before — receives the flow's one shared session</span>
+def _quality_task(album_id, session, client, aesthetic, embedder):
+    QualityStage(client, aesthetic, embedder=embedder).run(album_id, session)
+    session.commit()
+
+<span class="c"># after — its OWN pooled connection, never the shared one</span>
+def _quality_task(album_id, session_factory, client, aesthetic, embedder):
+    with session_factory() as session:
+        QualityStage(client, aesthetic, embedder=embedder).run(album_id, session)
+        session.commit()</code></pre>
+    </div>
+
+    <div>
+      <p class="codelabel"><b>2 · The flow body.</b> <code>.submit()</code> schedules on Prefect 3's <code>ThreadPoolTaskRunner</code>; <code>.result()</code> blocks and re-raises. <code>wait_for</code> keeps render chained behind enhance.</p>
+<pre><code>_sync_task(album_id, db_session, client)
+db_session.commit()                 <span class="c"># publish sync's writes before fan-out</span>
+
+<span class="c"># ── group 1: independent after sync ──</span>
+g1 = [
+    _resolve_leads_task.submit(album_id, session_factory, client, album_slug),
+    _quality_task.submit(album_id, session_factory, client, aesthetic_m, embedder_m),
+    _cluster_task.submit(album_id, session_factory),
+]
+for f in g1:
+    f.result()                      <span class="c"># join: blocks + re-raises any stage error</span>
+
+db_session.expire_all()             <span class="c"># drop stale identity-map state</span>
+_select_task(album_id, db_session, similarity)
+db_session.commit()
+
+<span class="c"># ── group 2: enhance‖caption, render chained behind enhance ──</span>
+enhance_f = _enhance_task.submit(album_id, session_factory, client, model)
+caption_f = _caption_task.submit(album_id, session_factory, client, model)
+render_f  = _render_task.submit(album_id, session_factory, client, renderer,
+                                wait_for=[enhance_f])   <span class="c"># needs enhance's XMP</span>
+for f in (render_f, caption_f):
+    f.result()
+
+_assemble_task(album_id, db_session)
+db_session.commit()
+_fulfill_task(album_id, db_session, printer)</code></pre>
+    </div>
+  </div>
+
+  <h2>What it costs</h2>
+  <p class="h2sub">The task graph already permits it — these are the real edges to mind.</p>
+  <div class="scroll">
+    <table>
+      <thead><tr><th>Concern</th><th>Detail</th></tr></thead>
+      <tbody>
+        <tr><td class="mono" style="white-space:nowrap;color:var(--ink)">connection pool</td><td>Concurrency peaks at 3. Default <code>QueuePool</code> is 5 + 10 overflow = 15, so no change needed now. Size <code>pool_size</code> only if a stage's <em>internal</em> per-photo loop later becomes fan-out.</td></tr>
+        <tr><td class="mono" style="white-space:nowrap;color:var(--ink)">failure isolation</td><td>Each task's own <code>with session_factory()</code> rolls back independently — one group-1 failure no longer poisons a shared transaction, and <code>.result()</code> still aborts the run before <code>select</code>.</td></tr>
+        <tr><td class="mono" style="white-space:nowrap;color:var(--ink)">read-after-write</td><td>Commit the shared session <em>before</em> each fan-out so threads read committed rows; <code>expire_all()</code> after the join so <code>select</code>/<code>assemble</code> re-read what the workers wrote.</td></tr>
+        <tr><td class="mono" style="white-space:nowrap;color:var(--ink)">tests</td><td>The SQLite test session can't cross threads. Unit tests inject a <code>session_factory</code> handing out independent doubles (or run the runner serially); real concurrency stays on the pgvector TestContainers suite.</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="note">
+    <span class="badge">Net</span>
+    <span>The whole change is <b>own session per concurrent task + two <code>submit</code>/<code>result</code> fences</b>. The real win lands in group 2, where <code>caption</code> disappears entirely into the shadow of the <code>enhance→render</code> chain.</span>
+  </div>
+
+  <footer>
+    <span>photobook-transformer · src/album/flow.py</span>
+    <span>sketch — not applied</span>
+  </footer>
+</main>

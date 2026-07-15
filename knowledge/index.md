@@ -13,6 +13,7 @@ manual work. This bundle is the project's source of truth.
 * [Overview](/overview.md) - What the pipeline does and the ground rules for building it.
 * [Domain model](/domain-model.md) - The `Album` + `Segment` abstraction that keeps the pipeline generic.
 * [Architecture](/architecture.md) - Batch pipeline over Immich + Postgres, Prefect orchestration, PydanticAI, with rationale.
+* [Pipeline execution shape](/pipeline-execution.md) - The stage DAG: linear as run today, two parallelisable fan-out groups, and the Prefect change to unlock them (`.html` companion diagram alongside).
 * [Working agreement](/working-agreement.md) - TDD, static typing, the git commit gate, and local workflow commands.
 * [Quality practices](/quality-practices.md) - How code is shaped: classes with injected dependencies, encapsulation, and class-based tests with scoped fixtures.
 

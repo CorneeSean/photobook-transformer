@@ -2,6 +2,16 @@
 
 ## 2026-07-15
 
+* **Doc**: Added [Pipeline execution shape](/pipeline-execution.md) — documents
+  that the pipeline runs as a linear chain today (one shared `Session`, committed
+  per stage) but is a **DAG** underneath, with two parallelisable fan-out groups
+  (`resolve-leads`‖`quality`‖`cluster` after `sync`; `enhance→render`‖`caption`
+  after `select`), the critical path, per-stage responsibilities, and a sketch of
+  the Prefect `submit()`/`result()` + own-session-per-task change to parallelise
+  them (with the connection-pool / read-after-write / test caveats). Ships a
+  self-contained `pipeline-execution.html` companion diagram. Not applied to
+  `flow.py` — reference only.
+
 * **TestContainers step 21 — pgvector integration suite** done (`ac2cd14`,
   branch `step-21-pgvector-integration`, merged). First step of the
   [TestContainers playbook](/testcontainers-integration.md): promotes the DB
