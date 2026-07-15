@@ -2,6 +2,37 @@
 
 ## 2026-07-15
 
+* **TestContainers step 21 — pgvector integration suite** done (`ac2cd14`,
+  branch `step-21-pgvector-integration`, merged). First step of the
+  [TestContainers playbook](/testcontainers-integration.md): promotes the DB
+  boundary from in-memory SQLite + a numpy `StubSimilarity` to a **real
+  Postgres+pgvector container migrated with alembic** (`upgrade head`, not
+  `create_all`), joining what `test_select.py` (MMR logic) and
+  `test_similarity.py` (the pgvector query) cover separately.
+    * `tests/test_pgvector_integration.py`: (a) migrations reach head + the
+      step-17/17b faces/people/lead columns exist + **no model↔migration drift**
+      (`compare_metadata == []`, automating the by-hand autogenerate check each
+      schema step); (b) `select` over the **real** cosine query — a near-dup is
+      skipped by real pgvector distance (load-bearing `selected==2`), idempotent
+      on re-run; lead coverage with a **negative control** (same near-dup pair
+      dropped WITHOUT lead status, rescued WITH it) + a raw-SQL assertion that
+      `person_ids` round-trips through Postgres JSON; (c) migration round-trip
+      (upgrade → downgrade base → upgrade) on a throwaway container.
+    * **Harness:** `_database_url` sets `DATABASE_URL` + clears the `get_settings`
+      `@cache` and restores both (no cross-test leakage); the alembic `Config` is
+      built **programmatically** so `env.py` skips `fileConfig` — which otherwise
+      has `disable_existing_loggers=True` and silently broke `caplog` assertions
+      in other test files that run after a migration (the one real bug caught in
+      review). Infra: registered `integration` marker + `poe test-fast`
+      (`-m "not integration"`) for a SQLite-only loop; shared `_vector`/image in
+      `tests/pgvector_support.py`. Cluster integration deferred (its DBSCAN path
+      is pure-Python lat/lon — no Postgres-specific behavior).
+    * **Review:** 2 broad-scope sub-agents (fewer for a test-only diff) — harness
+      correctness (found the fileConfig/caplog leak) + test quality (drove the
+      negative control, JSON round-trip, idempotency re-run, drift check, shared
+      helper). `TESTCONTAINERS_RYUK_DISABLED=true uv run poe check` green, 211
+      tests (10 integration).
+
 * **Enrichment step 18 — people/lead-aware `select`** done (`f3afc54`, branch
   `step-18-people-select`, merged). The first consumer of step 17's
   `Photo.person_ids` and step 17b's `Person.is_lead`; layers people-awareness

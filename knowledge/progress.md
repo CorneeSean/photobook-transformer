@@ -46,6 +46,15 @@ order, one at a time.
 | 19 | Name-grounded `caption` (optional) | — | todo | — | pass `Person.name`s into the shared analysis call |
 | 20 | Rating / OCR / geocoded place (optional) | — | todo | — | `rating` + `exifInfo.city/state/country` + OCR into nullable columns |
 
+### TestContainers playbook (see [testcontainers-integration.md](/testcontainers-integration.md))
+
+| # | Step | Branch | Status | Commit | Notes |
+|---|------|--------|--------|--------|-------|
+| 21 | pgvector schema + integration harness | step-21-pgvector-integration (merged, deleted) | done | ac2cd14 | alembic-migrated pgvector container fixture; `select` over the real `PgVectorSimilarity` (near-dup skip, idempotent; lead coverage with a negative control + `person_ids` JSON round-trip); migrations reach head + no drift; migration round-trip; `integration` marker + `poe test-fast`. 2-agent review (fixed a fileConfig/caplog cross-test leak). 211 tests |
+| 22 | darktable-cli render integration | — | todo | — | run the app image (has darktable-cli), assert a rendered JPEG differs from source — closes step-11's deferred manual check; no internet model |
+| 23 | DB-backed flow smoke test (optional) | — | todo | — | whole flow on real Postgres, Immich/Claude/Lulu as doubles |
+| 24 | Immich ML integration (deferred optional) | — | todo | — | needs internet CLIP/face models or a pre-baked model-cache image — see the playbook |
+
 ## Notes / blockers
 
 - **Enrichment step 17b done; live reference-upload/detection deferred
