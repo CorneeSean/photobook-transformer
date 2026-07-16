@@ -3,8 +3,8 @@
 Reproducible demo of the real pipeline's back half: it seeds an ``Album`` + 5
 time/place ``Segment``s + 30 ``Photo`` rows from
 ``tests/data/cat-album/manifest.json`` (photos already on disk under
-``photos/``), then runs the actual [`cluster`](../src/album/stages/cluster.py)
-and [`assemble`](../src/album/stages/assemble.py) stages and the default
+``photos/``), then runs the actual [`cluster`](../src/album/flow/stages/cluster.py)
+and [`assemble`](../src/album/flow/stages/assemble.py) stages and the default
 [`HtmlPrinter`](../src/album/printers/html.py) — the same code a live
 ``album run`` uses. The front-half stages that need external services (``sync``
 from Immich, ``quality``'s scorer, ``enhance``/``render`` via darktable,
@@ -30,9 +30,9 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import Session
 
 from album.db.models import Album, Base, Photo, Segment
+from album.flow.stages.assemble import AssembleStage
+from album.flow.stages.cluster import ClusterStage
 from album.printers.html import HtmlPrinter
-from album.stages.assemble import assemble
-from album.stages.cluster import cluster
 
 _ROOT = Path(__file__).resolve().parents[1]
 _DATA = _ROOT / "tests" / "data" / "cat-album"
@@ -87,7 +87,7 @@ def main() -> None:
     with Session(engine) as session:
         album_id = _seed(session, manifest)
 
-        cluster_result = cluster(album_id, session)
+        cluster_result = ClusterStage().run(album_id, session)
         session.commit()
         print(
             f"cluster: {cluster_result.segments_assigned} photos into segments, "
@@ -98,7 +98,7 @@ def main() -> None:
 
         # assemble writes <output_dir>/<slug>/assembled.pdf and sets page_number;
         # HtmlPrinter writes <output_dir>/<slug>/book/index.html.
-        assemble_result = assemble(album_id, session, _DATA.parent)
+        assemble_result = AssembleStage(_DATA.parent).run(album_id, session)
         session.commit()
         print(
             f"assemble: {assemble_result.photos_placed} photos on "

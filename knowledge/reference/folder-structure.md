@@ -13,7 +13,7 @@ photo-album-pipeline/
 ├── .gitignore
 ├── .dockerignore
 ├── .pre-commit-config.yaml   # no-commit-to-branch (protect main) + ruff + basedpyright
-├── .env.example              # our Postgres + Immich compose vars, ANTHROPIC_API_KEY, IMMICH_API_KEY, LULU_*, DATABASE_URL
+├── .env.example              # our Postgres + Immich compose vars, ANTHROPIC_API_KEY, IMMICH__API_KEY, LULU__*, DATABASE_URL
 ├── Dockerfile                # multi-stage: uv sync → runtime w/ darktable-cli
 ├── docker-compose.yml        # app + our Postgres + Prefect server; `include:`s the next file
 ├── docker-compose.immich.yml # Immich's stack, vendored from their official release compose
