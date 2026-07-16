@@ -40,8 +40,8 @@ uv run poe migrate # alembic upgrade head
 1. Add `data/albums/<slug>/album.yml` (see
    [Album definition](./knowledge/reference/album-definition.md)) with a real
    `immich_album_id` from Immich's web UI, and set the `.env` credentials it
-   needs (`IMMICH_API_KEY`, `ANTHROPIC_API_KEY` — see `.env.example`; the
-   `LULU_*` credentials are only needed for the opt-in Lulu printer, below).
+   needs (`IMMICH__API_KEY`, `ANTHROPIC_API_KEY` — see `.env.example`; the
+   `LULU__*` credentials are only needed for the opt-in Lulu printer, below).
 2. `uv run poe up` (or `docker compose up -d db prefect-server` for just the
    two services a run needs, skipping Immich's heavier stack if it's already
    running elsewhere), then `uv run poe migrate`.
@@ -60,7 +60,7 @@ that file in a browser to page through the book.
 To order a physical copy instead, inject the opt-in `LuluPrinter`
 (`pipeline(..., printer=LuluPrinter.from_settings(LuluClient.from_settings()))`),
 which submits the print-ready PDF to [Lulu](https://api.lulu.com)'s Print API —
-this needs the `LULU_*` credentials and a PDF hosted at a URL Lulu can fetch.
+this needs the `LULU__*` credentials and a PDF hosted at a URL Lulu can fetch.
 
 Every dependency `flow/_flow.py` wires is real except one, deliberately deferred
 since [build step 6](./knowledge/build/progress.md): the LAION-style aesthetic

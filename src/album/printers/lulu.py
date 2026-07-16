@@ -67,15 +67,15 @@ class LuluPrinter:
         settings = get_settings()
         return cls(
             client,
-            contact_email=settings.lulu_contact_email,
-            pod_package_id=settings.lulu_pod_package_id,
+            contact_email=settings.lulu.contact_email,
+            pod_package_id=settings.lulu.pod_package_id,
             shipping_address=ShippingAddress(
-                name=settings.lulu_shipping_name,
-                street1=settings.lulu_shipping_street1,
-                city=settings.lulu_shipping_city,
-                postcode=settings.lulu_shipping_postcode,
-                country_code=settings.lulu_shipping_country_code,
-                phone_number=settings.lulu_shipping_phone_number,
+                name=settings.lulu.shipping_name,
+                street1=settings.lulu.shipping_street1,
+                city=settings.lulu.shipping_city,
+                postcode=settings.lulu.shipping_postcode,
+                country_code=settings.lulu.shipping_country_code,
+                phone_number=settings.lulu.shipping_phone_number,
             ),
         )
 

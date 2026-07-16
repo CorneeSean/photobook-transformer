@@ -1,53 +1,85 @@
 """The only module in this app that reads environment variables.
 
 Every other module that needs configuration gets it from :func:`get_settings`.
+
+Settings are grouped into domain sub-models (:class:`ImmichSettings`,
+:class:`LuluSettings`) reached as ``settings.immich`` / ``settings.lulu``. The
+``__`` nested delimiter maps each nested field to a ``GROUP__FIELD`` env var —
+``IMMICH__API_KEY`` populates ``settings.immich.api_key``,
+``LULU__SHIPPING_CITY`` populates ``settings.lulu.shipping_city``.
+
+Two fields stay flat on purpose:
+
+- ``database_url`` — a single value AND a de-facto standard env name
+  (``DATABASE_URL``) consumed by ``alembic/env.py`` and ``docker-compose.yml``;
+  nesting it to ``DATABASE__URL`` would break those.
+- ``anthropic_api_key`` — a single field whose conventional env name is
+  ``ANTHROPIC_API_KEY``. Nesting a one-field group buys no grouping, so it stays
+  flat like ``database_url``.
 """
 
 from functools import cache
 
+from pydantic import BaseModel
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
+class ImmichSettings(BaseModel):
+    """Immich REST API config (used by src/album/immich/client.py).
+
+    Env: ``IMMICH__BASE_URL``, ``IMMICH__API_KEY``. Defaults keep DB-only flows
+    (alembic, migrate) working without Immich vars set; a real sync run needs
+    ``IMMICH__API_KEY`` filled in from Immich's web UI.
+    """
+
+    base_url: str = "http://localhost:2283/api"
+    api_key: str = ""
+
+
+class LuluSettings(BaseModel):
+    """Lulu Print API config (used by src/album/lulu/client.py and
+    src/album/printers/lulu.py).
+
+    Env: ``LULU__CLIENT_KEY``, ``LULU__CLIENT_SECRET``, ``LULU__SHIPPING_CITY``,
+    etc. OAuth2 client-credentials — see lulu/client.py's module docstring.
+    Defaulted empty so importing the client never requires credentials; only
+    building the real (non-test) client and submitting a real print job needs
+    them filled in.
+
+    The shipping / order-level fields describe the *recipient*, not the album,
+    so they aren't part of the Album/Photo data model. ``pod_package_id``
+    selects Lulu's physical product (trim size / paper / binding); pin down the
+    real SKU alongside open question #4 (trim/bleed spec) before the first real
+    submission.
+    """
+
+    base_url: str = "https://api.lulu.com"
+    client_key: str = ""
+    client_secret: str = ""
+    contact_email: str = ""
+    pod_package_id: str = ""
+    shipping_name: str = ""
+    shipping_street1: str = ""
+    shipping_city: str = ""
+    shipping_postcode: str = ""
+    shipping_country_code: str = ""
+    shipping_phone_number: str = ""
+
+
 class Settings(BaseSettings):
-    # `__` is the nested-group separator (e.g. a future `LULU__CLIENT_KEY` would
-    # populate a `lulu.client_key` field) — configured now so grouped settings
-    # added in later steps don't need this file touched again.
+    # `__` is the nested-group separator: `IMMICH__API_KEY` populates
+    # `immich.api_key`, `LULU__SHIPPING_CITY` populates `lulu.shipping_city`.
     model_config = SettingsConfigDict(env_file=".env", env_nested_delimiter="__", extra="ignore")
 
     database_url: str
 
-    # Immich REST API (used by src/album/immich/client.py from step 4 onward).
-    # Defaults keep DB-only flows (alembic, migrate) working without Immich vars
-    # set; a real sync run needs IMMICH_API_KEY filled in from Immich's web UI.
-    immich_base_url: str = "http://localhost:2283/api"
-    immich_api_key: str = ""
-
-    # Claude, via PydanticAI (used by src/album/agents/analysis.py from step 9
-    # onward). Defaulted so importing the agent module never requires a key —
-    # only building the real (non-test) model does.
+    # Claude, via PydanticAI (used by src/album/agents/analysis.py). Kept flat
+    # under its conventional env name; defaulted so importing the agent module
+    # never requires a key — only building the real (non-test) model does.
     anthropic_api_key: str = ""
 
-    # Lulu Print API (used by src/album/lulu/client.py from step 15 onward).
-    # OAuth2 client-credentials — see lulu/client.py's module docstring. Defaulted
-    # empty so importing the client never requires credentials; only building the
-    # real (non-test) client and submitting a real print job needs them filled in.
-    lulu_base_url: str = "https://api.lulu.com"
-    lulu_client_key: str = ""
-    lulu_client_secret: str = ""
-
-    # Order-level fields Lulu requires that aren't part of the Album/Photo data
-    # model (they describe the *recipient*, not the album) — placeholders until
-    # a real print run needs them. `lulu_pod_package_id` selects Lulu's physical
-    # product (trim size / paper / binding); pin down the real SKU alongside open
-    # question #4 (trim/bleed spec) before the first real submission.
-    lulu_contact_email: str = ""
-    lulu_pod_package_id: str = ""
-    lulu_shipping_name: str = ""
-    lulu_shipping_street1: str = ""
-    lulu_shipping_city: str = ""
-    lulu_shipping_postcode: str = ""
-    lulu_shipping_country_code: str = ""
-    lulu_shipping_phone_number: str = ""
+    immich: ImmichSettings = ImmichSettings()
+    lulu: LuluSettings = LuluSettings()
 
 
 @cache

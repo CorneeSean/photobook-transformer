@@ -145,7 +145,7 @@ class LuluClient:
     @classmethod
     def from_settings(cls) -> LuluClient:
         settings = get_settings()
-        return cls(settings.lulu_base_url, settings.lulu_client_key, settings.lulu_client_secret)
+        return cls(settings.lulu.base_url, settings.lulu.client_key, settings.lulu.client_secret)
 
     def submit_print_job(self, request: PrintJobRequest) -> PrintJob:
         """Create a print job via ``POST /print-jobs/``."""

@@ -125,7 +125,7 @@ class ImmichClient:
     @classmethod
     def from_settings(cls) -> ImmichClient:
         settings = get_settings()
-        return cls(settings.immich_base_url, settings.immich_api_key)
+        return cls(settings.immich.base_url, settings.immich.api_key)
 
     def get_album_assets(self, immich_album_id: str) -> list[ImmichAsset]:
         """Every asset in an Immich album, following pagination to completion."""
