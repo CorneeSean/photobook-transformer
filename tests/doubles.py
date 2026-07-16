@@ -54,6 +54,20 @@ class ConstantEmbedder:
         return [0.1] * 768
 
 
+_CANNED_ANALYSIS_JSON = (
+    '{"exposure_ev": 0.0, "temp_shift_k": 0.0, "shadows": 0.0, '
+    '"highlights": 0.0, "caption": "A generic caption."}'
+)
+
+
+def canned_analysis_response() -> ModelResponse:
+    """The canonical valid :class:`AnalysisResult` as a raw ``ModelResponse`` —
+    the single source of the canned JSON shared by every ``FunctionModel``
+    double (the call-counter here, the prompt-capturer in
+    ``test_photo_analyzer.py``), so the literal lives in exactly one place."""
+    return ModelResponse(parts=[TextPart(content=_CANNED_ANALYSIS_JSON)])
+
+
 def analysis_test_model(**overrides: object) -> TestModel:
     """A :class:`TestModel` returning a valid :class:`AnalysisResult`, tone deltas
     zeroed by default; pass overrides (e.g. ``exposure_ev=0.2``) for tests that
@@ -78,15 +92,6 @@ def counting_analysis_model() -> tuple[FunctionModel, list[int]]:
         messages: list[ModelMessage], info: AgentInfo
     ) -> ModelResponse:  # pragma: no cover - exercised via FunctionModel
         calls.append(1)
-        return ModelResponse(
-            parts=[
-                TextPart(
-                    content=(
-                        '{"exposure_ev": 0.0, "temp_shift_k": 0.0, "shadows": 0.0, '
-                        '"highlights": 0.0, "caption": "A generic caption."}'
-                    )
-                )
-            ]
-        )
+        return canned_analysis_response()
 
     return FunctionModel(handler), calls

@@ -31,6 +31,23 @@ class ThumbnailSource(Protocol):
     def get_thumbnail(self, asset_id: str, *, size: str = "thumbnail") -> bytes: ...
 
 
+def _resolve_person_names(photo: Photo) -> list[str]:
+    """The *named* people in ``photo``, in ``person_ids`` order — the caption's
+    name grounding (enrichment step 19).
+
+    Resolves the photo's assigned Immich person ids to display names via the
+    album-scoped ``Person`` cache (``photo.album.people`` — one query per album,
+    reused from the session's identity map, so no per-photo round trip). A person
+    unnamed in Immich (``Person.name is None``) or with no cached ``Person`` row
+    contributes no name, so a fabricated name is never passed and no ``None``
+    leaks into the prompt. A photo with no assigned people yields ``[]``, leaving
+    the prompt identical to a face-free album's (genericity guard)."""
+    if not photo.person_ids:
+        return []
+    names_by_id = {person.immich_person_id: person.name for person in photo.album.people}
+    return [name for pid in photo.person_ids if (name := names_by_id.get(pid)) is not None]
+
+
 class PhotoAnalyzer:
     """Runs (and persists) the shared vision call for a photo, exactly once.
 
@@ -59,9 +76,10 @@ class PhotoAnalyzer:
         - Otherwise: fetches a thumbnail, builds a ``PhotoContext`` from the
           photo's segment (label/place, both optional — an unsegmented album or an
           out-of-range photo simply gets a context with neither set, never an
-          error) and ``Album.meta``, calls ``analyze_photo``, writes all five
-          fields onto ``photo`` in one shot, and returns the fresh
-          :class:`AnalysisResult`.
+          error), ``Album.meta``, and the names of the photo's recognized people
+          (:func:`_resolve_person_names`, empty when the album has no named
+          faces), calls ``analyze_photo``, writes all five fields onto ``photo``
+          in one shot, and returns the fresh :class:`AnalysisResult`.
 
         ``force`` matters because ``EnhanceStage`` overwrites ``enhance_exposure_ev``
         et al. with the *final, reconciled* (baseline + AI delta) values, not the
@@ -88,6 +106,7 @@ class PhotoAnalyzer:
             segment_label=photo.segment.label if photo.segment is not None else None,
             segment_place=photo.segment.place if photo.segment is not None else None,
             album_meta=photo.album.meta,
+            person_names=_resolve_person_names(photo),
         )
         result = analyze_photo(image, context, model=self._model)
 

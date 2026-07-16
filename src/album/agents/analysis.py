@@ -43,9 +43,11 @@ in a single response:
    never describe or imply pixels you would invent; the deltas are the only
    output that reaches the image.
 2. A short, natural caption. Ground it in whatever context you're given (a
-   segment name/place, album metadata) when present. If no context is given,
-   still write an accurate, general caption from the image alone — never
-   mention that context is missing.
+   segment name/place, the names of people in the photo, album metadata) when
+   present. When names are given, use them naturally; never invent a name, and
+   never state that you don't know who someone is. If no context is given, still
+   write an accurate, general caption from the image alone — never mention that
+   context is missing.
 """
 
 
@@ -79,6 +81,10 @@ class PhotoContext:
     segment_label: str | None = None
     segment_place: str | None = None
     album_meta: dict[str, Any] = field(default_factory=dict)
+    # Display names of the *named* people in this photo, resolved from
+    # ``Photo.person_ids`` — see ``PhotoAnalyzer._resolve_person_names`` for how,
+    # and for why an empty list leaves the prompt unchanged (genericity guard).
+    person_names: list[str] = field(default_factory=list)
 
 
 _agent = Agent(output_type=AnalysisResult, system_prompt=_SYSTEM_PROMPT)
@@ -118,6 +124,8 @@ def format_context(context: PhotoContext) -> str:
     if context.segment_label:
         place = f" in {context.segment_place}" if context.segment_place else ""
         lines.append(f"Context: {context.segment_label}{place}.")
+    if context.person_names:
+        lines.append(f"People in this photo: {', '.join(context.person_names)}.")
     if context.album_meta:
         lines.append(f"Album context: {context.album_meta}.")
     return "\n".join(lines)

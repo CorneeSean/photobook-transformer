@@ -90,3 +90,20 @@ class TestFormatContext:
 
         assert prompt  # non-empty; the agent still has something to work from
         assert "Context:" not in prompt  # no segment info leaked in when there is none
+
+    def test_includes_person_names(self) -> None:
+        context = PhotoContext(person_names=["Alex", "Sam"])
+
+        prompt = format_context(context)
+
+        assert "Alex" in prompt
+        assert "Sam" in prompt
+
+    def test_omits_people_line_when_no_names(self) -> None:
+        # Step-19 genericity guard: an empty name list must add no people line, so
+        # a face-free album's prompt is byte-for-byte unchanged. (Dropping unnamed
+        # people so no "None" leaks is the resolver's job, covered in
+        # test_photo_analyzer.py.)
+        prompt = format_context(PhotoContext())
+
+        assert "People in this photo" not in prompt
