@@ -3,6 +3,9 @@ __pycache__/
 *.pyc
 .env
 
+# JetBrains IDE project files (per-developer, not shared).
+.idea/
+
 # Album definitions are code; everything else under an album dir is generated.
 data/albums/*/*
 !data/albums/*/album.yml
