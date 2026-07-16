@@ -74,6 +74,7 @@ from album.agents.analysis import AnalysisResult
 from album.db.models import Album, Photo
 from album.photo_analyzer import PhotoAnalyzer, ThumbnailSource
 from album.stages.base import Stage
+from album.tone import ToneParams
 
 _log = logging.getLogger(__name__)
 
@@ -101,19 +102,6 @@ _BLENDOP_OFF = "gz10eJxjYGBgYAFiCQYYOOHEgAYY0QVwggZ7CB6pfOygYtaVAyCMi08IAAB5xiOg
 # ±2000 K (AnalysisResult); at that bound this yields a ~±0.15 multiplier — a
 # clearly visible but bounded warm/cool shift (AGENTS.md rule 5, never drastic).
 _TEMP_K_TO_MULT = 7.5e-5
-
-
-@dataclass(frozen=True)
-class ToneParams:
-    """The same four bounded tone knobs as :class:`AnalysisResult`, but
-    freestanding — used for the baseline offset, the AI delta, and their
-    reconciled sum alike, so :func:`reconcile_tone` can be pure arithmetic
-    over one type instead of juggling three."""
-
-    exposure_ev: float = 0.0
-    temp_shift_k: float = 0.0
-    shadows: float = 0.0
-    highlights: float = 0.0
 
 
 @dataclass
@@ -388,40 +376,20 @@ class EnhanceStage(Stage[EnhanceResult]):
                 result.failed += 1
                 continue
 
-            photo.enhance_exposure_ev = combined.exposure_ev
-            photo.enhance_temp_shift_k = combined.temp_shift_k
-            photo.enhance_shadows = combined.shadows
-            photo.enhance_highlights = combined.highlights
+            combined.write_to(photo)
             photo.xmp_written = True
             result.enhanced += 1
 
-    def _ai_delta(self, photo: Photo, analysis: AnalysisResult | None) -> ToneParams:
+    @staticmethod
+    def _ai_delta(photo: Photo, analysis: AnalysisResult | None) -> ToneParams:
         """The raw per-photo AI tone delta, from a fresh analysis or the stored columns."""
         if analysis is not None:
-            return self._ai_delta_from_analysis(analysis)
-        return self._ai_delta_from_stored(photo)
-
-    @staticmethod
-    def _ai_delta_from_analysis(analysis: AnalysisResult) -> ToneParams:
-        return ToneParams(
-            exposure_ev=analysis.exposure_ev,
-            temp_shift_k=analysis.temp_shift_k,
-            shadows=analysis.shadows,
-            highlights=analysis.highlights,
-        )
-
-    @staticmethod
-    def _ai_delta_from_stored(photo: Photo) -> ToneParams:
-        # Only reachable when force=False and the photo was already analyzed but
-        # never reconciled/xmp_written (e.g. a previous run crashed between the
+            return ToneParams.from_analysis(analysis)
+        # analysis is None only when force=False and the photo was already analyzed
+        # but never reconciled/xmp_written (e.g. a previous run crashed between the
         # analysis call and the XMP write) — the stored columns still hold the
         # untouched raw AI delta.
-        return ToneParams(
-            exposure_ev=photo.enhance_exposure_ev or 0.0,
-            temp_shift_k=photo.enhance_temp_shift_k or 0.0,
-            shadows=photo.enhance_shadows or 0.0,
-            highlights=photo.enhance_highlights or 0.0,
-        )
+        return ToneParams.from_photo(photo)
 
     def _baseline(
         self, photo: Photo, reference: Photo, reference_image: bytes | None
@@ -450,7 +418,6 @@ class EnhanceStage(Stage[EnhanceResult]):
 __all__ = [
     "EnhanceResult",
     "EnhanceStage",
-    "ToneParams",
     "compute_camera_baseline",
     "reconcile_tone",
     "write_xmp_sidecar",

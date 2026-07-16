@@ -25,6 +25,7 @@ from sqlalchemy.orm import Session
 
 from album.agents.analysis import AnalysisResult, PhotoContext, analyze_photo
 from album.db.models import Photo
+from album.tone import ToneParams
 
 
 class ThumbnailSource(Protocol):
@@ -126,9 +127,7 @@ class PhotoAnalyzer:
 
     @staticmethod
     def _persist(photo: Photo, result: AnalysisResult) -> None:
-        """Writes all five stored fields from ``result`` onto ``photo`` in one shot."""
-        photo.enhance_exposure_ev = result.exposure_ev
-        photo.enhance_temp_shift_k = result.temp_shift_k
-        photo.enhance_shadows = result.shadows
-        photo.enhance_highlights = result.highlights
+        # caption is written here, not by ToneParams.write_to — it is not a tone
+        # knob, so the value object deliberately excludes it.
+        ToneParams.from_analysis(result).write_to(photo)
         photo.caption = result.caption

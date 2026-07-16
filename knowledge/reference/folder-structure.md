@@ -36,6 +36,7 @@ photo-album-pipeline/
 │       ├── flow.py               # Prefect @flow(album_slug); builds stage classes, wraps .run as @tasks
 │       ├── definition.py         # loads/validates album.yml → Album + Segments
 │       ├── photo_analyzer.py     # PhotoAnalyzer: shared one-vision-call collaborator (enhance + caption)
+│       ├── tone.py               # ToneParams value object + AnalysisResult/Photo conversions
 │       │
 │       ├── db/
 │       │   ├── models.py         # Album, Segment, Photo

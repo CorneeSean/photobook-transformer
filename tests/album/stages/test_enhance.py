@@ -31,11 +31,11 @@ from album.stages.enhance import (
     _NAMESPACES,  # pyright: ignore[reportPrivateUsage]
     EnhanceResult,
     EnhanceStage,
-    ToneParams,
     compute_camera_baseline,
     reconcile_tone,
     write_xmp_sidecar,
 )
+from album.tone import ToneParams
 from tests.doubles import FakeThumbnails, analysis_test_model
 
 
