@@ -15,68 +15,26 @@ Marked ``integration`` (needs Docker); ``poe test-unit`` skips it.
 
 from __future__ import annotations
 
-import os
 from collections.abc import Callable, Iterator
-from contextlib import contextmanager
 
 import pytest
 from alembic.autogenerate import compare_metadata
-from alembic.config import Config
 from alembic.runtime.migration import MigrationContext
-from alembic.script import ScriptDirectory
 from sqlalchemy import create_engine, text
 from sqlalchemy.orm import Session
 from testcontainers.postgres import PostgresContainer
 
-from album.config import get_settings
 from album.db.models import Album, Base, Person, Photo
 from album.db.similarity import PgVectorSimilarity
 from album.stages.select import SelectStage
 from alembic import command
 from tests.pgvector_support import PGVECTOR_IMAGE
+from tests.pgvector_support import alembic_config as _alembic_config
+from tests.pgvector_support import alembic_head as _alembic_head
+from tests.pgvector_support import database_url as _database_url
 from tests.pgvector_support import vector as _vector
 
 pytestmark = pytest.mark.integration
-
-
-@contextmanager
-def _database_url(url: str) -> Iterator[None]:
-    """Point ``config.py`` (and thus alembic's ``env.py``) at ``url`` transiently.
-
-    ``env.py`` overrides alembic.ini's ``sqlalchemy.url`` with
-    ``get_settings().database_url`` (config.py is the only env-var reader), so the
-    only way to aim a migration at the container is via ``DATABASE_URL`` — set it,
-    clear the ``@cache``, and restore both afterwards so no other test is affected.
-    """
-    original = os.environ.get("DATABASE_URL")
-    os.environ["DATABASE_URL"] = url
-    get_settings.cache_clear()
-    try:
-        yield
-    finally:
-        if original is None:
-            os.environ.pop("DATABASE_URL", None)
-        else:
-            os.environ["DATABASE_URL"] = original
-        get_settings.cache_clear()
-
-
-def _alembic_config() -> Config:
-    """Alembic config built programmatically — deliberately *without* the .ini path.
-
-    ``env.py`` only calls ``logging.config.fileConfig`` when ``config_file_name``
-    is set; that call has ``disable_existing_loggers=True``, which would silence
-    the app loggers and break ``caplog`` assertions in *other* test files that run
-    after a migration here. Omitting the .ini skips it; ``script_location`` and the
-    DB url (from ``get_settings`` via :func:`_database_url`) are all env.py needs.
-    """
-    config = Config()
-    config.set_main_option("script_location", "alembic")
-    return config
-
-
-def _alembic_head() -> str:
-    return ScriptDirectory.from_config(_alembic_config()).get_current_head() or ""
 
 
 @pytest.fixture(scope="module")

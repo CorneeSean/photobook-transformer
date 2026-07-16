@@ -54,6 +54,7 @@ order, one at a time.
 | 22 | darktable-cli render integration | step-22-darktable-render (merged, deleted) | done | 8aac81b | real `DarktableRenderer` inside the shipped app image renders a real `write_xmp_sidecar` sidecar → asserts output JPEG exists, decodes, **visibly brighter** (`tests/test_render_integration.py`). Validated the darktable XMP history-stack format — see [enhance.md](/stages/enhance.md). Closes step-11's deferred manual check. Shells to `docker` CLI (docker-py build breaks on the py3.14 gcloud cred-helper landmine). |
 | 23 | DB-backed flow smoke test (optional) | — | todo | — | whole flow on real Postgres, Immich/Claude/Lulu as doubles |
 | 24 | Immich ML integration (deferred optional) | — | todo | — | needs internet CLIP/face models or a pre-baked model-cache image — see the playbook |
+| 25 | Parallelize the flow (fan-out groups) | step-25-parallelize-flow | in-progress | — | — |
 
 ## Notes / blockers
 

@@ -1,10 +1,10 @@
-"""Test doubles shared across the vision-call stages (photo_analyzer, enhance,
-caption).
+"""Test doubles shared across more than one test file.
 
-Kept here rather than duplicated per file because all three exercise the same
-:class:`~album.photo_analyzer.PhotoAnalyzer` path and so need the same
-:class:`ThumbnailSource` fake and the same PydanticAI stand-in models
-(quality-practices.md §2.4 — a double shared across files lives in one place).
+Kept here rather than duplicated per file once a second file needs the same
+double (quality-practices.md §2.4). The vision-call stages (photo_analyzer,
+enhance, caption) share the same :class:`ThumbnailSource` fake and PydanticAI
+stand-in models; ``quality``'s :class:`AestheticScorer`/``Embedder`` doubles
+are shared between ``test_quality.py`` and the flow concurrency test.
 """
 
 from __future__ import annotations
@@ -27,6 +27,31 @@ class FakeThumbnails:
     def get_thumbnail(self, asset_id: str, *, size: str = "thumbnail") -> bytes:
         self.calls.append(asset_id)
         return self._by_asset.get(asset_id, self._default)
+
+
+class ConstantAesthetic:
+    """A fixed-score :class:`~album.stages.quality.AestheticScorer` double,
+    counting calls so tests can assert idempotency (not re-scored on a rerun)."""
+
+    def __init__(self, value: float = 0.5) -> None:
+        self.value = value
+        self.calls = 0
+
+    def score(self, image: bytes) -> float:
+        self.calls += 1
+        return self.value
+
+
+class ConstantEmbedder:
+    """A fixed-embedding :class:`~album.stages.quality.Embedder` double (the
+    768-dim width matches data-model.md's ``Vector(768)``), counting calls."""
+
+    def __init__(self) -> None:
+        self.calls = 0
+
+    def embed(self, image: bytes) -> list[float]:
+        self.calls += 1
+        return [0.1] * 768
 
 
 def analysis_test_model(**overrides: object) -> TestModel:

@@ -15,6 +15,7 @@ from sqlalchemy.orm import Session
 
 from album.db.models import Album, Photo
 from album.stages.quality import QualityResult, QualityStage, compute_blur_score
+from tests.doubles import ConstantAesthetic, ConstantEmbedder
 
 _IMAGES = Path(__file__).parent.parent.parent / "fixtures" / "images"
 _SHARP = (_IMAGES / "sharp.jpg").read_bytes()
@@ -34,28 +35,9 @@ class FakeThumbnails:
         return self._by_asset.get(asset_id, self._default)
 
 
-class ConstantAesthetic:
-    def __init__(self, value: float = 0.5) -> None:
-        self.value = value
-        self.calls = 0
-
-    def score(self, image: bytes) -> float:
-        self.calls += 1
-        return self.value
-
-
 class RaisingAesthetic:
     def score(self, image: bytes) -> float:
         raise RuntimeError("model unavailable")
-
-
-class ConstantEmbedder:
-    def __init__(self) -> None:
-        self.calls = 0
-
-    def embed(self, image: bytes) -> list[float]:
-        self.calls += 1
-        return [0.1] * 768
 
 
 def test_compute_blur_score_ranks_sharp_above_blurry() -> None:
