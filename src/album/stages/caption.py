@@ -35,6 +35,7 @@ from sqlalchemy.orm import Session
 
 from album.db.models import Album, Photo
 from album.photo_analyzer import PhotoAnalyzer
+from album.stages.base import Stage
 
 _log = logging.getLogger(__name__)
 
@@ -46,7 +47,7 @@ class CaptionResult:
     failed: int = 0
 
 
-class CaptionStage:
+class CaptionStage(Stage[CaptionResult]):
     """`caption` — guarantee every selected photo has a stored caption. Idempotent.
 
     Owns no vision logic of its own: it routes through the same injected
@@ -58,8 +59,8 @@ class CaptionStage:
     def __init__(self, analyzer: PhotoAnalyzer) -> None:
         self._analyzer = analyzer
 
-    def run(self, album_id: int, session: Session, *, force: bool = False) -> CaptionResult:
-        """Ensure every ``selected`` photo in ``album_id`` has a stored caption.
+    def _process(self, album: Album, session: Session, *, force: bool) -> CaptionResult:
+        """Ensure every ``selected`` photo in ``album`` has a stored caption.
 
         Idempotent unless ``force``: a photo whose shared analysis already ran
         (via a prior `enhance` run, or a prior `caption` run) is not re-analyzed —
@@ -67,34 +68,34 @@ class CaptionStage:
         `enhance` and `caption` does not matter; whichever runs first triggers the
         one shared call.
         """
-        album = session.get(Album, album_id)
-        if album is None:
-            raise ValueError(f"no album with id {album_id}")
-
         result = CaptionResult()
         photos = session.scalars(
-            select(Photo).where(Photo.album_id == album_id, Photo.selected == True)  # noqa: E712
+            select(Photo).where(Photo.album_id == album.id, Photo.selected == True)  # noqa: E712
         )
         for photo in photos:
-            try:
-                analysis = self._analyzer.ensure(session, photo, force=force)
-            except Exception:
-                # Failure isolation: one bad photo (unreadable thumbnail,
-                # unparseable model response) must not sink the whole album's
-                # captioning run.
-                _log.warning(
-                    "failed to caption photo %s (%s)", photo.id, photo.filename, exc_info=True
-                )
-                result.failed += 1
-                continue
-
-            if analysis is None:
-                result.skipped += 1
-            else:
-                result.captioned += 1
+            self._caption_photo(photo, session, force, result)
 
         session.flush()
         return result
+
+    def _caption_photo(
+        self, photo: Photo, session: Session, force: bool, result: CaptionResult
+    ) -> None:
+        """Ensure one photo's shared analysis has run, tallying the outcome onto
+        ``result``. Isolates a per-photo failure so one bad photo (unreadable
+        thumbnail, unparseable model response) doesn't sink the whole album's
+        captioning run."""
+        try:
+            analysis = self._analyzer.ensure(session, photo, force=force)
+        except Exception:
+            _log.warning("failed to caption photo %s (%s)", photo.id, photo.filename, exc_info=True)
+            result.failed += 1
+            return
+
+        if analysis is None:
+            result.skipped += 1
+        else:
+            result.captioned += 1
 
 
 __all__ = ["CaptionResult", "CaptionStage"]

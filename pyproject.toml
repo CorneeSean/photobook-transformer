@@ -56,10 +56,20 @@ select = ["E", "F", "I", "UP", "B", "C90"]
 
 [tool.ruff.lint.mccabe]
 # Cheap, dependency-free complexity smell check (Sonar-style), complementing the
-# radon/xenon gate below. 10 is ruff's conventional ceiling and is green today;
-# mccabe scores a touch more leniently than radon CC, so this catches regressions
-# early while xenon holds the harder per-block/module/average line.
-max-complexity = 10
+# radon/xenon gate below. Ceiling 5 matches the radon A boundary (CC <= 5), so an
+# over-complex function trips this fast ruff pass before the harder xenon gate.
+# mccabe scores a touch more leniently than radon CC, so xenon still holds the
+# harder per-block/module/average line — this just catches regressions early.
+max-complexity = 5
+
+[tool.ruff.lint.per-file-ignores]
+# The A-level complexity gate governs *production* code — xenon runs on `src`
+# only, and mccabe (C901) mirrors that scope. Test functions are governed by the
+# §2 testing conventions (class grouping, parametrization) rather than a per-
+# function CC ceiling: an orchestration/wiring test (e.g. flow's task-graph
+# assertions) is legitimately branchier than any single production method, and
+# splitting it to hit CC 5 would harm rather than help readability.
+"tests/**" = ["C901"]
 
 [tool.basedpyright]
 include = ["src", "tests"]
@@ -96,11 +106,13 @@ test = "pytest"
 test-unit = "pytest -m 'not integration'"
 # Only the integration-marked tests (containers + real HTTP client boundary).
 test-integration = "pytest -m 'integration'"
-# Complexity/maintainability gate (radon metrics, enforced by xenon). Thresholds:
-# no single block worse than B (CC>10), no module averaging worse than B, and the
-# whole-codebase average stays A. Tightened to B after the stage-class refactor
-# split the two former grade-C blocks (assemble, enhance._enhance_scene).
-complexity = "xenon --max-absolute B --max-modules B --max-average A src"
+# Complexity/maintainability gate (radon metrics, enforced by xenon). Thresholds
+# are A across the board: no single block worse than A (CC>5), no module averaging
+# worse than A, whole-codebase average A. Radon grades a class by the mean of its
+# methods and a module by the mean of its blocks, so keeping every method CC <= 5
+# satisfies all three. Tightened to A after the Stage Template Method base removed
+# the per-stage album-guard branch and the remaining grade-B methods were split.
+complexity = "xenon --max-absolute A --max-modules A --max-average A src"
 up = "docker compose up --build"
 down = "docker compose down"
 migrate = "alembic upgrade head"
@@ -123,6 +135,6 @@ sequence = [
     { cmd = "ruff check ." },
     { cmd = "ruff format --check ." },
     { cmd = "basedpyright" },
-    { cmd = "xenon --max-absolute B --max-modules B --max-average A src" },
+    { cmd = "xenon --max-absolute A --max-modules A --max-average A src" },
     { shell = "pytest || [ \"$?\" = \"5\" ]" },
 ]

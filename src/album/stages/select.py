@@ -60,6 +60,7 @@ from sqlalchemy.orm import Session
 
 from album.db.models import Album, Photo
 from album.db.similarity import SimilaritySearch
+from album.stages.base import Stage
 
 _log = logging.getLogger(__name__)
 
@@ -77,7 +78,7 @@ class SelectResult:
     scenes: int = 0
 
 
-class SelectStage:
+class SelectStage(Stage[SelectResult]):
     """`select` — diversity-aware, people-aware best-of-scene via MMR. Idempotent.
 
     The ``pgvector`` similarity query sits behind the substitutable
@@ -100,26 +101,16 @@ class SelectStage:
         self._lead_boost = lead_boost
         self._group_boost = group_boost
 
-    def run(self, album_id: int, session: Session) -> SelectResult:
-        """Pick the best, diverse photos per scene in ``album_id``. Idempotent."""
-        album = session.get(Album, album_id)
-        if album is None:
-            raise ValueError(f"no album with id {album_id}")
-
+    def _process(self, album: Album, session: Session, *, force: bool) -> SelectResult:
+        """Pick the best, diverse photos per scene in ``album``. Idempotent."""
         lead_ids = {person.immich_person_id for person in album.people if person.is_lead}
 
         # order_by(Photo.id): deterministic tie-breaking when effective scores are equal.
         photos = list(
-            session.scalars(sa_select(Photo).where(Photo.album_id == album_id).order_by(Photo.id))
+            session.scalars(sa_select(Photo).where(Photo.album_id == album.id).order_by(Photo.id))
         )
-        for photo in photos:  # reset so a re-run is deterministic
-            photo.selected = False
-
-        by_scene: dict[int, list[Photo]] = {}
-        for photo in photos:
-            if photo.scene_id is None:  # unclustered — never selected
-                continue
-            by_scene.setdefault(photo.scene_id, []).append(photo)
+        self._reset_selection(photos)
+        by_scene = self._group_by_scene(photos)
 
         result = SelectResult(scenes=len(by_scene))
         for scene_id in sorted(by_scene):
@@ -127,6 +118,22 @@ class SelectStage:
 
         session.flush()
         return result
+
+    @staticmethod
+    def _reset_selection(photos: list[Photo]) -> None:
+        """Clear ``selected`` up front so a re-run recomputes rather than compounding."""
+        for photo in photos:
+            photo.selected = False
+
+    @staticmethod
+    def _group_by_scene(photos: list[Photo]) -> dict[int, list[Photo]]:
+        """Bucket ``photos`` by ``scene_id``, dropping unclustered (``None``) ones."""
+        by_scene: dict[int, list[Photo]] = {}
+        for photo in photos:
+            if photo.scene_id is None:  # unclustered — never selected
+                continue
+            by_scene.setdefault(photo.scene_id, []).append(photo)
+        return by_scene
 
     def _select_scene(self, candidates: list[Photo], session: Session, lead_ids: set[str]) -> int:
         """MMR + people/lead coverage over one scene. Returns the number picked."""
@@ -156,9 +163,17 @@ class SelectStage:
         photo has no recognized people, so a face-free album ranks as before."""
         base = photo.aesthetic_score if photo.aesthetic_score is not None else float("-inf")
         people = photo.person_ids or []
-        num_leads = sum(1 for person_id in people if person_id in lead_ids) if lead_ids else 0
+        num_leads = self._count_leads(people, lead_ids)
         boost = self._group_boost * len(people) + self._lead_boost * num_leads
         return base + boost
+
+    @staticmethod
+    def _count_leads(people: list[str], lead_ids: set[str]) -> int:
+        """How many of ``people`` are recognized leads. Short-circuits to 0 when
+        the album has no leads at all, so a lead-less album never pays for the scan."""
+        if not lead_ids:
+            return 0
+        return sum(1 for person_id in people if person_id in lead_ids)
 
     def _cover_leads(
         self,
@@ -204,15 +219,24 @@ class SelectStage:
         """Select ``candidate`` unless a dup-group repeat or near-dup of the guard set."""
         if candidate.selected:
             return False
-        if candidate.duplicate_group_id is not None and candidate.duplicate_group_id in dup_groups:
+        if self._is_dup_group_repeat(candidate, dup_groups):
             return False
         if similarity_against and self._too_similar(candidate, similarity_against, session):
             return False
+        self._record_pick(candidate, picked, dup_groups)
+        return True
+
+    @staticmethod
+    def _is_dup_group_repeat(candidate: Photo, dup_groups: set[str]) -> bool:
+        dup_group_id = candidate.duplicate_group_id
+        return dup_group_id is not None and dup_group_id in dup_groups
+
+    @staticmethod
+    def _record_pick(candidate: Photo, picked: list[Photo], dup_groups: set[str]) -> None:
         candidate.selected = True
         picked.append(candidate)
         if candidate.duplicate_group_id is not None:
             dup_groups.add(candidate.duplicate_group_id)
-        return True
 
     def _too_similar(self, candidate: Photo, against: list[Photo], session: Session) -> bool:
         max_sim = self._similarity.max_similarity(

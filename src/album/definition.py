@@ -44,21 +44,22 @@ class LeadFacesYAML(BaseModel):
 
     @model_validator(mode="after")
     def _exactly_one_input(self) -> LeadFacesYAML:
-        provided = [
-            name
-            for name, value in (
-                ("reference_image", self.reference_image),
-                ("reference_asset_id", self.reference_asset_id),
-                ("person_ids", self.person_ids),
-            )
-            if value
-        ]
+        provided = self._provided_fields()
         if len(provided) != 1:
             raise ValueError(
                 "lead_faces must set exactly one of reference_image, "
                 f"reference_asset_id, person_ids (got: {provided or 'none'})"
             )
         return self
+
+    def _provided_fields(self) -> list[str]:
+        """Names of the lead-identifying fields that were actually set."""
+        candidates = (
+            ("reference_image", self.reference_image),
+            ("reference_asset_id", self.reference_asset_id),
+            ("person_ids", self.person_ids),
+        )
+        return [name for name, value in candidates if value]
 
 
 class AlbumYAML(BaseModel):

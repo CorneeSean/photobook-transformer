@@ -29,7 +29,7 @@ from typing import Protocol, runtime_checkable
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from album.db.models import Album, Photo
+from album.db.models import Album, Photo, Segment
 
 
 @dataclass(frozen=True)
@@ -104,6 +104,18 @@ def iter_book_pages(album: Album, session: Session) -> list[BookPage]:
 
     Raises :class:`NotAssembledError` if no photo is placed yet.
     """
+    placed = _fetch_placed_photos(album, session)
+    segments_by_id = {seg.id: seg for seg in album.segments}
+    seen_segment_ids: set[int | None] = set()
+    pages: list[BookPage] = []
+    for number, group in groupby(placed, key=lambda p: p.page_number):
+        page_photos = list(group)
+        pages.append(_build_page(number, page_photos, segments_by_id, seen_segment_ids))
+    return pages
+
+
+def _fetch_placed_photos(album: Album, session: Session) -> list[Photo]:
+    """The album's selected, paginated photos, in page order — ``assemble``'s output."""
     placed = list(
         session.scalars(
             select(Photo)
@@ -115,26 +127,35 @@ def iter_book_pages(album: Album, session: Session) -> list[BookPage]:
         raise NotAssembledError(
             f"album {album.slug!r} has no placed photos — run `assemble` before printing"
         )
+    return placed
 
-    segments_by_id = {seg.id: seg for seg in album.segments}
-    pages: list[BookPage] = []
-    seen_segment_ids: set[int | None] = set()
-    for number, group in groupby(placed, key=lambda p: p.page_number):
-        page_photos = list(group)
-        segment_id = page_photos[0].segment_id
-        segment = segments_by_id.get(segment_id) if segment_id is not None else None
-        starts_segment = segment is not None and segment_id not in seen_segment_ids
-        seen_segment_ids.add(segment_id)
-        pages.append(
-            BookPage(
-                number=number,  # pyright: ignore[reportArgumentType] -- filtered is_not(None) above
-                photos=[_book_photo(p) for p in page_photos],
-                segment_label=segment.label if segment is not None else None,
-                segment_place=segment.place if segment is not None else None,
-                starts_segment=starts_segment,
-            )
-        )
-    return pages
+
+def _build_page(
+    number: int | None,
+    page_photos: list[Photo],
+    segments_by_id: dict[int, Segment],
+    seen_segment_ids: set[int | None],
+) -> BookPage:
+    """One :class:`BookPage` for a single page number's photos, marking whether
+    it opens a new segment and recording that segment as seen."""
+    segment_id = page_photos[0].segment_id
+    segment = _segment_for(segment_id, segments_by_id)
+    starts_segment = segment is not None and segment_id not in seen_segment_ids
+    seen_segment_ids.add(segment_id)
+    return BookPage(
+        number=number,  # pyright: ignore[reportArgumentType] -- filtered is_not(None) above
+        photos=[_book_photo(p) for p in page_photos],
+        segment_label=segment.label if segment is not None else None,
+        segment_place=segment.place if segment is not None else None,
+        starts_segment=starts_segment,
+    )
+
+
+def _segment_for(segment_id: int | None, segments_by_id: dict[int, Segment]) -> Segment | None:
+    """The segment a photo belongs to, or ``None`` for an unsegmented photo."""
+    if segment_id is None:
+        return None
+    return segments_by_id.get(segment_id)
 
 
 def _book_photo(photo: Photo) -> BookPhoto:

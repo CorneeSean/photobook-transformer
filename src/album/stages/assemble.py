@@ -44,6 +44,7 @@ from sqlalchemy.orm import Session
 from weasyprint import HTML
 
 from album.db.models import Album, Photo, Segment
+from album.stages.base import Stage
 
 _log = logging.getLogger(__name__)
 
@@ -89,7 +90,7 @@ def spine_width_in(page_count: int) -> float:
     return page_count / SPINE_PPI + SPINE_BASE_IN
 
 
-class AssembleStage:
+class AssembleStage(Stage[AssembleResult]):
     """`assemble` — lay out selected photos into page templates and render a
     print-ready PDF via WeasyPrint. Idempotent.
 
@@ -102,29 +103,14 @@ class AssembleStage:
         self._output_dir = output_dir
         self._templates_dir = templates_dir
 
-    def run(self, album_id: int, session: Session, *, force: bool = False) -> AssembleResult:
-        """Lay out ``album_id``'s selected photos and render a print PDF. Idempotent."""
-        album = session.get(Album, album_id)
-        if album is None:
-            raise ValueError(f"no album with id {album_id}")
-
+    def _process(self, album: Album, session: Session, *, force: bool) -> AssembleResult:
+        """Lay out ``album``'s selected photos and render a print PDF. Idempotent."""
         if album.assembled_pdf_path is not None and not force:
             return AssembleResult(output_path=album.assembled_pdf_path, skipped=True)
 
-        all_photos = list(session.scalars(select(Photo).where(Photo.album_id == album_id)))
-        # Reset so a re-run is deterministic and never leaves a stale page_number on
-        # a photo that was placed by a previous run but is no longer selected
-        # (mirrors cluster.py/select.py's reset-up-front idempotency pattern).
-        for photo in all_photos:
-            photo.page_number = None
-
-        photos = [p for p in all_photos if p.selected]
-        missing_render = [p for p in photos if p.rendered_path is None]
-        if missing_render:
-            raise ValueError(
-                f"album {album_id}: {len(missing_render)} selected photo(s) have no "
-                "rendered_path yet — run `render` before `assemble`"
-            )
+        all_photos = list(session.scalars(select(Photo).where(Photo.album_id == album.id)))
+        self._reset_page_numbers(all_photos)
+        photos = self._select_for_placement(all_photos, album.id)
 
         html_pages, page_number, photos_placed = self._lay_out(album, photos)
 
@@ -142,6 +128,29 @@ class AssembleStage:
             output_path=str(output_path),
         )
 
+    @staticmethod
+    def _reset_page_numbers(photos: list[Photo]) -> None:
+        """Reset so a re-run is deterministic and never leaves a stale page_number
+        on a photo that was placed by a previous run but is no longer selected
+        (mirrors cluster.py/select.py's reset-up-front idempotency pattern)."""
+        for photo in photos:
+            photo.page_number = None
+
+    def _select_for_placement(self, all_photos: list[Photo], album_id: int | None) -> list[Photo]:
+        """Filter to selected photos, raising if any lacks a ``rendered_path``."""
+        photos = [p for p in all_photos if p.selected]
+        self._require_rendered(photos, album_id)
+        return photos
+
+    @staticmethod
+    def _require_rendered(photos: list[Photo], album_id: int | None) -> None:
+        missing_render = [p for p in photos if p.rendered_path is None]
+        if missing_render:
+            raise ValueError(
+                f"album {album_id}: {len(missing_render)} selected photo(s) have no "
+                "rendered_path yet — run `render` before `assemble`"
+            )
+
     def _lay_out(self, album: Album, photos: list[Photo]) -> tuple[list[str], int, int]:
         """Render each (segment, scene) group to page HTML, stamping each placed
         photo's ``page_number``. Returns ``(html_pages, page_count, photos_placed)``."""
@@ -158,26 +167,46 @@ class AssembleStage:
         photos_placed = 0
         html_pages: list[str] = []
         for segment, group in self._group_photos(album, photos):
-            if segment is not None:
-                page_number += 1
-                html_pages.append(
-                    env.get_template("section.html").render(
-                        **base_ctx, label=segment.label, place=segment.place
-                    )
-                )
-            for chunk in self._chunk_by_scene(group):
-                page_number += 1
-                html_pages.append(
-                    env.get_template(self._layout_for_size(len(chunk))).render(
-                        **base_ctx, photos=[self._photo_ctx(p) for p in chunk]
-                    )
-                )
-                for photo in chunk:
-                    photo.page_number = page_number
-                    photos_placed += 1
+            group_pages, page_number, group_placed = self._render_group(
+                env, base_ctx, segment, group, page_number
+            )
+            html_pages.extend(group_pages)
+            photos_placed += group_placed
         return html_pages, page_number, photos_placed
 
-    def _photo_ctx(self, photo: Photo) -> dict[str, Any]:
+    def _render_group(
+        self,
+        env: Environment,
+        base_ctx: dict[str, Any],
+        segment: Segment | None,
+        group: list[Photo],
+        page_number: int,
+    ) -> tuple[list[str], int, int]:
+        """Render one (segment, scene) group's section header (if any) and its
+        photo pages. Returns ``(html_pages, page_number, photos_placed)``."""
+        html_pages: list[str] = []
+        if segment is not None:
+            page_number += 1
+            html_pages.append(
+                env.get_template("section.html").render(
+                    **base_ctx, label=segment.label, place=segment.place
+                )
+            )
+        photos_placed = 0
+        for chunk in self._chunk_by_scene(group):
+            page_number += 1
+            html_pages.append(
+                env.get_template(self._layout_for_size(len(chunk))).render(
+                    **base_ctx, photos=[self._photo_ctx(p) for p in chunk]
+                )
+            )
+            for photo in chunk:
+                photo.page_number = page_number
+                photos_placed += 1
+        return html_pages, page_number, photos_placed
+
+    @staticmethod
+    def _photo_ctx(photo: Photo) -> dict[str, Any]:
         return {"image_path": photo.rendered_path, "caption": photo.caption}
 
     def _group_photos(
@@ -203,14 +232,16 @@ class AssembleStage:
             groups.append((segment, list(group_iter)))
         return groups
 
-    def _segment_position(self, segments_by_id: dict[int, Segment], segment_id: int | None) -> int:
+    @staticmethod
+    def _segment_position(segments_by_id: dict[int, Segment], segment_id: int | None) -> int:
         if segment_id is None:
             return 0
         segment = segments_by_id.get(segment_id)
         # orphaned/out-of-range segment_id: sort with the unsegmented group
         return segment.position if segment is not None else 0
 
-    def _chunk_by_scene(self, photos: list[Photo]) -> list[list[Photo]]:
+    @staticmethod
+    def _chunk_by_scene(photos: list[Photo]) -> list[list[Photo]]:
         """Split one segment's (already sorted) photos into page-sized chunks,
         per-scene, cycling through the layout capacities in ``_LAYOUT_CYCLE``."""
         chunks: list[list[Photo]] = []
@@ -225,7 +256,8 @@ class AssembleStage:
                 cycle_pos += 1
         return chunks
 
-    def _layout_for_size(self, size: int) -> str:
+    @staticmethod
+    def _layout_for_size(size: int) -> str:
         """``_chunk_by_scene`` only ever slices chunks to one of ``_LAYOUT_CYCLE``'s
         capacities, so every real chunk size has an exact match here — a mismatch
         means the chunker's invariant broke, which should fail loudly rather than
@@ -235,7 +267,8 @@ class AssembleStage:
                 return template_name
         raise ValueError(f"no layout template for a chunk of size {size}")
 
-    def _render_pdf(self, html_pages: list[str], output_path: Path) -> None:
+    @staticmethod
+    def _render_pdf(html_pages: list[str], output_path: Path) -> None:
         # base_url="." resolves each page's <img src> (Photo.rendered_path) against
         # the process's working directory, matching how that path is stored — not
         # the templates dir, which holds no photos.

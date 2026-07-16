@@ -29,6 +29,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from album.db.models import Album, Photo
+from album.stages.base import Stage
 
 _log = logging.getLogger(__name__)
 
@@ -73,7 +74,7 @@ def compute_blur_score(image: bytes) -> float:
     return float(cv2.Laplacian(decoded, cv2.CV_64F).var())
 
 
-class QualityStage:
+class QualityStage(Stage[QualityResult]):
     """`quality` — score each photo's blur and aesthetics. Idempotent unless ``force``.
 
     Blur is computed here for real (cheap OpenCV Laplacian variance). The heavy
@@ -93,38 +94,54 @@ class QualityStage:
         self._aesthetic = aesthetic
         self._embedder = embedder
 
-    def run(self, album_id: int, session: Session, *, force: bool = False) -> QualityResult:
-        """Score every photo in ``album_id``. Idempotent unless ``force``."""
-        if session.get(Album, album_id) is None:
-            raise ValueError(f"no album with id {album_id}")
-
+    def _process(self, album: Album, session: Session, *, force: bool) -> QualityResult:
+        """Score every photo in ``album``. Idempotent unless ``force``."""
         result = QualityResult()
-        for photo in session.scalars(select(Photo).where(Photo.album_id == album_id)):
-            already_scored = photo.blur_score is not None and photo.aesthetic_score is not None
-            if already_scored and not force:
-                result.skipped += 1
-                continue
-
-            try:
-                image = self._thumbnails.get_thumbnail(photo.immich_asset_id)
-                blur = compute_blur_score(image)
-                aesthetic_score = self._aesthetic.score(image)
-                embedding = self._embedder.embed(image) if self._embedder is not None else None
-            except Exception:
-                # Failure isolation: one unreadable thumbnail must not sink a 3,000-photo run.
-                _log.warning(
-                    "failed to score photo %s (%s)", photo.id, photo.filename, exc_info=True
-                )
-                result.failed += 1
-                continue
-            # Assign only once every computation has succeeded, so a mid-photo failure
-            # leaves no partial write for the trailing flush to persist (blur without
-            # aesthetic would otherwise both look scored-ish and get committed).
-            photo.blur_score = blur
-            photo.aesthetic_score = aesthetic_score
-            if embedding is not None:
-                photo.clip_embedding = embedding
-            result.scored += 1
+        for photo in session.scalars(select(Photo).where(Photo.album_id == album.id)):
+            self._score_photo(photo, result, force=force)
 
         session.flush()
         return result
+
+    def _score_photo(self, photo: Photo, result: QualityResult, *, force: bool) -> None:
+        """Score one photo, updating ``result`` in place. Skips if already scored
+        (unless ``force``); isolates a scoring failure as a ``failed`` count.
+        """
+        if self._already_scored(photo) and not force:
+            result.skipped += 1
+            return
+
+        scores = self._try_score(photo)
+        if scores is None:
+            result.failed += 1
+            return
+        # Assign only once every computation has succeeded, so a mid-photo failure
+        # leaves no partial write for the trailing flush to persist (blur without
+        # aesthetic would otherwise both look scored-ish and get committed).
+        self._apply_scores(photo, scores)
+        result.scored += 1
+
+    @staticmethod
+    def _already_scored(photo: Photo) -> bool:
+        return photo.blur_score is not None and photo.aesthetic_score is not None
+
+    @staticmethod
+    def _apply_scores(photo: Photo, scores: tuple[float, float, list[float] | None]) -> None:
+        blur, aesthetic_score, embedding = scores
+        photo.blur_score = blur
+        photo.aesthetic_score = aesthetic_score
+        if embedding is not None:
+            photo.clip_embedding = embedding
+
+    def _try_score(self, photo: Photo) -> tuple[float, float, list[float] | None] | None:
+        """Fetch the thumbnail and compute all scores for ``photo``, or ``None`` on failure."""
+        try:
+            image = self._thumbnails.get_thumbnail(photo.immich_asset_id)
+            blur = compute_blur_score(image)
+            aesthetic_score = self._aesthetic.score(image)
+            embedding = self._embedder.embed(image) if self._embedder is not None else None
+        except Exception:
+            # Failure isolation: one unreadable thumbnail must not sink a 3,000-photo run.
+            _log.warning("failed to score photo %s (%s)", photo.id, photo.filename, exc_info=True)
+            return None
+        return blur, aesthetic_score, embedding

@@ -89,6 +89,14 @@ class shape:
   mutation (`BookPage`, `ToneParams`); plain when the stage accumulates counts
   into it during the run (`QualityResult`).
 
+> Since the Template Method retrofit (§1.6.1) a stage no longer *writes* its own
+> `run`: it subclasses `Stage[…Result]` and implements `_process(album, session,
+> *, force)`. The base's `run` performs the invariant album lookup + guard, then
+> calls `_process`. The conventions above are unchanged — they are now enforced by
+> the base signature rather than restated per stage. The `SelectStage` sketch
+> above predates the base; read it as "what `_process` contains", with `run`
+> inherited.
+
 ### 1.3 Encapsulation
 
 - **Public surface is the smallest thing a collaborator needs.** For a stage
@@ -98,6 +106,12 @@ class shape:
 - **`_`-prefix every internal method, attribute, and module constant.** Stored
   dependencies are `self._similarity`, not `self.similarity` — a stage's injected
   collaborators are implementation detail, not public API.
+- **A private helper that reads no instance state is a `@staticmethod`.** If
+  `_verb_noun` never touches `self._x`, mark it `@staticmethod` (as the base's
+  `_load_album` does) — it makes the self-independence explicit and is applied
+  uniformly across a class's helpers, not sporadically. A helper that *does* read a
+  stored dependency or tunable stays an instance method. This is a consistency
+  rule, not a correctness one; keep it uniform within and across the stage family.
 - **Prefer a factory classmethod for "the real thing".** `ImmichClient.from_settings()`
   is the pattern: the constructor takes explicit dependencies (so tests pass
   fakes), and a `from_settings()` / `from_config()` classmethod builds the
@@ -147,6 +161,115 @@ defaulting to the real thing built from `config.py` — but now defaults to a
 constructed stage (or the collaborator the stage needs), so `pipeline()` itself
 stays unit-testable for wiring/ordering without touching Postgres, Immich,
 Claude, darktable-cli, or Lulu.
+
+### 1.6 Design patterns — deliberate, not decorative
+
+Patterns are adopted only where a usage analysis shows a *recurring shape* they
+name better than ad-hoc code. The verdicts below are the standing decisions for
+this codebase; a new pattern is added the same way — evidence first, then the
+name.
+
+#### 1.6.1 Template Method — the `Stage` base (adopted)
+
+Every stage's `run` opens with the same invariant envelope: load the album by
+`album_id`, guard its existence, *then* do the stage-specific work. That shared
+skeleton is a **Template Method**, owned by an abstract base so no stage repeats
+it:
+
+```python
+class Stage[ResultT](ABC):  # PEP 695 generics — the py3.14 idiom, no TypeVar import
+    """Template Method base for every pipeline stage. `run` owns the invariant
+    envelope (load + guard the album); the variant work is `_process`."""
+
+    def run(self, album_id: int, session: Session, *, force: bool = False) -> ResultT:
+        album = self._load_album(album_id, session)
+        return self._process(album, session, force=force)
+
+    @staticmethod
+    def _load_album(album_id: int, session: Session) -> Album:
+        album = session.get(Album, album_id)
+        if album is None:
+            raise ValueError(f"no album with id {album_id}")
+        return album
+
+    @abstractmethod
+    def _process(self, album: Album, session: Session, *, force: bool) -> ResultT: ...
+```
+
+Rules that keep this honest:
+
+- **`run` stays the public surface** — the `album_id`-first, session-per-call, and
+  `force`-is-keyword-only conventions (§1.2) are now enforced *by the base's
+  signature*, not re-typed per stage. Tests still target `run` (§2.4).
+- **`Stage` is `Generic[ResultT]`** so each subclass keeps its own concrete
+  result: `class SyncStage(Stage[SyncResult])`, `_process(...) -> SyncResult`. No
+  stage loses its typed return.
+- **Only the genuinely invariant step is hoisted.** The album lookup + None-guard
+  is universal, so it lives in the base. The *idempotency short-circuit logic* is
+  **not** hoisted — it varies structurally (album-level early-return for
+  `assemble`/`fulfill`, per-photo skip for `quality`/`enhance`/`caption`/`render`,
+  none for `sync`/`cluster`/`select`), so each `_process` keeps its own. Hoisting a
+  step that isn't actually shared is how Template Method rots into a god-method.
+- **`force` is universal by *signature*, inert where there's no envelope.** The
+  base's `run`/`_process` carry `*, force: bool` for every stage so the public
+  surface is uniform (one Template Method, one signature). The three stages with no
+  per-run idempotency — `sync`, `cluster`, `select` — accept `force` and ignore it.
+  That's a deliberate trade: a uniform inherited `run` at the cost of an inert knob
+  on three stages, versus per-stage `run` overrides. The *flag* being shared is not
+  the same as the *short-circuit logic* being shared — only the former is.
+- **A stage that needs an extra invariant guard adds it in `_process`**, not the
+  base — e.g. `sync` still raises when `immich_album_id` is unset.
+- **ABC here, Protocol for collaborators — they solve different problems** (§1.6.4).
+
+`lead_faces.LeadFaceResolver` is *not* a `Stage` (it's a resolver invoked by
+`select`, not a DAG stage with a `run(album_id, session)` contract) and stays a
+plain class. "Where appropriate" means the shape must actually match.
+
+#### 1.6.2 Strategy — the `Printer` boundary (already present, keep)
+
+`fulfill` owns no delivery policy; it delegates to an injected
+[`Printer`](/stages/fulfill.md) with `HtmlPrinter` / `LuluPrinter` as
+interchangeable concretes. That *is* Strategy, and it predates this document —
+the analysis only confirms it. Guidance going forward: when a stage grows a
+second interchangeable *how* (a different selection-scoring rule, a different
+scene-detection rule), extract it as an injected Strategy the same way `Printer`
+was — a `Protocol` collaborator with named concretes — rather than branching on a
+mode flag inside the stage. Do this only when a second concrete actually exists;
+one implementation behind a Strategy interface is speculative generality.
+
+#### 1.6.3 Singleton — rejected, on purpose
+
+The usage analysis found no honest home for Singleton. The only global-ish state
+is `config.Settings` and the engine/session factory, and both are already handled
+better by the patterns this codebase is built on:
+
+- **Dependency injection + `from_settings()` / `from_config()` factories** (§1.3)
+  are the deliberate alternative. A stage receives its collaborators; it never
+  reaches for a global instance.
+- A Singleton's process-global, self-substituting instance is **actively hostile
+  to the test-double substitution** the whole suite relies on (§2.4) — you cannot
+  cleanly swap a `StubSimilarity` for the real thing if callers bind to a global.
+- `pydantic-settings` already gives `Settings` a cached, single-construction
+  lifecycle where one is wanted, without the pattern's coupling.
+
+So: **do not introduce Singleton.** If a future need looks like it wants one, it
+almost certainly wants an injected collaborator built once in `flow.py` instead.
+
+#### 1.6.4 Protocol vs. ABC — when each
+
+Both express an interface; they are not interchangeable here:
+
+- **`Protocol` (structural) for an injected collaborator** a test substitutes —
+  `SimilaritySearch`, `Printer`, `AssetSource`, `ThumbnailSource`, `Renderer`,
+  `AestheticScorer`, `Embedder`, `LeadFaceProvider`. A fake satisfies it with no
+  inheritance; that zero-coupling substitution is the point (§1.4). Mark
+  `@runtime_checkable` **only** when `flow.py` names the type in a `@flow`
+  signature (Prefect's schema build runs `isinstance`).
+- **`abc.ABC` (nominal) for a shared-behaviour family** where the base supplies a
+  real implementation subclasses reuse via inheritance — the `Stage` Template
+  Method (§1.6.1). Reach for an ABC only when there is behaviour to *inherit*; if
+  the base would be all `@abstractmethod` and no body, it should have been a
+  `Protocol`.
 
 ## 2. Testing conventions
 
@@ -270,19 +393,35 @@ Structure discipline is backed by a machine gate, not just review, so a
 too-large method fails `uv run poe check` the same way a type error does:
 
 - **ruff mccabe (`C90`)** — a cheap, dependency-free per-function complexity smell
-  check (ceiling 10), running inside the existing ruff pass.
+  check, running inside the existing ruff pass. Ceiling **5**, matching the radon
+  A boundary so it catches an over-complex function early, before the harder
+  xenon gate. Scoped to **production code**: `tests/**` is exempted from `C901`
+  (a `per-file-ignores` entry), because the gate governs how *production* units
+  are shaped — xenon runs on `src` only, and mccabe mirrors that. Test structure
+  is governed by the §2 conventions instead; an orchestration/wiring test is
+  legitimately branchier than any single production method.
 - **radon + xenon** — `radon` computes the metrics (cyclomatic complexity,
   maintainability index; `uv run poe metrics` prints them); **xenon** enforces
   them as a gate (`uv run poe complexity`, and inside `poe check` + pre-commit).
-  Thresholds: **no block worse than B** (CC ≤ 10), **no module averaging worse
-  than B**, **whole-codebase average A**. These three settings are kept in
-  lock-step across `poe check`, the `complexity` task, and the pre-commit hook.
+  Thresholds are **A across the board**: **no block worse than A** (CC ≤ 5), **no
+  module averaging worse than A**, **whole-codebase average A** —
+  `xenon --max-absolute A --max-modules A --max-average A src`. These three
+  settings are kept in lock-step across `poe check`, the `complexity` task, and
+  the pre-commit hook.
 
-The gate was tightened from an initial `--max-absolute C` to **B** once the
-stage-class refactor split the two former grade-C blocks (`assemble` and
-`enhance._enhance_scene`) into smaller methods. A new unit that can't meet the
-gate is the signal it's doing too much — extract a collaborator or a helper
-method rather than raising the threshold.
+Radon grades a **class block by the mean of its method complexities** and a
+**module by the mean of its blocks**, so the single discipline that satisfies all
+three thresholds is: **keep every function and method at CC ≤ 5.** Do that and the
+class-mean and module-mean fall out for free. There is no separate "make the class
+smaller" step — there is only "no method does too much."
+
+The gate has been tightened in steps as the structure hardened: initial
+`--max-absolute C`, then **B** once the stage-class refactor split the two former
+grade-C blocks, and now **A** once the `Stage` Template Method (§1.6.1) removed the
+per-stage album-guard branch and the remaining grade-B methods were split into
+named helpers. A new unit that can't meet the gate is the signal it's doing too
+much — extract a collaborator, a helper method, or a Strategy (§1.6.2) rather than
+raising the threshold. The threshold does not go back up.
 
 ## 3. Applying this standard
 
@@ -293,6 +432,16 @@ method rather than raising the threshold.
   fixtures), landed as its own reviewed change, `uv run poe check` green, no
   behavioural change. The shared-analysis collaborator extraction (§1.4) is the
   one piece with real design content; everything else is mechanical.
+- **The `Stage` Template Method base (§1.6.1) and the A-level gate (§2.7) are the
+  current retrofit.** The nine stages inherit `Stage[…Result]` and implement
+  `_process`; every method over CC 5 is split into named helpers so the whole
+  codebase grades A. A helper earns its place by *naming a cohesive step*, not only
+  by shaving complexity — so a few sub-steps below the ceiling were extracted too
+  where it aids reading (the gate is the floor, cohesion is the goal).
+  Behaviour-preserving — the existing tests (which target `run`) stay green
+  unchanged, which is the guardrail. The pattern verdicts in
+  §1.6 (Template Method adopted, Strategy already present, Singleton rejected) are
+  standing decisions, not one-off choices.
 
 ## See also
 

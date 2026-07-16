@@ -73,6 +73,7 @@ from sqlalchemy.orm import Session
 from album.agents.analysis import AnalysisResult
 from album.db.models import Album, Photo
 from album.photo_analyzer import PhotoAnalyzer, ThumbnailSource
+from album.stages.base import Stage
 
 _log = logging.getLogger(__name__)
 
@@ -291,7 +292,7 @@ def _xmp_path(data_root: Path, album_slug: str, filename: str) -> Path:
     return data_root / album_slug / "xmp" / f"{filename}.xmp"
 
 
-class EnhanceStage:
+class EnhanceStage(Stage[EnhanceResult]):
     """`enhance` — reconcile cross-camera tone and write XMP sidecars. Idempotent.
 
     Two collaborators, injected: the shared :class:`~album.photo_analyzer.PhotoAnalyzer`
@@ -312,8 +313,8 @@ class EnhanceStage:
         self._thumbnails = thumbnails
         self._data_root = data_root
 
-    def run(self, album_id: int, session: Session, *, force: bool = False) -> EnhanceResult:
-        """Enhance every ``selected`` photo in ``album_id``: ensure the shared
+    def _process(self, album: Album, session: Session, *, force: bool) -> EnhanceResult:
+        """Enhance every ``selected`` photo in ``album``: ensure the shared
         analysis has run, reconcile cross-camera baseline with the AI's per-photo
         delta, and write an XMP sidecar. Idempotent unless ``force``.
 
@@ -326,14 +327,10 @@ class EnhanceStage:
         reasonable stand-in for "how this moment actually looked" before any
         per-camera drift.
         """
-        album = session.get(Album, album_id)
-        if album is None:
-            raise ValueError(f"no album with id {album_id}")
-
         photos = list(
             session.scalars(
                 select(Photo)
-                .where(Photo.album_id == album_id, Photo.selected == True)  # noqa: E712
+                .where(Photo.album_id == album.id, Photo.selected == True)  # noqa: E712
                 .order_by(Photo.id)
             )
         )
@@ -401,12 +398,20 @@ class EnhanceStage:
     def _ai_delta(self, photo: Photo, analysis: AnalysisResult | None) -> ToneParams:
         """The raw per-photo AI tone delta, from a fresh analysis or the stored columns."""
         if analysis is not None:
-            return ToneParams(
-                exposure_ev=analysis.exposure_ev,
-                temp_shift_k=analysis.temp_shift_k,
-                shadows=analysis.shadows,
-                highlights=analysis.highlights,
-            )
+            return self._ai_delta_from_analysis(analysis)
+        return self._ai_delta_from_stored(photo)
+
+    @staticmethod
+    def _ai_delta_from_analysis(analysis: AnalysisResult) -> ToneParams:
+        return ToneParams(
+            exposure_ev=analysis.exposure_ev,
+            temp_shift_k=analysis.temp_shift_k,
+            shadows=analysis.shadows,
+            highlights=analysis.highlights,
+        )
+
+    @staticmethod
+    def _ai_delta_from_stored(photo: Photo) -> ToneParams:
         # Only reachable when force=False and the photo was already analyzed but
         # never reconciled/xmp_written (e.g. a previous run crashed between the
         # analysis call and the XMP write) — the stored columns still hold the

@@ -82,3 +82,15 @@ Resolve early; record answers back into this bundle (and note them in
    taken. The faces/rating/OCR enrichment ([Immich enrichment](/build/enrichment.md))
    is unaffected: it's additive and API-only. See the full research write-up in
    [`log.md`](/log.md) 2026-07-14.
+
+7. **Follow-up (noted during the A-level refactor, 2026-07-16):** the
+   "selected photos for this album, ordered by id" query
+   (`select(Photo).where(Photo.album_id == album.id, Photo.selected).order_by(Photo.id)`)
+   is repeated near-identically in [`caption`](/stages/caption.md),
+   [`enhance`](/stages/enhance.md), and [`render`](/stages/render.md). Centralizing
+   the album-lookup guard in `Stage` (quality-practices.md §1.6.1) made this the
+   next-most-obvious shared read. Deliberately **not** hoisted in that change (it's
+   pre-existing and the three variants must be confirmed byte-identical first, and a
+   query used by 3 of 9 stages doesn't belong on the all-stages base) — a small
+   `selected_photos(album_id, session)` free function in `stages/` is the likely
+   shape. Settle when one of those three stages next needs editing.

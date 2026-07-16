@@ -57,6 +57,7 @@ photo-album-pipeline/
 │       │   └── analysis.py       # ONE agent; output = bounded tone deltas + caption
 │       │
 │       └── stages/               # one class per stage (run(album_id, session, …)); album_id first
+│           ├── base.py          # Stage[ResultT](ABC): Template Method run() → _process hook
 │           ├── sync.py
 │           ├── quality.py
 │           ├── cluster.py        # segment assignment + scene detection
@@ -156,6 +157,12 @@ suites with parametrization and scoped fixtures — see
   **takes `album_id` first, then the `Session`** — request-scoped state is never a
   constructor dependency; injected collaborators (clients, similarity, printer,
   renderer, vision model) and tunables are.
+- **Every stage class subclasses `stages.base.Stage[…Result]`** and implements
+  `_process(album, session, *, force)`; the base's `run` is the Template Method
+  that performs the invariant album lookup + existence guard, then delegates
+  (quality practices §1.6.1). `flow.py` still wraps the inherited `.run` as a
+  `@task` — the base carries no Prefect import. A non-stage helper class (e.g.
+  `lead_faces.LeadFaceResolver`) does **not** inherit `Stage`.
 - **`agents/*.py` define a Pydantic output model + an `Agent`**, kept out of
   `stages/` so they can be swapped for `TestModel` in tests. The vision work is
   **one combined agent** producing tone deltas *and* caption in a single call.

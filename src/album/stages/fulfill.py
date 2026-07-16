@@ -22,6 +22,7 @@ from sqlalchemy.orm import Session
 
 from album.db.models import Album
 from album.printers.base import Printer
+from album.stages.base import Stage
 
 
 @dataclass
@@ -30,7 +31,7 @@ class FulfillResult:
     output_ref: str | None = None
 
 
-class FulfillStage:
+class FulfillStage(Stage[FulfillResult]):
     """`fulfill` — deliver the assembled book via a pluggable ``Printer``. Idempotent.
 
     Owns no delivery policy of its own: it delegates to the injected
@@ -42,12 +43,8 @@ class FulfillStage:
     def __init__(self, printer: Printer) -> None:
         self._printer = printer
 
-    def run(self, album_id: int, session: Session, *, force: bool = False) -> FulfillResult:
-        """Deliver ``album_id``'s assembled book. Idempotent unless ``force=True``."""
-        album = session.get(Album, album_id)
-        if album is None:
-            raise ValueError(f"no album with id {album_id}")
-
+    def _process(self, album: Album, session: Session, *, force: bool) -> FulfillResult:
+        """Deliver ``album``'s assembled book. Idempotent unless ``force=True``."""
         if album.output_ref is not None and not force:
             return FulfillResult(printed=False, output_ref=album.output_ref)
 

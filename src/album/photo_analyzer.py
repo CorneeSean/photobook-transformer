@@ -91,28 +91,44 @@ class PhotoAnalyzer:
 
         Does not ``flush``/``commit`` — the caller controls the transaction boundary.
         """
-        already_analyzed = (
+        if self._is_already_analyzed(photo) and not force:
+            return None
+
+        image = self._thumbnails.get_thumbnail(photo.immich_asset_id)
+        context = self._build_context(photo)
+        result = analyze_photo(image, context, model=self._model)
+        self._persist(photo, result)
+        return result
+
+    @staticmethod
+    def _is_already_analyzed(photo: Photo) -> bool:
+        """Whether all five stored fields are already populated — the no-op
+        half of ``ensure``'s idempotency contract."""
+        return (
             photo.enhance_exposure_ev is not None
             and photo.enhance_temp_shift_k is not None
             and photo.enhance_shadows is not None
             and photo.enhance_highlights is not None
             and photo.caption is not None
         )
-        if already_analyzed and not force:
-            return None
 
-        image = self._thumbnails.get_thumbnail(photo.immich_asset_id)
-        context = PhotoContext(
+    @staticmethod
+    def _build_context(photo: Photo) -> PhotoContext:
+        """The ``PhotoContext`` for ``photo``'s vision call: segment label/place
+        (both optional — an unsegmented album or out-of-range photo gets neither,
+        never an error), ``Album.meta``, and the photo's named people."""
+        return PhotoContext(
             segment_label=photo.segment.label if photo.segment is not None else None,
             segment_place=photo.segment.place if photo.segment is not None else None,
             album_meta=photo.album.meta,
             person_names=_resolve_person_names(photo),
         )
-        result = analyze_photo(image, context, model=self._model)
 
+    @staticmethod
+    def _persist(photo: Photo, result: AnalysisResult) -> None:
+        """Writes all five stored fields from ``result`` onto ``photo`` in one shot."""
         photo.enhance_exposure_ev = result.exposure_ev
         photo.enhance_temp_shift_k = result.temp_shift_k
         photo.enhance_shadows = result.shadows
         photo.enhance_highlights = result.highlights
         photo.caption = result.caption
-        return result

@@ -52,6 +52,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from album.db.models import Album, Photo
+from album.stages.base import Stage
 
 _log = logging.getLogger(__name__)
 
@@ -115,7 +116,7 @@ class RenderResult:
     not_ready: int = 0
 
 
-class RenderStage:
+class RenderStage(Stage[RenderResult]):
     """`render` — darktable-cli batch over the XMP sidecars. Idempotent.
 
     Two collaborators, injected: the :class:`OriginalSource` (Immich, for the
@@ -135,48 +136,55 @@ class RenderStage:
         self._renderer = renderer
         self._data_root = data_root
 
-    def run(self, album_id: int, session: Session, *, force: bool = False) -> RenderResult:
-        """Render every ``selected`` photo in ``album_id`` that has an XMP
+    def _process(self, album: Album, session: Session, *, force: bool) -> RenderResult:
+        """Render every ``selected`` photo in ``album`` that has an XMP
         sidecar (``xmp_written=True``) into a corrected JPEG. Idempotent unless
         ``force``.
         """
-        album = session.get(Album, album_id)
-        if album is None:
-            raise ValueError(f"no album with id {album_id}")
-
         photos = list(
             session.scalars(
                 select(Photo)
-                .where(Photo.album_id == album_id, Photo.selected == True)  # noqa: E712
+                .where(Photo.album_id == album.id, Photo.selected == True)  # noqa: E712
                 .order_by(Photo.id)
             )
         )
 
         result = RenderResult()
         for photo in photos:
-            if not photo.xmp_written:
-                # Selected but enhance hasn't produced a sidecar yet — nothing for
-                # darktable-cli to read. Flagged, not silently dropped.
-                _log.warning(
-                    "photo %s (%s) is selected but has no XMP sidecar yet — skipping render",
-                    photo.id,
-                    photo.filename,
-                )
-                result.not_ready += 1
-                continue
-
-            already_done = photo.rendered_path is not None and not force
-            if already_done:
-                result.skipped += 1
-                continue
-
-            output_path = self._render_photo(photo, album.slug, result)
-            if output_path is not None:
-                photo.rendered_path = str(output_path)
-                result.rendered += 1
+            self._render_or_skip_photo(photo, album.slug, result, force=force)
 
         session.flush()
         return result
+
+    def _render_or_skip_photo(
+        self, photo: Photo, album_slug: str, result: RenderResult, *, force: bool
+    ) -> None:
+        """Dispatch one selected photo to the not-ready/skip/render outcome,
+        updating ``result`` (and ``photo.rendered_path`` on success) in place."""
+        if not photo.xmp_written:
+            self._flag_not_ready(photo, result)
+            return
+
+        already_done = photo.rendered_path is not None and not force
+        if already_done:
+            result.skipped += 1
+            return
+
+        output_path = self._render_photo(photo, album_slug, result)
+        if output_path is not None:
+            photo.rendered_path = str(output_path)
+            result.rendered += 1
+
+    @staticmethod
+    def _flag_not_ready(photo: Photo, result: RenderResult) -> None:
+        # Selected but enhance hasn't produced a sidecar yet — nothing for
+        # darktable-cli to read. Flagged, not silently dropped.
+        _log.warning(
+            "photo %s (%s) is selected but has no XMP sidecar yet — skipping render",
+            photo.id,
+            photo.filename,
+        )
+        result.not_ready += 1
 
     def _render_photo(self, photo: Photo, album_slug: str, result: RenderResult) -> Path | None:
         """Stage the original, invoke the renderer, and clean up. Returns the

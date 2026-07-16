@@ -33,6 +33,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from album.db.models import Album, Photo, Segment
+from album.stages.base import Stage
 
 _log = logging.getLogger(__name__)
 
@@ -51,7 +52,7 @@ class ClusterResult:
     undated: list[int] = field(default_factory=list)
 
 
-class ClusterStage:
+class ClusterStage(Stage[ClusterResult]):
     """`cluster` — assign each photo to a segment and a scene. Idempotent.
 
     Pure logic over the DB — no injected collaborator. It's a class (rather than a
@@ -69,27 +70,41 @@ class ClusterStage:
         self._time_gap = time_gap
         self._spatial_eps_m = spatial_eps_m
 
-    def run(self, album_id: int, session: Session) -> ClusterResult:
-        """Assign photos in ``album_id`` to segments and scenes. Idempotent."""
-        album = session.get(Album, album_id)
-        if album is None:
-            raise ValueError(f"no album with id {album_id}")
-
-        # order_by(Photo.id): without it Postgres may return rows in any order, which
-        # would make the out_of_range/undated result lists non-deterministic across runs.
-        photos = list(
-            session.scalars(select(Photo).where(Photo.album_id == album_id).order_by(Photo.id))
-        )
-        for photo in photos:  # reset so a re-run is deterministic
-            photo.segment_id = None
-            photo.scene_id = None
+    def _process(self, album: Album, session: Session, *, force: bool) -> ClusterResult:
+        """Assign photos in ``album`` to segments and scenes. Idempotent."""
+        photos = self._load_photos(album.id, session)
+        self._reset_photos(photos)
 
         result = ClusterResult()
         dated = [p for p in photos if p.timestamp is not None]
         result.undated = [p.id for p in photos if p.timestamp is None]
 
         groups = self._assign_segments(album.segments, dated, result)
+        result.scenes = self._assign_scenes(groups)
 
+        session.flush()
+        return result
+
+    @staticmethod
+    def _load_photos(album_id: int, session: Session) -> list[Photo]:
+        # order_by(Photo.id): without it Postgres may return rows in any order, which
+        # would make the out_of_range/undated result lists non-deterministic across runs.
+        return list(
+            session.scalars(select(Photo).where(Photo.album_id == album_id).order_by(Photo.id))
+        )
+
+    @staticmethod
+    def _reset_photos(photos: list[Photo]) -> None:
+        for photo in photos:  # reset so a re-run is deterministic
+            photo.segment_id = None
+            photo.scene_id = None
+
+    def _assign_scenes(self, groups: list[list[Photo]]) -> int:
+        """Sort each group temporally, index its scenes, and stamp ``scene_id``.
+
+        Scene ids run consecutively across groups (group 1's scenes, then group
+        2's, ...), so the return value is simply the running total.
+        """
         next_scene = 1
         for group_photos in groups:
             group_photos.sort(key=lambda p: _as_naive_utc(p.timestamp))
@@ -97,10 +112,7 @@ class ClusterStage:
             for photo, idx in zip(group_photos, local, strict=True):
                 photo.scene_id = next_scene + idx
             next_scene += (max(local) + 1) if local else 0
-        result.scenes = next_scene - 1
-
-        session.flush()
-        return result
+        return next_scene - 1
 
     def _assign_segments(
         self, segments: list[Segment], dated: list[Photo], result: ClusterResult
@@ -112,7 +124,12 @@ class ClusterStage:
         """
         if not segments:
             return [dated] if dated else []
+        by_segment = self._bucket_by_segment(segments, dated, result)
+        return [by_segment[seg.id] for seg in segments if by_segment[seg.id]]
 
+    def _bucket_by_segment(
+        self, segments: list[Segment], dated: list[Photo], result: ClusterResult
+    ) -> dict[int, list[Photo]]:
         by_segment: dict[int, list[Photo]] = {seg.id: [] for seg in segments}
         for photo in dated:
             segment = self._find_segment(segments, photo.timestamp)
@@ -122,9 +139,10 @@ class ClusterStage:
             photo.segment_id = segment.id
             result.segments_assigned += 1
             by_segment[segment.id].append(photo)
-        return [by_segment[seg.id] for seg in segments if by_segment[seg.id]]
+        return by_segment
 
-    def _find_segment(self, segments: list[Segment], timestamp: datetime | None) -> Segment | None:
+    @staticmethod
+    def _find_segment(segments: list[Segment], timestamp: datetime | None) -> Segment | None:
         # Bounds are inclusive on both ends; segments are guaranteed non-overlapping by
         # definition.py, so the only ambiguous case is two segments abutting on the same
         # instant (end_at == next start_at), where first-match (position order) wins.
@@ -138,17 +156,24 @@ class ClusterStage:
         """0-based, contiguous scene index per (time-sorted) photo within one group."""
         if not photos:
             return []
-        use_spatial = all(p.gps_lat is not None and p.gps_lon is not None for p in photos)
-        spatial = self._spatial_labels(photos) if use_spatial else None
+        spatial = self._spatial_labels(photos) if self._has_gps(photos) else None
 
         indices = [0]
         for i in range(1, len(photos)):
-            gap_break = (
-                _as_naive_utc(photos[i].timestamp) - _as_naive_utc(photos[i - 1].timestamp)
-            ) > self._time_gap
-            spatial_break = spatial is not None and spatial[i] != spatial[i - 1]
-            indices.append(indices[-1] + (1 if gap_break or spatial_break else 0))
+            is_break = self._is_scene_break(photos, spatial, i)
+            indices.append(indices[-1] + (1 if is_break else 0))
         return indices
+
+    @staticmethod
+    def _has_gps(photos: list[Photo]) -> bool:
+        return all(p.gps_lat is not None and p.gps_lon is not None for p in photos)
+
+    def _is_scene_break(self, photos: list[Photo], spatial: list[int] | None, i: int) -> bool:
+        gap_break = (
+            _as_naive_utc(photos[i].timestamp) - _as_naive_utc(photos[i - 1].timestamp)
+        ) > self._time_gap
+        spatial_break = spatial is not None and spatial[i] != spatial[i - 1]
+        return gap_break or spatial_break
 
     def _spatial_labels(self, photos: list[Photo]) -> list[int]:
         """DBSCAN cluster label per photo over lat/lon (haversine). min_samples=1 → no noise."""

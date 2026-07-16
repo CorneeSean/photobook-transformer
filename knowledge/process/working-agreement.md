@@ -77,10 +77,11 @@ bar a step must clear before it can be finalized.
   `main`.
 - A step is "successfully completed" only when **all** of:
   - `ruff check .` and `ruff format --check .` pass (ruff includes the mccabe
-    `C90` complexity smell check)
+    `C90` complexity smell check, ceiling 5)
   - `basedpyright` reports no errors (static type check)
-  - `xenon` passes the complexity/maintainability gate — no block worse than B,
-    no module averaging worse than B, whole-codebase average A (see
+  - `xenon` passes the complexity/maintainability gate — **A across the board**:
+    no block worse than A (CC ≤ 5), no module averaging worse than A,
+    whole-codebase average A (see
     [quality practices](/process/quality-practices.md))
   - `pytest` passes — *all* tests, not just the new ones (no regressions)
   - If the step has no automated test: the manual verification described in that
@@ -112,7 +113,7 @@ including subcommits on a step branch — so nothing slips through:
 - **`no-commit-to-branch`** — blocks direct commits to `main`, backing up the
   "never commit to `main`" rule at the tooling level. (Landing a step is a
   fast-forward merge, which creates no commit and so passes the hook.)
-- **ruff** — `ruff check --fix` (incl. the mccabe `C90` complexity check) and `ruff format`.
+- **ruff** — `ruff check --fix` (incl. the mccabe `C90` complexity check, ceiling 5) and `ruff format`.
 - **basedpyright** — the static type check.
 - **xenon** — the complexity/maintainability gate; a fast, import-free static
   metric check, so it runs per-commit with the other static gates rather than in
@@ -133,7 +134,7 @@ without memorizing raw invocations. At minimum:
 | `uv run poe lint` | `ruff check .` |
 | `uv run poe format` | `ruff format .` (write) |
 | `uv run poe typecheck` | `basedpyright` |
-| `uv run poe complexity` | `xenon` complexity/maintainability gate (absolute C / modules B / average A) |
+| `uv run poe complexity` | `xenon` complexity/maintainability gate (absolute A / modules A / average A — CC ≤ 5 everywhere) |
 | `uv run poe metrics` | non-gating radon report: cyclomatic complexity + maintainability index per module |
 | `uv run poe test` | `pytest` |
 | `uv run poe check` | lint + `ruff format --check .` + typecheck + complexity + test — **the commit gate** |

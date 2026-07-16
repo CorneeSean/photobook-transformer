@@ -183,7 +183,8 @@ class LeadFaceResolver:
             )
         return faces
 
-    def _person_ids_from_faces(self, faces: list[ImmichFace], result: LeadResult) -> list[str]:
+    @staticmethod
+    def _person_ids_from_faces(faces: list[ImmichFace], result: LeadResult) -> list[str]:
         """Assigned person IDs from a reference's faces; warn on unassigned ones."""
         person_ids: list[str] = []
         for face in faces:
@@ -207,15 +208,34 @@ class LeadFaceResolver:
         leads behind. Only reached when ``lead_faces`` is configured (``run``
         returns early otherwise), so an album with no leads is never touched.
         """
-        target = set(person_ids)
-        existing = {
+        existing = self._existing_persons(album_id, session)
+        self._demote_stale_leads(existing, set(person_ids))
+        self._promote_leads(album_id, person_ids, existing, session)
+        session.flush()
+
+    @staticmethod
+    def _existing_persons(album_id: int, session: Session) -> dict[str, Person]:
+        """The album's already-synced ``Person`` rows, keyed by Immich person ID."""
+        return {
             person.immich_person_id: person
             for person in session.scalars(select(Person).where(Person.album_id == album_id))
         }
-        # Demote stale leads the current config no longer names.
+
+    @staticmethod
+    def _demote_stale_leads(existing: dict[str, Person], target: set[str]) -> None:
+        """Clear ``is_lead`` on any previously-marked lead ``target`` no longer names."""
         for person in existing.values():
             if person.is_lead and person.immich_person_id not in target:
                 person.is_lead = False
+
+    @staticmethod
+    def _promote_leads(
+        album_id: int,
+        person_ids: list[str],
+        existing: dict[str, Person],
+        session: Session,
+    ) -> None:
+        """Set ``is_lead=True`` on each resolved lead, creating unsynced ones."""
         for person_id in person_ids:
             person = existing.get(person_id)
             if person is None:
@@ -226,4 +246,3 @@ class LeadFaceResolver:
                 existing[person_id] = person
             else:
                 person.is_lead = True
-        session.flush()

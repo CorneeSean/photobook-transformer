@@ -338,6 +338,38 @@ def _run_group_2(
         future.result()
 
 
+def _resolve_quality_deps(
+    aesthetic: AestheticScorer | None, embedder: Embedder | None
+) -> tuple[AestheticScorer, Embedder]:
+    """Fill in whichever of ``aesthetic``/``embedder`` wasn't injected with the
+    same shared :class:`_UnavailableQualityModel` placeholder — see this
+    module's docstring's "Known gap" note. Shared (not one placeholder each)
+    for the same reason the module docstring gives: one model would produce
+    both in reality."""
+    deferred = _UnavailableQualityModel()
+    return (
+        aesthetic if aesthetic is not None else deferred,
+        embedder if embedder is not None else deferred,
+    )
+
+
+def _default_similarity(similarity: SimilaritySearch | None) -> SimilaritySearch:
+    """The injected similarity search, or the real pgvector one built from config."""
+    return similarity if similarity is not None else PgVectorSimilarity()
+
+
+def _default_renderer(renderer: Renderer | None) -> Renderer:
+    """The injected renderer, or the real darktable-cli one built from config."""
+    return renderer if renderer is not None else DarktableRenderer()
+
+
+def _default_printer(printer: Printer | None) -> Printer:
+    # HtmlPrinter is the default: a browsable webpage rendered from the
+    # on-disk photos, needing no external service or credentials (unlike
+    # LuluPrinter, which callers inject when they want a physical order).
+    return printer if printer is not None else HtmlPrinter()
+
+
 def _run_pipeline_body(
     album_slug: str,
     db_session: Session,
@@ -364,39 +396,42 @@ def _run_pipeline_body(
     _sync_task(album_id, db_session, client)
     db_session.commit()  # publish sync's writes before fan-out
 
-    deferred_quality_model = _UnavailableQualityModel()
-    _run_group_1(
-        album_id,
-        factory,
-        client,
-        album_slug,
-        aesthetic if aesthetic is not None else deferred_quality_model,
-        embedder if embedder is not None else deferred_quality_model,
-    )
+    aesthetic, embedder = _resolve_quality_deps(aesthetic, embedder)
+    _run_group_1(album_id, factory, client, album_slug, aesthetic, embedder)
     db_session.expire_all()  # re-read what the workers committed
-    _select_task(
-        album_id,
-        db_session,
-        similarity if similarity is not None else PgVectorSimilarity(),
-    )
+    _select_task(album_id, db_session, _default_similarity(similarity))
     db_session.commit()
 
-    _run_group_2(
-        album_id,
-        factory,
-        client,
-        model,
-        renderer if renderer is not None else DarktableRenderer(),
-    )
+    _run_group_2(album_id, factory, client, model, _default_renderer(renderer))
     db_session.expire_all()  # re-read render's/caption's committed writes
 
     _assemble_task(album_id, db_session)
     db_session.commit()
 
-    # HtmlPrinter is the default: a browsable webpage rendered from the
-    # on-disk photos, needing no external service or credentials (unlike
-    # LuluPrinter, which callers inject when they want a physical order).
-    _fulfill_task(album_id, db_session, printer if printer is not None else HtmlPrinter())
+    _fulfill_task(album_id, db_session, _default_printer(printer))
+
+
+def _open_or_reuse_session(session: Session | None) -> tuple[Session, bool]:
+    """Open a fresh pooled session only if the caller didn't inject one; the
+    returned bool says whether :func:`pipeline` now owns it (and so must
+    close it) or not."""
+    if session is not None:
+        return session, False
+    return new_session(), True
+
+
+def _open_or_reuse_client(immich_client: ImmichClient | None) -> tuple[ImmichClient, bool]:
+    """Same shape as :func:`_open_or_reuse_session`, for the Immich client."""
+    if immich_client is not None:
+        return immich_client, False
+    return ImmichClient.from_settings(), True
+
+
+def _close_if_owned(owns: bool, close: Callable[[], None]) -> None:
+    """Close a resource only if :func:`pipeline` opened it itself — callers
+    own the lifecycle of whatever they passed in."""
+    if owns:
+        close()
 
 
 @flow(name="photo-album-pipeline", validate_parameters=False)
@@ -434,14 +469,12 @@ def pipeline(
     session/client lifecycle.
     """
     factory = session_factory if session_factory is not None else new_session
-    owns_session = session is None
-    db_session = session if session is not None else new_session()
+    db_session, owns_session = _open_or_reuse_session(session)
     try:
         # client's construction lives inside this try (not before it) so a
         # failure building it still lets the outer `finally` close db_session
         # — nothing here should leak a resource that came before it.
-        owns_client = immich_client is None
-        client = immich_client if immich_client is not None else ImmichClient.from_settings()
+        client, owns_client = _open_or_reuse_client(immich_client)
         try:
             _run_pipeline_body(
                 album_slug,
@@ -456,11 +489,9 @@ def pipeline(
                 model=model,
             )
         finally:
-            if owns_client:
-                client.close()
+            _close_if_owned(owns_client, client.close)
     finally:
-        if owns_session:
-            db_session.close()
+        _close_if_owned(owns_session, db_session.close)
 
 
 __all__ = ["get_or_create_album", "pipeline"]
