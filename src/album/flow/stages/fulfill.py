@@ -9,18 +9,22 @@ returns on ``Album.output_ref``. That column's presence is what makes this
 idempotent: a second run is a no-op unless ``force=True``.
 
 Each printer validates its own precondition (a webpage needs the placed photos; a
-Lulu order needs the master PDF), so this stage stays medium-agnostic. No Prefect
-imports live here — :class:`FulfillStage` is a plain class so it stays
-unit-testable without an orchestrator (folder-structure.md rule).
+Lulu order needs the master PDF), so this stage stays medium-agnostic.
+:class:`FulfillStage` itself stays Prefect-free logic — so it's unit-testable
+without an orchestrator — while this module also exports :func:`fulfill_task`, the
+thin co-located Prefect ``@task`` that wraps it (folder-structure.md rule;
+quality-practices.md §1.5).
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass
 
+from prefect import task
 from sqlalchemy.orm import Session
 
 from album.db.models import Album
+from album.flow._tasks import autocommit
 from album.flow.stages.base import Stage
 from album.printers.base import Printer
 
@@ -52,3 +56,10 @@ class FulfillStage(Stage[FulfillResult]):
         album.output_ref = result.output_ref
         session.flush()
         return FulfillResult(printed=True, output_ref=result.output_ref)
+
+
+@task(name="fulfill")
+@autocommit
+def fulfill_task(stage: FulfillStage, album_id: int, session: Session) -> None:
+    """``fulfill`` as a Prefect ``@task`` on the flow's shared session (``autocommit``)."""
+    stage.run(album_id, session)

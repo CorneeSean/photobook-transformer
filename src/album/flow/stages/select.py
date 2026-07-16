@@ -46,8 +46,11 @@ interface, so this module is unit-testable on in-memory SQLite with similarity
 stubbed (see [build step 8](/build/build-order.md)).
 
 Idempotent: resets ``selected`` for the album up front, so re-running recomputes
-from scratch rather than compounding. No Prefect imports (folder-structure.md
-rule). :class:`SelectStage`'s ``run`` takes ``album_id`` first.
+from scratch rather than compounding. :class:`SelectStage` itself is Prefect-free
+logic (folder-structure.md rule) — its ``run`` takes ``album_id`` first and is
+unit-testable without an orchestrator — while this module also exports
+:func:`select_task`, the co-located Prefect ``@task`` wrapping it
+(quality-practices.md §1.5).
 """
 
 from __future__ import annotations
@@ -55,11 +58,13 @@ from __future__ import annotations
 import logging
 from dataclasses import dataclass
 
+from prefect import task
 from sqlalchemy import select as sa_select
 from sqlalchemy.orm import Session
 
 from album.db.models import Album, Photo
 from album.db.similarity import SimilaritySearch
+from album.flow._tasks import autocommit
 from album.flow.stages.base import Stage
 
 _log = logging.getLogger(__name__)
@@ -251,3 +256,10 @@ class SelectStage(Stage[SelectResult]):
     @staticmethod
     def _covered(person_id: str, picked: list[Photo]) -> bool:
         return any(person_id in (photo.person_ids or []) for photo in picked)
+
+
+@task(name="select")
+@autocommit
+def select_task(stage: SelectStage, album_id: int, session: Session) -> None:
+    """``select`` as a Prefect ``@task`` on the flow's shared session (``autocommit``)."""
+    stage.run(album_id, session)

@@ -26,8 +26,11 @@ Idempotent: skips regeneration if ``Album.assembled_pdf_path`` is already set,
 unless ``force=True``. Writes the PDF to
 ``<output_dir>/<slug>/assembled.pdf`` and stores that path on the ``Album``
 row — the integration contract [`fulfill`](/stages/fulfill.md) (built in
-parallel) reads to submit the print order. No Prefect imports
-(folder-structure.md rule). :class:`AssembleStage`'s ``run`` takes ``album_id`` first.
+parallel) reads to submit the print order. :class:`AssembleStage` itself is
+Prefect-free logic (folder-structure.md rule) — its ``run`` takes ``album_id``
+first and is unit-testable without an orchestrator — while this module also
+exports :func:`assemble_task`, the co-located Prefect ``@task`` wrapping it
+(quality-practices.md §1.5).
 """
 
 from __future__ import annotations
@@ -39,11 +42,13 @@ from pathlib import Path
 from typing import Any
 
 from jinja2 import Environment, FileSystemLoader
+from prefect import task
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 from weasyprint import HTML
 
 from album.db.models import Album, Photo, Segment
+from album.flow._tasks import autocommit
 from album.flow.stages.base import Stage
 
 _log = logging.getLogger(__name__)
@@ -286,3 +291,10 @@ class AssembleStage(Stage[AssembleResult]):
         # `Page` objects (see its docstring) — a third-party stub gap, not a real
         # type error.
         documents[0].copy(all_pages).write_pdf(str(output_path))  # pyright: ignore[reportArgumentType]
+
+
+@task(name="assemble")
+@autocommit
+def assemble_task(stage: AssembleStage, album_id: int, session: Session) -> None:
+    """``assemble`` as a Prefect ``@task`` on the flow's shared session (``autocommit``)."""
+    stage.run(album_id, session)

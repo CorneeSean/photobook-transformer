@@ -17,8 +17,13 @@ knowledge/reference/immich-api.md and knowledge/build/enrichment.md). The three 
 - ``reference_image`` — a local photo; upload it (Immich runs face detection on
   import, *asynchronously*), wait out that detection, then read its faces.
 
-No Prefect here — :class:`LeadFaceResolver` is a plain class (folder-structure.md
-rule); ``flow/_flow.py`` wraps it as a ``@task``.
+:class:`LeadFaceResolver` itself stays Prefect-free logic (folder-structure.md
+rule) — so it's unit-testable without an orchestrator — while this module also
+exports :func:`resolve_leads_task`, the co-located Prefect ``@task`` that wraps it.
+Unlike a :class:`~album.flow.stages.base.Stage` task, this one also carries the
+resolver's extra per-run inputs (the parsed ``lead_faces`` config and its
+directory), which the :class:`~album.flow._flow.Pipeline` reads from ``album.yml``
+in the wiring layer and passes through.
 """
 
 from __future__ import annotations
@@ -30,11 +35,13 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Protocol
 
+from prefect import task
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from album.db.models import Album, Person
 from album.definition import LeadFacesYAML
+from album.flow._tasks import owns_session
 from album.immich.client import ImmichFace
 
 _log = logging.getLogger(__name__)
@@ -246,3 +253,22 @@ class LeadFaceResolver:
                 existing[person_id] = person
             else:
                 person.is_lead = True
+
+
+@task(name="resolve-leads")
+@owns_session
+def resolve_leads_task(
+    resolver: LeadFaceResolver,
+    album_id: int,
+    session: Session,
+    config: LeadFacesYAML | None,
+    reference_dir: Path,
+) -> None:
+    """``resolve-leads`` as a Prefect ``@task`` on its own pooled session.
+
+    Not a :class:`~album.flow.stages.base.Stage`, so it doesn't share the uniform
+    ``stage.run(album_id, session)`` body: it forwards the extra per-run inputs
+    (``config``, ``reference_dir``) the :class:`~album.flow._flow.Pipeline` resolved
+    from ``album.yml`` to :meth:`LeadFaceResolver.run`.
+    """
+    resolver.run(album_id, config, reference_dir, session)

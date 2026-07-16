@@ -2,6 +2,49 @@
 
 ## 2026-07-16
 
+* **Refactor — co-locate each stage's `@task`; class-based `Pipeline` via factory**
+  (branch `refactor-04-flow-tasks`). Four coupled changes to the flow layer,
+  behaviour-preserving (all 237 tests green, incl. the `test_flow_integration.py`
+  concurrency + enhance/caption-race guard).
+    * **Each stage module now exports its own Prefect `@task`.** `flow/_flow.py`
+      no longer defines the `@task` wrappers (`_sync_task`, …); each moved into its
+      stage module as a public `sync_task`/`quality_task`/… co-located with the
+      stage class it wraps. The task takes the **constructed stage instance** first
+      (quality-practices.md §1.5), then `album_id` + session/`session_factory`, and
+      calls `stage.run(...)`. `resolve_leads_task` additionally forwards the
+      resolver's extra per-run inputs (parsed `lead_faces` config + its directory).
+    * **Overturned invariant (user-directed).** The former rule *"`flow/stages/*.py`
+      contain no Prefect imports; `flow/_flow.py` is the only Prefect-aware module"*
+      is **reversed**: stages now import `prefect` to define their `@task`. The
+      stage **class** stays Prefect-free and independently unit-testable without a
+      Prefect runtime (tests still target `run`/`_process`, never the `@task`) —
+      the testability the old rule protected is preserved. `flow/stages/base.py`
+      still imports no Prefect, and nothing added Prefect to `db/`, `immich/`,
+      `lulu/`, `printers/`, `agents/`, `config.py`, `definition.py`.
+    * **New `flow/_tasks.py`** holds the two shared transaction-boundary wrappers
+      (`autocommit` for the four sequential stages on the shared session;
+      `owns_session` for the six fan-out stages on their own pooled session) — the
+      session/commit *policy* stays an orchestration concern, not scattered across
+      stage modules.
+    * **`flow/_flow.py` is now a thin aggregator** built around a class-based
+      `Pipeline` (holds the injected collaborators, constructs each stage, composes
+      the DAG + session/client lifecycle). The public `@flow` is produced by the
+      `Pipeline.flow()` factory: `pipeline = Pipeline.flow()`, keeping
+      `pipeline(album_slug=…, **deps)` callable exactly as before (cli.py + tests
+      unchanged in shape). `Pipeline` is re-exported from `album.flow`.
+    * **Removed three redundant `db_session.commit()` calls** from the pipeline
+      body — the ones right after `sync`/`select`/`assemble` that duplicated those
+      tasks' own `autocommit` commit. The commit-before-fan-out invariant (each
+      sequential task's own commit publishes state before the next fan-out) and the
+      `expire_all()`-after-join invariant are both intact; the `expire_all()` calls
+      were kept. The album-bootstrap commit (after `get_or_create_album`, which
+      doesn't commit) was kept — it is not a task-duplicate.
+    * **Docs updated on the branch:** `folder-structure.md` (tree + the reversed
+      Prefect rule, with rationale, + the `Stage`-subclass rule) and
+      `quality-practices.md` §1.5 (rewritten to the per-stage-`@task` +
+      `flow/_tasks.py` + class-based `Pipeline` shape; See-also invariant note
+      corrected). `base.py`'s docstring now points at the concrete stage module for
+      the `@task`, not `_flow.py`.
 * **Refactor — `src/album/flow/` pipeline package** (branch
   `refactor-01-flow-package`). Structural reorg so the only loose top-level
   modules under `src/album/` are `config.py`, `definition.py`, `cli.py`,

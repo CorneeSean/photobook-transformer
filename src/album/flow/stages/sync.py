@@ -14,8 +14,10 @@ source zone is resolved in priority order:
    timestamp left ``NULL`` — cluster (step 7) handles NULL-timestamp photos
    explicitly rather than dropping them.
 
-No Prefect imports live here — :class:`SyncStage` is a plain class so it stays
-unit-testable without an orchestrator (folder-structure.md rule).
+:class:`SyncStage` itself stays Prefect-free logic — so it's unit-testable
+without an orchestrator — while this module also exports :func:`sync_task`, the
+thin Prefect ``@task`` that wraps it, co-located with the stage it runs
+(folder-structure.md rule; quality-practices.md §1.5).
 """
 
 from __future__ import annotations
@@ -27,11 +29,13 @@ from typing import Protocol
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 import httpx
+from prefect import task
 from pydantic import ValidationError
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from album.db.models import Album, Person, Photo
+from album.flow._tasks import autocommit
 from album.flow.stages.base import Stage
 from album.immich.client import ImmichAsset, ImmichExif, ImmichFace
 
@@ -286,3 +290,10 @@ class SyncStage(Stage[SyncResult]):
         if exif.make and not exif.model.startswith(exif.make):
             return f"{exif.make} {exif.model}"
         return exif.model
+
+
+@task(name="sync")
+@autocommit
+def sync_task(stage: SyncStage, album_id: int, session: Session) -> None:
+    """``sync`` as a Prefect ``@task`` on the flow's shared session (``autocommit``)."""
+    stage.run(album_id, session)

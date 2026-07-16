@@ -18,11 +18,13 @@ Context grounding (segment label/place, ``Album.meta``) is assembled inside
 out-of-segment photo still gets an accurate, if generic, caption rather than
 erroring (AGENTS.md rule 1 — genericity).
 
-No Prefect imports (folder-structure.md rule). :class:`CaptionStage`'s ``run``
-takes ``album_id`` first. Per-photo failures are isolated (try/except + log +
-continue), consistent with ``quality.py``/``enhance.py``, so one bad photo
-(unreadable thumbnail, unparseable model response) doesn't sink an album's
-captioning run.
+:class:`CaptionStage` itself is Prefect-free logic (folder-structure.md rule) —
+its ``run`` takes ``album_id`` first and is unit-testable without an orchestrator —
+while this module also exports :func:`caption_task`, the co-located Prefect
+``@task`` wrapping it (quality-practices.md §1.5). Per-photo failures are isolated
+(try/except + log + continue), consistent with ``quality.py``/``enhance.py``, so
+one bad photo (unreadable thumbnail, unparseable model response) doesn't sink an
+album's captioning run.
 """
 
 from __future__ import annotations
@@ -30,10 +32,12 @@ from __future__ import annotations
 import logging
 from dataclasses import dataclass
 
+from prefect import task
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from album.db.models import Album, Photo
+from album.flow._tasks import owns_session
 from album.flow.photo_analyzer import PhotoAnalyzer
 from album.flow.stages.base import Stage
 
@@ -98,4 +102,11 @@ class CaptionStage(Stage[CaptionResult]):
             result.captioned += 1
 
 
-__all__ = ["CaptionResult", "CaptionStage"]
+@task(name="caption")
+@owns_session
+def caption_task(stage: CaptionStage, album_id: int, session: Session) -> None:
+    """``caption`` as a Prefect ``@task`` on its own pooled session (``owns_session``)."""
+    stage.run(album_id, session)
+
+
+__all__ = ["CaptionResult", "CaptionStage", "caption_task"]

@@ -12,10 +12,12 @@ early-return for ``assemble``/``fulfill``, a per-photo skip for
 ``quality``/``enhance``/``caption``/``render``, none for
 ``sync``/``cluster``/``select``) — so each ``_process`` keeps its own.
 
-No Prefect import lives here (folder-structure.md): ``flow/_flow.py`` wraps the
-inherited ``.run`` as a ``@task``. ``Stage`` is generic over its result type, so a
-subclass keeps its own concrete ``@dataclass`` return —
-``class SyncStage(Stage[SyncResult])`` with ``_process(...) -> SyncResult``.
+No Prefect import lives *here* (folder-structure.md): the ``@task`` that wraps a
+stage's inherited ``.run`` lives in each concrete stage module (e.g.
+``flow/stages/sync.py``'s ``sync_task``), not in this Template Method base.
+``Stage`` is generic over its result type, so a subclass keeps its own concrete
+``@dataclass`` return — ``class SyncStage(Stage[SyncResult])`` with
+``_process(...) -> SyncResult``.
 """
 
 from __future__ import annotations

@@ -50,10 +50,12 @@ Sidecar path: ``<data_root>/<album.slug>/xmp/<photo.filename>.xmp`` (e.g.
 (folder-structure.md). ``data_root`` defaults to ``data/albums`` but is an
 injectable parameter so tests never touch the real filesystem.
 
-No Prefect imports (folder-structure.md rule). :class:`EnhanceStage`'s ``run``
-takes ``album_id`` first. Idempotent: skips photos whose ``xmp_written`` is
-already ``True`` unless ``force=True``; per-photo failures are isolated
-(try/except + log + continue), consistent with ``quality.py``.
+:class:`EnhanceStage` itself is Prefect-free logic (folder-structure.md rule) —
+its ``run`` takes ``album_id`` first and is unit-testable without an orchestrator —
+while this module also exports :func:`enhance_task`, the co-located Prefect
+``@task`` wrapping it (quality-practices.md §1.5). Idempotent: skips photos whose
+``xmp_written`` is already ``True`` unless ``force=True``; per-photo failures are
+isolated (try/except + log + continue), consistent with ``quality.py``.
 """
 
 from __future__ import annotations
@@ -66,12 +68,14 @@ from pathlib import Path
 
 import cv2
 import numpy as np
+from prefect import task
 from skimage.exposure import match_histograms
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from album.agents.analysis import AnalysisResult
 from album.db.models import Album, Photo
+from album.flow._tasks import owns_session
 from album.flow.photo_analyzer import PhotoAnalyzer, ThumbnailSource
 from album.flow.stages.base import Stage
 from album.flow.tone import ToneParams
@@ -415,10 +419,18 @@ class EnhanceStage(Stage[EnhanceResult]):
         return compute_camera_baseline(reference_image, camera_image), reference_image
 
 
+@task(name="enhance")
+@owns_session
+def enhance_task(stage: EnhanceStage, album_id: int, session: Session) -> None:
+    """``enhance`` as a Prefect ``@task`` on its own pooled session (``owns_session``)."""
+    stage.run(album_id, session)
+
+
 __all__ = [
     "EnhanceResult",
     "EnhanceStage",
     "compute_camera_baseline",
+    "enhance_task",
     "reconcile_tone",
     "write_xmp_sidecar",
 ]

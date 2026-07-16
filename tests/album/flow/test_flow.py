@@ -15,12 +15,15 @@ already has its own thorough test suite. What matters, and is covered here:
   re-raises), rather than silently continuing.
 - ``pipeline`` only closes resources it opened itself.
 
-Each stage's ``@task`` wrapper (``_sync_task`` … ``_fulfill_task``) is
-monkeypatched at the ``album.flow`` module level — the stages themselves are not
+Each stage's ``@task`` (``sync_task`` … ``fulfill_task``) now lives in its own
+stage module and is imported into ``album.flow._flow``; these tests monkeypatch it
+at the ``album.flow._flow`` module level — the stages themselves are not
 re-exercised for real (that's each stage's own test file's job), and patching the
-task wrappers rather than the stage classes keeps these wiring tests decoupled
-from how any one stage is constructed. Doubles for the six grouped stages are
-wrapped with Prefect's own ``task()`` (not plain lambdas) since ``pipeline``
+imported task rather than the stage classes keeps these wiring tests decoupled
+from how any one stage is constructed. Each task's first argument is now the
+constructed stage instance (quality-practices.md §1.5), so a double takes
+``(stage, album_id, session_or_factory, …)``. Doubles for the six grouped stages
+are wrapped with Prefect's own ``task()`` (not plain lambdas) since ``pipeline``
 now calls ``.submit()`` on them; sequential-stage doubles work either way
 since calling a Prefect ``Task`` directly just runs it. This runs fast and
 never touches Postgres, Immich, Claude, darktable-cli, or Lulu. Runs against
@@ -56,12 +59,14 @@ from sqlalchemy.orm import Session
 import album.flow._flow as flow_module
 from album.db.models import Album
 from album.flow import get_or_create_album, pipeline
+from album.flow.stages.fulfill import FulfillStage
 from album.printers.html import HtmlPrinter
 
-# The ten stages, and the flow-module attribute of each one's @task wrapper.
-# Patching these decouples the wiring tests from stage construction. Order
-# here is just enumeration order — build step 25 means only a *partial* order
-# is guaranteed at runtime (see _GROUP_1/_GROUP_2 below).
+# The ten stages, and the flow-module attribute of each one's @task (imported
+# into album.flow._flow from its stage module). Patching these decouples the
+# wiring tests from stage construction. Order here is just enumeration order —
+# build step 25 means only a *partial* order is guaranteed at runtime (see
+# _GROUP_1/_GROUP_2 below).
 _STAGE_NAMES: tuple[str, ...] = (
     "sync",
     "resolve_leads",
@@ -91,13 +96,13 @@ def _prefect_test_db() -> Iterator[None]:
 
 
 def _task_attr(stage_name: str) -> str:
-    return f"_{stage_name}_task"
+    return f"{stage_name}_task"
 
 
 def _patch_stage_tasks_noop(monkeypatch: pytest.MonkeyPatch, *, exclude: str = "") -> None:
-    """No-op double for every stage's @task wrapper except ``exclude``. Every
-    double is Prefect-``task()``-wrapped (not a plain lambda) so ``.submit()``
-    — which ``pipeline`` calls on the six grouped stages — still resolves."""
+    """No-op double for every stage's @task except ``exclude``. Every double is
+    Prefect-``task()``-wrapped (not a plain lambda) so ``.submit()`` — which
+    ``pipeline`` calls on the six grouped stages — still resolves."""
     for stage_name in _STAGE_NAMES:
         if stage_name == exclude:
             continue
@@ -172,7 +177,9 @@ class TestPipelineWiring:
     def _record(
         self, name: str, album_id: int, calls: list[str], lock: threading.Lock
     ) -> Callable[..., None]:
-        def _fn(received_album_id: int, *_args: object, **_kwargs: object) -> None:
+        # Each task's first arg is now the constructed stage instance
+        # (quality-practices.md §1.5); album_id is second.
+        def _fn(_stage: object, received_album_id: int, *_args: object, **_kwargs: object) -> None:
             assert received_album_id == album_id
             with lock:
                 calls.append(name)
@@ -241,11 +248,17 @@ class TestPipelineWiring:
         lock = threading.Lock()
 
         def _capture(name: str) -> Callable[..., None]:
+            # (stage, album_id, session_or_factory, …): the session/factory a task
+            # runs on is now the *third* positional (the stage instance is first).
             def _fn(
-                _album_id: int, second_arg: object = None, *_args: object, **_kwargs: object
+                _stage: object,
+                _album_id: int,
+                session_or_factory: object = None,
+                *_args: object,
+                **_kwargs: object,
             ) -> None:
                 with lock:
-                    received[name] = second_arg
+                    received[name] = session_or_factory
 
             return _fn
 
@@ -445,11 +458,14 @@ class TestPipelineWiring:
         _patch_stage_tasks_noop(monkeypatch, exclude="fulfill")
 
         def _capture_fulfill(
-            album_id: int, session: Session, printer: object, **_kwargs: object
+            stage: FulfillStage, _album_id: int, _session: Session, **_kwargs: object
         ) -> None:
-            captured["printer"] = printer
+            # The printer is now injected into the constructed FulfillStage by the
+            # Pipeline wiring, not passed as a task argument — read it back off the
+            # stage the task received.
+            captured["printer"] = stage._printer  # pyright: ignore[reportPrivateUsage]
 
-        monkeypatch.setattr(flow_module, "_fulfill_task", _capture_fulfill)
+        monkeypatch.setattr(flow_module, "fulfill_task", _capture_fulfill)
         monkeypatch.setattr(
             flow_module.ImmichClient, "from_settings", classmethod(lambda cls: _FakeImmichClient())
         )

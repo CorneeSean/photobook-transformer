@@ -143,24 +143,44 @@ class shape:
   preserved — it now lives in one owned object instead of a cross-module function
   import.
 
-### 1.5 Wiring in `flow.py`
+### 1.5 The per-stage `@task` and the `flow/_flow.py` aggregator
 
-`flow.py` remains the only Prefect-aware module. It instantiates each stage class
-with its real (or injected-for-test) collaborators, then wraps the bound `.run`
-in a `@task`:
+*(Revised 2026-07-16.)* Each stage module now co-locates its own Prefect `@task`
+with the stage it wraps; `flow/_flow.py` no longer defines the tasks, it
+**aggregates** them. The task is a thin module-level wrapper that takes the
+**constructed stage instance** as its first argument — so dependency injection
+stays in the wiring layer, not the task — then `album_id` + the session (or a
+`session_factory`, for a fan-out stage), and just calls `stage.run(...)`:
 
 ```python
+# flow/stages/select.py — co-located with SelectStage
 @task(name="select")
-def _select_task(stage: SelectStage, album_id: int, session: Session) -> None:
+@autocommit                                  # from flow/_tasks.py
+def select_task(stage: SelectStage, album_id: int, session: Session) -> None:
     stage.run(album_id, session)
-    session.commit()
 ```
 
-`pipeline()` keeps its existing shape — every dependency is a keyword argument
-defaulting to the real thing built from `config.py` — but now defaults to a
-constructed stage (or the collaborator the stage needs), so `pipeline()` itself
-stays unit-testable for wiring/ordering without touching Postgres, Immich,
-Claude, darktable-cli, or Lulu.
+The session/commit **policy** is the one orchestration concern that stays shared:
+`flow/_tasks.py` holds two transaction-boundary wrappers — `autocommit` (runs on
+the flow's shared `Session`, commits) for the four sequential stages, and
+`owns_session` (opens its own pooled `Session` from a `session_factory`, commits)
+for the six fan-out stages that run on real threads. Keeping the commit here, not
+inline in every stage module, stops session-lifecycle policy from scattering.
+
+The **stage class itself imports no Prefect logic** and stays independently
+unit-testable *without* a Prefect runtime — its tests target `run`/`_process`,
+never the `@task` (§2.4). Importing `prefect` at module load is acceptable (it's
+already a dependency); entering a Prefect context is not required for a logic test.
+
+Wiring lives in a class-based **`Pipeline`** (`flow/_flow.py`): its constructor
+takes every collaborator as a keyword argument defaulting to the real thing built
+from `config.py`, it constructs each stage from those collaborators and hands the
+built stage to the stage's own `@task`, and it composes the DAG (fan-out groups,
+join fences, session/client lifecycle). The public `@flow` is produced by a
+factory — `pipeline = Pipeline.flow()` — and keeps `pipeline(album_slug=…, **deps)`
+callable exactly as before, so `cli.py` and the wiring tests are unchanged and
+`pipeline` stays unit-testable for wiring/ordering without touching Postgres,
+Immich, Claude, darktable-cli, or Lulu.
 
 ### 1.6 Design patterns — deliberate, not decorative
 
@@ -447,5 +467,5 @@ raising the threshold. The threshold does not go back up.
 
 - [Working agreement](/process/working-agreement.md) — the TDD loop and the `uv run poe check` commit gate.
 - [Folder structure](/reference/folder-structure.md) — where each unit lives and the genericity/structure rules.
-- [Architecture](/foundations/architecture.md) — why the collaborators are injected (idempotent stages, one combined vision call, Prefect only in `flow.py`).
+- [Architecture](/foundations/architecture.md) — why the collaborators are injected (idempotent stages, one combined vision call, each stage a `@task` composed by one `@flow`).
 - [Implementation workflow](/process/implementation-workflow.md) — the branch → review → squash → merge delivery loop this change goes through.

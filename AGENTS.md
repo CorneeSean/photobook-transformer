@@ -103,8 +103,15 @@ just prose.
    *tested* fallback for an album with none (and, where relevant, no GPS).
 3. **`album_id` first.** Every stage function takes `album_id` as its first
    argument; no stage assumes it's the only album in the DB.
-4. **No Prefect in `flow/stages/`.** `flow/stages/*.py` are plain, unit-testable
-   functions. Only `flow/_flow.py` imports Prefect and wraps them as `@task`s.
+4. **Stage classes are Prefect-free logic; the `@task` is co-located per stage.**
+   *(Changed 2026-07-16.)* Each `flow/stages/*.py` defines both its Prefect-free
+   stage **class** (unit-testable without an orchestrator — tests target
+   `run`/`_process`, never the task) *and* a thin `@task` wrapping it
+   (`sync_task`, …); `flow/_flow.py` is the **aggregator** that imports those
+   tasks and composes the DAG via the `Pipeline` class. Session/commit policy
+   lives in `flow/_tasks.py`. `flow/stages/base.py` still imports no Prefect, and
+   nothing adds Prefect to `db/`, `immich/`, `lulu/`, `printers/`, `agents/`,
+   `config.py`, `definition.py`. See folder-structure.md for the rationale.
 5. **AI estimates parameters, never generates pixels.** Enhancement produces
    bounded numeric deltas (Pydantic `Field(ge=, le=)`); classical code applies
    them. No invented detail.
@@ -145,8 +152,8 @@ full tree and rules. In brief:
 ```
 src/album/
   config.py      cli.py      definition.py
-  flow/          _flow.py (the one Prefect @flow) tone.py photo_analyzer.py
-  flow/stages/   sync quality cluster select enhance render caption assemble fulfill
+  flow/          _flow.py (Pipeline + the one Prefect @flow) _tasks.py (txn wrappers) tone.py photo_analyzer.py
+  flow/stages/   sync quality cluster select enhance render caption assemble fulfill (each: Stage class + its @task)
   db/            models.py similarity.py session.py
   immich/        client.py
   lulu/          client.py     (thin Lulu Print API HTTP transport)

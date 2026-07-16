@@ -36,8 +36,10 @@ double an album's disk footprint alongside the real artifact (the rendered
 JPEG). A failed render intentionally leaves its staged original in place, so
 a retry doesn't re-fetch it.
 
-No Prefect imports (reference/folder-structure.md rule). :class:`RenderStage`'s ``run``
-takes ``album_id`` first.
+:class:`RenderStage` itself is Prefect-free logic (reference/folder-structure.md
+rule) — its ``run`` takes ``album_id`` first and is unit-testable without an
+orchestrator — while this module also exports :func:`render_task`, the co-located
+Prefect ``@task`` wrapping it (quality-practices.md §1.5).
 """
 
 from __future__ import annotations
@@ -48,10 +50,12 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Protocol, runtime_checkable
 
+from prefect import task
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from album.db.models import Album, Photo
+from album.flow._tasks import owns_session
 from album.flow.stages.base import Stage
 
 _log = logging.getLogger(__name__)
@@ -231,10 +235,18 @@ class RenderStage(Stage[RenderResult]):
         return self._data_root / album_slug / "rendered" / filename
 
 
+@task(name="render")
+@owns_session
+def render_task(stage: RenderStage, album_id: int, session: Session) -> None:
+    """``render`` as a Prefect ``@task`` on its own pooled session (``owns_session``)."""
+    stage.run(album_id, session)
+
+
 __all__ = [
     "DarktableRenderer",
     "OriginalSource",
     "RenderResult",
     "RenderStage",
     "Renderer",
+    "render_task",
 ]

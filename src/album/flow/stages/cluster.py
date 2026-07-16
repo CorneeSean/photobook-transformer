@@ -16,9 +16,12 @@ the [genericity guard](/reference/folder-structure.md):
 Photos with a NULL timestamp can't be placed temporally; they're handled
 explicitly (flagged in ``ClusterResult.undated``, left unassigned).
 
-Pure logic over the DB — no Prefect, no external calls. Idempotent: it resets
+Pure logic over the DB — no external calls. Idempotent: it resets
 ``segment_id``/``scene_id`` for the album up front, so re-running is a no-op-equivalent.
-:class:`ClusterStage`'s ``run`` takes ``album_id`` first.
+:class:`ClusterStage` itself is Prefect-free logic — its ``run`` takes ``album_id``
+first and is unit-testable without an orchestrator — while this module also exports
+:func:`cluster_task`, the co-located Prefect ``@task`` wrapping it
+(quality-practices.md §1.5).
 """
 
 from __future__ import annotations
@@ -28,11 +31,13 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 
 import numpy as np
+from prefect import task
 from sklearn.cluster import DBSCAN
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from album.db.models import Album, Photo, Segment
+from album.flow._tasks import owns_session
 from album.flow.stages.base import Stage
 
 _log = logging.getLogger(__name__)
@@ -199,3 +204,10 @@ def _as_naive_utc(dt: datetime | None) -> datetime:
     if dt is None:  # callers pass only non-None timestamps here
         raise ValueError("cannot order a photo with no timestamp")
     return dt.astimezone(UTC).replace(tzinfo=None) if dt.tzinfo is not None else dt
+
+
+@task(name="cluster")
+@owns_session
+def cluster_task(stage: ClusterStage, album_id: int, session: Session) -> None:
+    """``cluster`` as a Prefect ``@task`` on its own pooled session (``owns_session``)."""
+    stage.run(album_id, session)

@@ -13,8 +13,10 @@ Thumbnails come from Immich (via the :class:`ThumbnailSource` protocol, which
 :class:`~album.immich.client.ImmichClient` satisfies) rather than re-reading
 originals. Idempotent: a photo already fully scored is skipped unless ``force``.
 
-No Prefect imports — :class:`QualityStage` is a plain class (folder-structure.md
-rule). ``run`` takes ``album_id`` first.
+:class:`QualityStage` itself stays Prefect-free logic (folder-structure.md rule),
+so ``run`` — ``album_id`` first — is unit-testable without an orchestrator; this
+module also exports :func:`quality_task`, the co-located Prefect ``@task`` that
+wraps it (quality-practices.md §1.5).
 """
 
 from __future__ import annotations
@@ -25,10 +27,12 @@ from typing import Protocol, runtime_checkable
 
 import cv2
 import numpy as np
+from prefect import task
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from album.db.models import Album, Photo
+from album.flow._tasks import owns_session
 from album.flow.stages.base import Stage
 
 _log = logging.getLogger(__name__)
@@ -145,3 +149,10 @@ class QualityStage(Stage[QualityResult]):
             _log.warning("failed to score photo %s (%s)", photo.id, photo.filename, exc_info=True)
             return None
         return blur, aesthetic_score, embedding
+
+
+@task(name="quality")
+@owns_session
+def quality_task(stage: QualityStage, album_id: int, session: Session) -> None:
+    """``quality`` as a Prefect ``@task`` on its own pooled session (``owns_session``)."""
+    stage.run(album_id, session)
