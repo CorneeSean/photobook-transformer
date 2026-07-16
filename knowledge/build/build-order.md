@@ -142,4 +142,25 @@ abstraction — fix it, don't work around it. **Commit.**
 
 Steps **17+** (adopting Immich API surface that didn't exist at steps 4–5 —
 faces/people, lead-face prioritization, rating/OCR/geocoding) are broken out into
-their own playbook: [Immich enrichment](/build/enrichment.md).
+their own playbook: [Immich enrichment](/build/enrichment.md). Steps **21+**
+(TestContainers integration testing) are broken out into their own playbook:
+[TestContainers](/build/testcontainers.md).
+
+---
+
+**25. Parallelize the flow (fan-out groups).** Apply the DAG execution from
+[`pipeline-execution.md`](/foundations/pipeline-execution.md): the four sequential
+stages keep the shared session; the six grouped stages take a `session_factory`
+and open their own pooled connection; two `submit()`/`result()` fences run group 1
+(`resolve-leads`‖`quality`‖`cluster`, join at `select`) and group 2 (`enhance`,
+then `render`‖`caption`, join at `assemble`). Commit before each fan-out;
+`expire_all()` after each join. *Test first:* wiring tests assert a partial order
+(group membership + fences) and that a group-1 (and a group-2) failure aborts
+before the next stage; a new Postgres-testcontainer test exercises real concurrent
+per-task sessions with external boundaries doubled. Only `flow.py` changes; no
+`stages/*.py` gains a Prefect import. **Caught in review, not in the original
+design sketch:** `enhance` and `caption` can't run fully independently despite
+both reading only the `selected` set — they share `PhotoAnalyzer.ensure`'s
+idempotency check, keyed on the same five DB columns, so `caption` is joined
+behind `enhance`'s future too (not just `render`), closing a double-vision-call/
+conflicting-write race. **Commit.**

@@ -2,6 +2,49 @@
 
 ## 2026-07-16
 
+* **Build step 25 — parallelize the flow (fan-out groups)** done (branch
+  `step-25-parallelize-flow`, merged, `036fcc2`). Applies the DAG execution
+  documented in [`pipeline-execution.md`](/foundations/pipeline-execution.md):
+  the four sequential stages (`sync`/`select`/`assemble`/`fulfill`) keep
+  `flow.py`'s shared `Session`; the six grouped stages
+  (`resolve-leads`/`quality`/`cluster`/`enhance`/`render`/`caption`) take a
+  `session_factory` and open their own pooled connection via a new
+  `_owns_session` decorator (+ a sibling `_autocommit` decorator for the
+  sequential four, removing their repeated trailing `session.commit()`).
+  Two `submit()`/`result()` fences: group 1
+  (`resolve-leads`‖`quality`‖`cluster`, join at `select`) and group 2
+  (`enhance`, then `render`‖`caption`, join at `assemble`).
+  Commit-before-fanout / `expire_all()`-after-join at both fences, including
+  before `assemble` (which reads group 2's `rendered_path`/`caption` writes
+  — not spelled out in the original design sketch).
+    * **Found + fixed a real bug (review, not the original design doc):**
+      `enhance` and `caption` were originally both `.submit()`ed with no
+      ordering between them — but both route through
+      `PhotoAnalyzer.ensure`'s idempotency check, keyed on the same five DB
+      columns. On separate per-task sessions with no ordering, a fresh run
+      would have *both* fire a redundant vision-model call and race to
+      commit conflicting values onto the same row (caption's raw AI delta
+      vs. enhance's reconciled baseline+delta — whichever committed last
+      would silently win). Three independent review passes converged on
+      this. Fixed by joining `enhance`'s future explicitly before
+      `render`/`caption` are even submitted — which also fixes a second,
+      smaller issue: a real `enhance` failure now surfaces its own
+      exception instead of a masked Prefect `UpstreamTaskError` from a
+      `wait_for`-blocked downstream task.
+    * New `tests/album/test_flow_integration.py`: the real `pipeline()`
+      against a Postgres+pgvector testcontainer, genuine concurrent
+      per-task sessions, every external boundary (Immich, vision model,
+      darktable) doubled, including a `counting_analysis_model()`
+      regression guard for the bug above (exactly one vision call per
+      photo). `tests/album/test_flow.py` relaxed to partial-order
+      assertions plus failure-isolation tests for both fences.
+      `ConstantAesthetic`/`ConstantEmbedder` test doubles deduplicated into
+      `tests/doubles.py`.
+    * 218 tests green (`uv run poe check`); no `stages/*.py` gained a
+      Prefect import. Live `album run` end-to-end stays deferred (no
+      reachable Immich/Claude/darktable/Lulu), same standing note as every
+      prior step.
+
 * **Immich keep-or-replace decision recorded** — new
   [`build/immich-dependency-decision.md`](/build/immich-dependency-decision.md) (linked from
   [`index.md`](/index.md)). Analyses what the pipeline actually consumes from Immich

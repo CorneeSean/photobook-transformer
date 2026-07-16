@@ -52,12 +52,21 @@ order, one at a time.
 |---|------|--------|--------|--------|-------|
 | 21 | pgvector schema + integration harness | step-21-pgvector-integration (merged, deleted) | done | ac2cd14 | alembic-migrated pgvector container fixture; `select` over the real `PgVectorSimilarity` (near-dup skip, idempotent; lead coverage with a negative control + `person_ids` JSON round-trip); migrations reach head + no drift; migration round-trip; `integration` marker + `poe test-fast`. 2-agent review (fixed a fileConfig/caplog cross-test leak). 211 tests |
 | 22 | darktable-cli render integration | step-22-darktable-render (merged, deleted) | done | 8aac81b | real `DarktableRenderer` inside the shipped app image renders a real `write_xmp_sidecar` sidecar → asserts output JPEG exists, decodes, **visibly brighter** (`tests/test_render_integration.py`). Validated the darktable XMP history-stack format — see [enhance.md](/stages/enhance.md). Closes step-11's deferred manual check. Shells to `docker` CLI (docker-py build breaks on the py3.14 gcloud cred-helper landmine). |
-| 23 | DB-backed flow smoke test (optional) | — | todo | — | whole flow on real Postgres, Immich/Claude/Lulu as doubles |
+| 23 | DB-backed flow smoke test (optional) | — | todo | — | whole flow on real Postgres, Immich/Claude/Lulu as doubles — largely subsumed by step 25's `test_flow_integration.py`, which already runs the real `pipeline()` on a pgvector container with every external boundary doubled; revisit only if a gap remains |
 | 24 | Immich ML integration (deferred optional) | — | todo | — | needs internet CLIP/face models or a pre-baked model-cache image — see the playbook |
-| 25 | Parallelize the flow (fan-out groups) | step-25-parallelize-flow | in-progress | — | — |
+| 25 | Parallelize the flow (fan-out groups) | step-25-parallelize-flow (merged, deleted) | done | 036fcc2 | DAG execution per `pipeline-execution.md`: 4 sequential stages keep the shared session; 6 grouped stages (`resolve-leads`/`quality`/`cluster`/`enhance`/`render`/`caption`) take a `session_factory` and open their own pooled connection via a new `_owns_session` decorator (+ sibling `_autocommit` for the 4 sequential tasks); two `submit()`/`result()` fences — group 1 (`resolve-leads`‖`quality`‖`cluster`, join at `select`) and group 2 (`enhance`, then `render`‖`caption`, join at `assemble`). Commit-before-fanout/`expire_all()`-after-join at both fences. Review caught a real bug in the original design sketch: `enhance`‖`caption` running fully concurrently raced on `PhotoAnalyzer.ensure`'s shared idempotency columns (double vision-model call + conflicting-write race) — fixed by joining `enhance`'s future before `render`/`caption` are even submitted. New `tests/album/test_flow_integration.py`: real concurrent per-task sessions against a Postgres+pgvector testcontainer, external boundaries doubled, incl. a counting-model regression guard for the caught bug. 3-agent Opus review (correctness/cleanup/tests) + a re-review after the fix; 218 tests. Live `album run` end-to-end stays deferred (no reachable Immich/Claude/darktable/Lulu), same standing note as every prior step. |
 
 ## Notes / blockers
 
+- **Step 25 done; live end-to-end run stays deferred (2026-07-16):**
+  `flow.py` now runs the DAG from `pipeline-execution.md` instead of a
+  straight chain — see the tracker row above for the shape. The manual
+  `album run --album honeymoon-2026` check (build-order.md step 14) is still
+  blocked on a reachable Immich + `ANTHROPIC_API_KEY` + `darktable-cli` +
+  Lulu creds, same standing deferral as every prior step; the new
+  `test_flow_integration.py` is the automated substitute for the
+  *concurrency* half of that check (real per-task sessions against a
+  Postgres+pgvector container), not for the external services themselves.
 - **Enrichment step 17b done; live reference-upload/detection deferred
   (2026-07-15):** `lead_faces` resolution is built and tested against a fake
   provider (upload → async-detection poll → `is_lead`), but the real
