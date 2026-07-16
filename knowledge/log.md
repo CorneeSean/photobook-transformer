@@ -2,6 +2,36 @@
 
 ## 2026-07-16
 
+* **Refactor — `src/album/flow/` pipeline package** (branch
+  `refactor-01-flow-package`). Structural reorg so the only loose top-level
+  modules under `src/album/` are `config.py`, `definition.py`, `cli.py`,
+  `__init__.py`; everything pipeline-related now lives in a new `flow/` package.
+  **Behaviour-preserving** — no logic changed, only file locations and import
+  paths.
+    * **Moves (via `git mv`, history preserved):** `flow.py → flow/_flow.py`;
+      `tone.py → flow/tone.py`; `photo_analyzer.py → flow/photo_analyzer.py`;
+      the whole `stages/` dir (`base.py`, `lead_faces.py`, the 9 stage files) →
+      `flow/stages/`. New `flow/__init__.py` re-exports the public surface
+      (`get_or_create_album`, `pipeline`) from `._flow`, so
+      `from album.flow import pipeline` — which `cli.py` and the tests rely on —
+      keeps resolving. The subpackages `db/`, `immich/`, `lulu/`, `printers/`,
+      `agents/` did **not** move.
+    * **Tests mirrored package-for-package:** `tests/album/stages/ →
+      tests/album/flow/stages/`; `test_flow.py`, `test_flow_integration.py`,
+      `test_tone.py`, `test_photo_analyzer.py` → `tests/album/flow/`.
+    * **Imports rewritten** across `src/`, `tests/`, `alembic/`: `album.stages →
+      album.flow.stages`, `album.tone → album.flow.tone`, `album.photo_analyzer →
+      album.flow.photo_analyzer`. Stale-reference grep returns nothing.
+    * **Docs updated on the branch:** `folder-structure.md` tree + structure
+      rules (the "only module that imports Prefect" rule now names
+      `flow/_flow.py`; tests tree gains `tests/album/flow/`), plus the now-wrong
+      `flow.py`/`stages/` path references in `AGENTS.md`, `README.md`, and moved
+      files' docstrings. The invariant "only `flow/_flow.py` imports Prefect"
+      still holds. `pyproject.toml` needed no change (its globs use `src`/`tests`).
+    * `uv run poe check` green (ruff + `ruff format --check` + basedpyright +
+      xenon A-across-the-board + pytest, **233 tests** — same count as before, only
+      import paths changed).
+
 * **Refactor — `ToneParams` field mapping centralized** (branch
   `refactor-toneparams-field-mapping`, merged). The four bounded tone knobs
   (`exposure_ev`, `temp_shift_k`, `shadows`, `highlights`) were hand-copied

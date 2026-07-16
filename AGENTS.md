@@ -103,8 +103,8 @@ just prose.
    *tested* fallback for an album with none (and, where relevant, no GPS).
 3. **`album_id` first.** Every stage function takes `album_id` as its first
    argument; no stage assumes it's the only album in the DB.
-4. **No Prefect in `stages/`.** `stages/*.py` are plain, unit-testable functions.
-   Only `flow.py` imports Prefect and wraps them as `@task`s.
+4. **No Prefect in `flow/stages/`.** `flow/stages/*.py` are plain, unit-testable
+   functions. Only `flow/_flow.py` imports Prefect and wraps them as `@task`s.
 5. **AI estimates parameters, never generates pixels.** Enhancement produces
    bounded numeric deltas (Pydantic `Field(ge=, le=)`); classical code applies
    them. No invented detail.
@@ -144,13 +144,14 @@ full tree and rules. In brief:
 
 ```
 src/album/
-  config.py      cli.py      flow.py      definition.py
+  config.py      cli.py      definition.py
+  flow/          _flow.py (the one Prefect @flow) tone.py photo_analyzer.py
+  flow/stages/   sync quality cluster select enhance render caption assemble fulfill
   db/            models.py similarity.py session.py
   immich/        client.py
   lulu/          client.py     (thin Lulu Print API HTTP transport)
   printers/      base.py html.py lulu.py  (pluggable output media; HtmlPrinter is default)
   agents/        analysis.py   (ONE agent: tone deltas + caption, swap for TestModel)
-  stages/        sync quality cluster select enhance render caption assemble fulfill
 templates/       Jinja2 page layouts (+ book/ for the HTML viewer)
 data/albums/     <slug>/album.yml (the only thing needed to define an album)
 tests/           conftest.py + per-stage tests + fixtures/

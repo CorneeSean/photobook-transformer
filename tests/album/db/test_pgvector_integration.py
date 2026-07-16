@@ -26,7 +26,7 @@ from testcontainers.postgres import PostgresContainer
 
 from album.db.models import Album, Base, Person, Photo
 from album.db.similarity import PgVectorSimilarity
-from album.stages.select import SelectStage
+from album.flow.stages.select import SelectStage
 from alembic import command
 from tests.pgvector_support import PGVECTOR_IMAGE
 from tests.pgvector_support import alembic_config as _alembic_config

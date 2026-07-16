@@ -33,10 +33,26 @@ photo-album-pipeline/
 │       ├── __init__.py
 │       ├── config.py             # pydantic-settings, reads .env
 │       ├── cli.py                # `album run --album honeymoon-2026`
-│       ├── flow.py               # Prefect @flow(album_slug); builds stage classes, wraps .run as @tasks
 │       ├── definition.py         # loads/validates album.yml → Album + Segments
-│       ├── photo_analyzer.py     # PhotoAnalyzer: shared one-vision-call collaborator (enhance + caption)
-│       ├── tone.py               # ToneParams value object + AnalysisResult/Photo conversions
+│       │
+│       ├── flow/                 # the pipeline package (everything orchestration-related)
+│       │   ├── __init__.py       # re-exports the public surface (pipeline, get_or_create_album) from _flow
+│       │   ├── _flow.py          # Prefect @flow(album_slug); builds stage classes, wraps .run as @tasks
+│       │   ├── photo_analyzer.py # PhotoAnalyzer: shared one-vision-call collaborator (enhance + caption)
+│       │   ├── tone.py           # ToneParams value object + AnalysisResult/Photo conversions
+│       │   │
+│       │   └── stages/           # one class per stage (run(album_id, session, …)); album_id first
+│       │       ├── base.py       # Stage[ResultT](ABC): Template Method run() → _process hook
+│       │       ├── sync.py
+│       │       ├── quality.py
+│       │       ├── cluster.py    # segment assignment + scene detection
+│       │       ├── select.py
+│       │       ├── lead_faces.py # LeadFaceResolver (helper invoked by select; not a Stage)
+│       │       ├── enhance.py    # incl. cross-camera reconciliation + XMP write
+│       │       ├── render.py     # darktable-cli invocation
+│       │       ├── caption.py
+│       │       ├── assemble.py
+│       │       └── fulfill.py    # delegates to an injected printers.Printer
 │       │
 │       ├── db/
 │       │   ├── models.py         # Album, Segment, Photo
@@ -54,20 +70,8 @@ photo-album-pipeline/
 │       │   ├── html.py           # HtmlPrinter — default; static page-by-page webpage
 │       │   └── lulu.py           # LuluPrinter — opt-in; submits the master PDF to Lulu
 │       │
-│       ├── agents/               # PydanticAI: output model + Agent (swap for TestModel)
-│       │   └── analysis.py       # ONE agent; output = bounded tone deltas + caption
-│       │
-│       └── stages/               # one class per stage (run(album_id, session, …)); album_id first
-│           ├── base.py          # Stage[ResultT](ABC): Template Method run() → _process hook
-│           ├── sync.py
-│           ├── quality.py
-│           ├── cluster.py        # segment assignment + scene detection
-│           ├── select.py
-│           ├── enhance.py        # incl. cross-camera reconciliation + XMP write
-│           ├── render.py         # darktable-cli invocation
-│           ├── caption.py
-│           ├── assemble.py
-│           └── fulfill.py            # delegates to an injected printers.Printer
+│       └── agents/               # PydanticAI: output model + Agent (swap for TestModel)
+│           └── analysis.py       # ONE agent; output = bounded tone deltas + caption
 │
 ├── templates/                    # Jinja2 templates, shared across albums
 │   ├── base.html                 # print-PDF page shell (assemble)
@@ -99,10 +103,26 @@ photo-album-pipeline/
         │                         # path as the code it covers, so the two navigate alike
         ├── test_config.py            # album/config.py
         ├── test_cli.py               # album/cli.py
-        ├── test_flow.py              # album/flow.py — Prefect wiring, all stages faked
         ├── test_definition.py        # album/definition.py — album.yml parsing/validation
-        ├── test_photo_analyzer.py    # album/photo_analyzer.py — shared one-vision-call collaborator
         ├── test_genericity.py        # cross-cutting: the shipped wedding album bootstraps
+        ├── flow/                          # mirrors src/album/flow/
+        │   ├── test_flow.py               # album/flow/_flow.py — Prefect wiring, all stages faked
+        │   ├── test_flow_integration.py   # real concurrent per-task sessions (pgvector testcontainer)
+        │   ├── test_photo_analyzer.py     # album/flow/photo_analyzer.py — shared one-vision-call collaborator
+        │   ├── test_tone.py               # album/flow/tone.py — ToneParams conversions
+        │   └── stages/                    # one test module per stage
+        │       ├── test_base.py
+        │       ├── test_sync.py
+        │       ├── test_quality.py
+        │       ├── test_cluster.py        # incl. the no-segments and no-GPS fallback paths
+        │       ├── test_select.py         # MMR logic, with similarity stubbed
+        │       ├── test_lead_faces.py
+        │       ├── test_enhance.py
+        │       ├── test_render.py
+        │       ├── test_render_integration.py
+        │       ├── test_caption.py
+        │       ├── test_assemble.py
+        │       └── test_fulfill.py
         ├── db/
         │   ├── test_models.py             # Album/Segment/Photo creation + relationships, SQLite
         │   ├── test_similarity.py         # pgvector queries, against a Postgres testcontainer
@@ -113,21 +133,9 @@ photo-album-pipeline/
         │   └── test_immich_client.py      # respx against recorded fixtures
         ├── lulu/
         │   └── test_lulu_client.py        # respx against recorded fixtures
-        ├── printers/
-        │   ├── test_html_printer.py
-        │   └── test_lulu_printer.py
-        └── stages/                        # one test module per stage
-            ├── test_sync.py
-            ├── test_quality.py
-            ├── test_cluster.py            # incl. the no-segments and no-GPS fallback paths
-            ├── test_select.py             # MMR logic, with similarity stubbed
-            ├── test_lead_faces.py
-            ├── test_enhance.py
-            ├── test_render.py
-            ├── test_render_integration.py
-            ├── test_caption.py
-            ├── test_assemble.py
-            └── test_fulfill.py
+        └── printers/
+            ├── test_html_printer.py
+            └── test_lulu_printer.py
 ```
 
 Shared helpers and fixtures live at the `tests/` root (imported absolutely, e.g.
@@ -147,10 +155,11 @@ suites with parametrization and scoped fixtures — see
 - **Nothing in `src/` may reference trips, itineraries, days, or any
   occasion-specific concept.** If a stage needs to know an album is a trip, the
   abstraction has leaked.
-- **`stages/*.py` contain no Prefect imports.** `flow.py` is the only module that
-  knows Prefect exists — it instantiates each stage and wraps its `run` method (or,
-  for a trivial stage, the bare function) as a `@task`. Keeps business logic
-  unit-testable without an orchestrator, which is what makes the TDD loop fast.
+- **`flow/stages/*.py` contain no Prefect imports.** `flow/_flow.py` is the only
+  module that knows Prefect exists — it instantiates each stage and wraps its `run`
+  method (or, for a trivial stage, the bare function) as a `@task`. Keeps business
+  logic unit-testable without an orchestrator, which is what makes the TDD loop
+  fast.
 - **A stage is a class when it has a collaborator or several helpers; a plain
   function only when genuinely trivial** (the hybrid rule in
   [quality practices](/process/quality-practices.md) — under which all nine current stages
@@ -158,17 +167,17 @@ suites with parametrization and scoped fixtures — see
   **takes `album_id` first, then the `Session`** — request-scoped state is never a
   constructor dependency; injected collaborators (clients, similarity, printer,
   renderer, vision model) and tunables are.
-- **Every stage class subclasses `stages.base.Stage[…Result]`** and implements
+- **Every stage class subclasses `flow.stages.base.Stage[…Result]`** and implements
   `_process(album, session, *, force)`; the base's `run` is the Template Method
   that performs the invariant album lookup + existence guard, then delegates
-  (quality practices §1.6.1). `flow.py` still wraps the inherited `.run` as a
+  (quality practices §1.6.1). `flow/_flow.py` still wraps the inherited `.run` as a
   `@task` — the base carries no Prefect import. A non-stage helper class (e.g.
-  `lead_faces.LeadFaceResolver`) does **not** inherit `Stage`.
+  `flow.stages.lead_faces.LeadFaceResolver`) does **not** inherit `Stage`.
 - **`agents/*.py` define a Pydantic output model + an `Agent`**, kept out of
-  `stages/` so they can be swapped for `TestModel` in tests. The vision work is
+  `flow/stages/` so they can be swapped for `TestModel` in tests. The vision work is
   **one combined agent** producing tone deltas *and* caption in a single call.
   The shared, idempotent trigger for that call lives in one injected collaborator,
-  `photo_analyzer.PhotoAnalyzer`, which **both** [`enhance`](/stages/enhance.md)
+  `flow.photo_analyzer.PhotoAnalyzer`, which **both** [`enhance`](/stages/enhance.md)
   and [`caption`](/stages/caption.md) receive in their constructors — so a
   selected photo costs exactly one vision round-trip, enforced against the DB
   rather than a stage importing a function from the other.
@@ -178,4 +187,4 @@ suites with parametrization and scoped fixtures — see
   reimplementing it inline. `docker-compose.immich.yml` is a near-drop-in copy of
   Immich's official release compose, kept in its own file so a new Immich release
   can be dropped in with minimal edits. `darktable-cli` must be in the app image,
-  since `stages/render.py` shells out to it.
+  since `flow/stages/render.py` shells out to it.

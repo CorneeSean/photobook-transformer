@@ -30,7 +30,7 @@ class FakeThumbnails:
 
 
 class ConstantAesthetic:
-    """A fixed-score :class:`~album.stages.quality.AestheticScorer` double,
+    """A fixed-score :class:`~album.flow.stages.quality.AestheticScorer` double,
     counting calls so tests can assert idempotency (not re-scored on a rerun)."""
 
     def __init__(self, value: float = 0.5) -> None:
@@ -43,7 +43,7 @@ class ConstantAesthetic:
 
 
 class ConstantEmbedder:
-    """A fixed-embedding :class:`~album.stages.quality.Embedder` double (the
+    """A fixed-embedding :class:`~album.flow.stages.quality.Embedder` double (the
     768-dim width matches data-model.md's ``Vector(768)``), counting calls."""
 
     def __init__(self) -> None:

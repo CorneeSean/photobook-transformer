@@ -62,7 +62,7 @@ To order a physical copy instead, inject the opt-in `LuluPrinter`
 which submits the print-ready PDF to [Lulu](https://api.lulu.com)'s Print API —
 this needs the `LULU_*` credentials and a PDF hosted at a URL Lulu can fetch.
 
-Every dependency `flow.py` wires is real except one, deliberately deferred
+Every dependency `flow/_flow.py` wires is real except one, deliberately deferred
 since [build step 6](./knowledge/build/progress.md): the LAION-style aesthetic
 predictor + CLIP embedder (`open_clip`/`torch` — a heavy, not-yet-added
 dependency). A run still completes without it — `select`'s MMR has a
