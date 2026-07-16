@@ -2,6 +2,34 @@
 
 ## 2026-07-16
 
+* **Refactor — `ToneParams` field mapping centralized** (branch
+  `refactor-toneparams-field-mapping`, merged). The four bounded tone knobs
+  (`exposure_ev`, `temp_shift_k`, `shadows`, `highlights`) were hand-copied
+  field-by-field between `AnalysisResult` (bare names + caption), `ToneParams`,
+  and the `enhance_`-prefixed `Photo` columns in **four** places; consolidated
+  onto the value object.
+    * **new `src/album/tone.py`:** `ToneParams` moved out of `stages/enhance.py`
+      and given `from_analysis` (drops the caption), `from_photo` (coalesces an
+      unset `enhance_*` column to `0.0`), and `write_to` (writes the four
+      columns, never `caption`). The neutral leaf module breaks the `enhance →
+      photo_analyzer` import cycle that had forced the copies to be duplicated
+      (`ToneParams` lived in `enhance`, which `photo_analyzer` can't import back).
+    * **`stages/enhance.py`:** the write-block becomes `combined.write_to(photo)`;
+      the two `_ai_delta_from_*` helpers collapse into one `@staticmethod`.
+      `reconcile_tone`/`_clamp`/`compute_camera_baseline` deliberately *stay*
+      (shared `_clamp`, image deps; `reconcile_tone` is a §1.1 pure-transform).
+    * **`photo_analyzer.py`:** `_persist` becomes
+      `ToneParams.from_analysis(result).write_to(photo)` + the explicit caption
+      write. `_is_already_analyzed`'s five-field presence guard is left as-is (a
+      `None`-check, not a copy — and `from_photo` coalesces away the `None` it
+      depends on).
+    * Behaviour-preserving; `folder-structure.md` tree updated; the two files
+      importing `ToneParams` from `enhance` now import from `album.tone`.
+    * **Review — two adversarial sub-agents** (correctness: no defects; cleanup:
+      4 findings applied — new `tests/album/test_tone.py`, doc/docstring trims)
+      plus a re-review confirming resolution. `uv run poe check` green,
+      **233 tests** (+7).
+
 * **Enrichment step 19 — name-grounded `caption`** done (`cd77da6`, branch
   `step-19-name-caption`, merged). The last core [enrichment
   playbook](/build/enrichment.md) add-on for people: a selected photo's
