@@ -8,11 +8,23 @@ timestamp: 2026-07-15
 
 # Pipeline execution shape
 
-Eleven stages turn Immich assets into a photo book. Today [`flow.py`](/foundations/architecture.md)
-runs them **strictly sequentially** on one shared DB `Session`, committed after
+> **Status (updated 2026-07-16): implemented, then restructured.** The fan-out
+> DAG that the sections below propose as a "change"/"sketch" was applied in build
+> [step 25](/build/progress.md) and later restructured by a refactor. In the
+> current code each stage **co-locates its own Prefect `@task`** in
+> `flow/stages/*.py`; the shared-session-vs-own-session commit wrappers live in
+> `flow/_tasks.py`; and the single `@flow` is produced by the **class-based
+> `Pipeline.flow()`** factory in `flow/_flow.py`. Everywhere below, read
+> **`flow.py`** as **`flow/_flow.py`**, and the "as it runs today — a linear
+> chain" reading as the *original* design the DAG replaced. The
+> dependency-graph analysis and the two invariants (commit-before-fan-out,
+> `expire_all()`-after-join) remain exactly current.
+
+Eleven stages turn Immich assets into a photo book. Originally [`flow/_flow.py`](/foundations/architecture.md)
+ran them **strictly sequentially** on one shared DB `Session`, committed after
 each stage. But the underlying data dependencies form a **DAG** with two
-fan-out groups that could run concurrently. This doc is the map: the shape, why
-it runs as a line today, and the surgical change to parallelise it.
+fan-out groups that run concurrently. This doc is the map: the shape, why
+it originally ran as a line, and the change that parallelised it.
 
 > Companion visual (self-contained, no external deps):
 > `knowledge/foundations/pipeline-execution.html` — the same graph hand-drawn, plus the code
@@ -116,7 +128,9 @@ only at `sync` (the boundary — see [architecture](/foundations/architecture.md
 ## The change
 
 One structural idea — an **own session per concurrent task** — plus a couple of
-`submit()` / `result()` fences. This is a sketch, not applied to `flow.py`.
+`submit()` / `result()` fences. This began as a sketch; it is now implemented in
+`flow/_flow.py` (via the `Pipeline` class + the `flow/_tasks.py` wrappers) — see
+the status note at the top.
 
 ### 1 · Session ownership
 

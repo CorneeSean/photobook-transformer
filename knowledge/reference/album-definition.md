@@ -74,7 +74,7 @@ lead_faces:
 We never run our own face model: Immich already recognizes library faces into
 `Person`s; the reference is just a way to *name* which people are the leads.
 Resolution (upload + waiting out Immich's async face detection, then reading the
-faces) happens in [`stages/lead_faces.py`](/stages/index.md), which marks the
+faces) happens in [`flow/stages/lead_faces.py`](/stages/index.md), which marks the
 matching `Person` rows `is_lead=True`. Omit the block entirely for an album with
 no priority subjects — every stage then behaves exactly as before. A reference
 face that Immich hasn't assigned to a named person is surfaced as a warning (the

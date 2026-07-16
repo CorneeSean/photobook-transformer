@@ -74,6 +74,49 @@
     * `uv run poe check` green (ruff + `ruff format --check` + basedpyright +
       xenon A-across-the-board + pytest, **233 tests** — same count as before, only
       import paths changed).
+* **Refactor — nested pydantic-settings by domain** (branch `refactor-02-config`).
+  `src/album/config.py`'s flat `immich_*` / `lulu_*` fields are now grouped into
+  nested `ImmichSettings` / `LuluSettings` sub-models reached as `settings.immich.*`
+  / `settings.lulu.*`, bound via the existing `env_nested_delimiter="__"`. Env vars
+  renamed to match: `IMMICH_API_KEY → IMMICH__API_KEY`, `LULU_CLIENT_KEY →
+  LULU__CLIENT_KEY`, `LULU_SHIPPING_* → LULU__SHIPPING_*`, etc. `database_url` and
+  `anthropic_api_key` kept **flat** — single fields with de-facto-standard env names
+  (`DATABASE_URL` consumed by alembic/compose; `ANTHROPIC_API_KEY` the SDK
+  convention). Readers updated (`immich/client.py`, `lulu/client.py`,
+  `printers/lulu.py`); `.env.example` + `README.md` renamed. `@cache get_settings()`
+  and the "only module that reads env vars" contract preserved. `uv run poe check`
+  green (**237 tests**, +4 `TestNestedGroups` binding tests).
+* **Refactor — `definition.py` as a `Definition` ABC hierarchy** (branch
+  `refactor-03-definition`). The module functions `load_album_definition` /
+  `load_lead_faces` become a Template-Method ABC `Definition[T]` (`load` hoists the
+  shared `yaml.safe_load` + `AlbumYAML.model_validate`; a `@staticmethod
+  @abstractmethod _map(parsed) -> T` hook does the per-concern projection) with
+  subclasses `AlbumDefinition(Definition[Album])` and
+  `LeadFacesDefinition(Definition[LeadFacesYAML | None])` — mirroring the
+  `flow/stages/base.Stage` idiom (quality-practices §1.6.1). Call shape
+  `AlbumDefinition().load(path)`. Pydantic schema models
+  (`AlbumYAML`/`SegmentYAML`/`LeadFacesYAML`) unchanged; behaviour-preserving
+  (identical parsing / UTC normalization / validation errors). Callers updated
+  (`flow/_flow.py` — import + 2 call sites; `tests/album/test_definition.py`); no
+  back-compat wrappers left. `uv run poe check` green (**233 tests**).
+* **Housekeeping — cat-album script + agent-worktree gitignore** (branch
+  `chore-01-scripts-and-hygiene`). `scripts/build_cat_album.py` used the pre-class
+  stage API (`cluster()`/`assemble()` functions) and pre-reorg `album.stages.*`
+  import paths — broken since the Stage-class refactor (`880f512`) and the `flow/`
+  move (`a6c3d15`), both of which left `scripts/` untouched (it is outside the
+  ruff/basedpyright/pytest gate scope). Repointed to `ClusterStage().run(...)` /
+  `AssembleStage(dir).run(...)` and `album.flow.stages.*` (`basedpyright
+  scripts/build_cat_album.py`: 0 errors). `.gitignore` now excludes
+  `.claude/worktrees/` so Claude Code agent worktrees stop being traversed by
+  `ruff check .`.
+* **Docs — knowledge-base sync for the flow/ + task refactors.**
+  `foundations/pipeline-execution.md` (+ its `.html` companion) carried a
+  "sketch, not applied" framing and `flow.py` module references; both are now
+  corrected — a status banner records that the fan-out DAG is implemented (build
+  step 25) and restructured (co-located per-stage `@task`s, `flow/_tasks.py`
+  wrappers, class-based `Pipeline.flow()` factory), and `flow.py` → `flow/_flow.py`
+  throughout. `reference/album-definition.md`'s `stages/lead_faces.py` path →
+  `flow/stages/lead_faces.py`.
 
 * **Refactor — `ToneParams` field mapping centralized** (branch
   `refactor-toneparams-field-mapping`, merged). The four bounded tone knobs

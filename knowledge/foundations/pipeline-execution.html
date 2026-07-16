@@ -222,9 +222,9 @@
   <p class="h2sub">The execution is a line; the dependencies are not.</p>
   <div class="cols">
     <div class="card">
-      <span class="tag" style="color:var(--muted)">As it runs today</span>
+      <span class="tag" style="color:var(--muted)">Original design</span>
       <h3>Linear chain</h3>
-      <p>One shared <code>Session</code>, committed after every stage (<code>flow.py:242</code>). Simple, resumable, one DB connection — each stage isolates its own per-photo failures, so no Prefect-level fan-out was needed to get correct.</p>
+      <p>One shared <code>Session</code>, committed after every stage (<code>flow/_flow.py</code>). Simple, resumable, one DB connection — each stage isolates its own per-photo failures, so no Prefect-level fan-out was needed to get correct. (Superseded: the fan-out DAG below is now implemented — see the companion <code>pipeline-execution.md</code> status note.)</p>
     </div>
     <div class="card">
       <span class="tag" style="color:var(--accent)">As data flows</span>
@@ -352,7 +352,7 @@ _fulfill_task(album_id, db_session, printer)</code></pre>
   </div>
 
   <footer>
-    <span>photobook-transformer · src/album/flow.py</span>
-    <span>sketch — not applied</span>
+    <span>photobook-transformer · src/album/flow/_flow.py</span>
+    <span>implemented (build step 25, later restructured)</span>
   </footer>
 </main>
