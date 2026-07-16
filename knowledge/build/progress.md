@@ -43,7 +43,7 @@ order, one at a time.
 | 17 | Faces in client + `sync` (+schema) | step-17-faces-sync (merged, deleted) | done | c99d319 | `ImmichFace` + `get_faces` (`GET /faces?id=`); `Photo.face_count`/`person_ids` + album-scoped `Person` table (migration `c3d9e5a1f742`, verified on real Postgres, zero autogenerate drift); per-asset N+1 face fetch, idempotent Person upsert, failure-isolated for both httpx + pydantic ValidationError; genericity guard holds (`person_ids=[]` ⇒ face-free behavior). 3-agent review; 177 tests green |
 | 17b | Lead-face resolution | step-17b-lead-faces (merged, deleted) | done | 06810d7 | `LeadFacesYAML` (exactly one of reference_image/reference_asset_id/person_ids) + `load_lead_faces`; client `upload_asset` (POST /assets); `Album.lead_reference_asset_id` cache (migration `d4a1c7b93e56`, verified on Postgres); `LeadFaceResolver` uploads + polls async face detection, marks `Person.is_lead` (exact set, clears stale); `_resolve_leads_task` after sync; genericity guard holds. 3-agent review (fixed stale-lead clearing); 194 tests |
 | 18 | People-aware + lead-aware `select` | step-18-people-select (merged, deleted) | done | f3afc54 | effective-score boosts (group_boost/person + lead_boost/lead, tunable) + lead guaranteed coverage (bypasses near-dup guard vs non-leads; couple each covered) + strict-on-non-leads (no generic coverage phase — chosen posture); byte-for-byte for face-free albums. 3-agent review (removed a provably-dead generic-coverage phase); 205 tests |
-| 19 | Name-grounded `caption` (optional) | — | todo | — | pass `Person.name`s into the shared analysis call |
+| 19 | Name-grounded `caption` (optional) | step-19-name-caption (merged, deleted) | done | cd77da6 | `PhotoContext.person_names` + pure `_resolve_person_names` (photo `person_ids` → `Person.name` via the album-scoped `photo.album.people` cache — one query/album from the identity map, order preserved, unnamed/unknown dropped); `format_context` emits a `People in this photo:` line only when non-empty; rides the **one** shared analysis call (no 2nd round-trip); byte-for-byte for a face-free or all-unnamed photo (genericity guard). 2 adversarial reviews (correctness clean; style/reuse findings applied — shared `doubles.canned_analysis_response`, capturing double → class fixture). 223 tests (+5). Live-Claude caption spot-check still deferred (no `ANTHROPIC_API_KEY`). |
 | 20 | Rating / OCR / geocoded place (optional) | — | todo | — | `rating` + `exifInfo.city/state/country` + OCR into nullable columns |
 
 ### TestContainers playbook (see [testcontainers.md](/build/testcontainers.md))
@@ -58,6 +58,19 @@ order, one at a time.
 
 ## Notes / blockers
 
+- **Enrichment step 19 done; live-Claude caption spot-check deferred
+  (2026-07-16):** `caption` now names people. A selected photo's assigned
+  `person_ids` are resolved to `Person.name`s (`PhotoAnalyzer._resolve_person_names`,
+  via the album-scoped `photo.album.people` cache) and passed as
+  `PhotoContext.person_names` into the **one** shared analysis call, so a caption
+  can say *"Alex and Sam at the harbour in Lisbon"*. Opt-in and additive: a
+  face-free album — or a photo whose recognized people are all unnamed/unknown in
+  Immich — produces no people line, leaving the prompt byte-for-byte as before
+  (genericity guard). Tested via `TestModel`/SQLite only; the "spot-check ~20
+  captions for accuracy and non-genericity" manual step (build-order step 12,
+  enrichment 19) stays deferred — no `ANTHROPIC_API_KEY` here, same pattern as
+  steps 9/10/12. **Next enrichment step: 20 (rating/OCR/geocoded place,
+  optional).**
 - **Step 25 done; live end-to-end run stays deferred (2026-07-16):**
   `flow.py` now runs the DAG from `pipeline-execution.md` instead of a
   straight chain — see the tracker row above for the shape. The manual

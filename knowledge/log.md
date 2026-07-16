@@ -2,6 +2,50 @@
 
 ## 2026-07-16
 
+* **Enrichment step 19 — name-grounded `caption`** done (`cd77da6`, branch
+  `step-19-name-caption`, merged). The last core [enrichment
+  playbook](/build/enrichment.md) add-on for people: a selected photo's
+  recognized *named* subjects now ground its caption, so it can say *"Alex and
+  Sam at the harbour in Lisbon"* instead of *"two people at the harbour."*
+    * **`agents/analysis.py`:** `PhotoContext` gains `person_names: list[str]`;
+      `format_context` appends a `People in this photo: …` line **only when
+      non-empty**; the system prompt now tells the model to use given names
+      naturally and never invent one or say it doesn't recognize someone.
+    * **`photo_analyzer.py`:** new pure `_resolve_person_names(photo)` maps the
+      photo's `person_ids` to `Person.name`s via the album-scoped
+      `photo.album.people` cache (**one query per album**, served from the
+      session identity map — not an N+1), preserving `person_ids` order and
+      dropping people unnamed in Immich (`Person.name is None`) or with no cached
+      `Person` row. Wired into `ensure`'s `PhotoContext`, so the names reach the
+      **one** shared vision call (no second round-trip) whether `enhance` or
+      `caption` triggers it.
+    * **Genericity guard:** a face-free album — or a photo whose people are all
+      unnamed/unknown — resolves to `[]`, so no people line is emitted and the
+      prompt is byte-for-byte what it was pre-step-19. No schema change.
+    * **Tests (TDD, `TestModel`/SQLite, no API key):** 3 in `test_photo_analyzer.py`
+      (named people reach the captured prompt via a prompt-capturing
+      `FunctionModel`; unnamed/unknown ids dropped with no `None`/raw-id leak;
+      face-free photo adds no line) + 2 in `test_analysis.py` (`format_context`
+      with names / empty).
+    * **Review — two *adversarial* sub-agents, per user's request** (one
+      correctness-only, one style/readability/reuse-only): correctness found **no
+      blockers/majors** (verified the None/`[]` collapse, both drop-cases, order,
+      the one-query-per-album claim, and that the tests are true-green, not
+      false-green). Style raised one should-fix + nice-to-haves, **all applied:**
+      the prompt-capturing double moved from a module-level function to a
+      `TestPeopleGrounding` class fixture (quality-practices.md §2.4); the canned
+      `AnalysisResult` JSON — previously duplicated across `counting_analysis_model`
+      and the new double — extracted into a shared `doubles.canned_analysis_response()`;
+      the two classes' `_persist` aligned; a dead `str`-content branch and a
+      defensive `getattr` dropped from the prompt walk; one assertion guarding a
+      structurally-impossible case removed; the `PhotoContext.person_names` doc
+      rationale de-duplicated against the resolver's docstring.
+    * `uv run poe check` green, **223 tests** (+5). Live-Claude caption spot-check
+      (build step 12 / enrichment 19) stays deferred — no `ANTHROPIC_API_KEY`,
+      same standing deferral as steps 9/10/12. Also gitignored `.idea/` (a
+      separate `chore:` commit, per user request). **Next enrichment step: 20
+      (rating/OCR/geocoded place, optional).**
+
 * **Build step 25 — parallelize the flow (fan-out groups)** done (branch
   `step-25-parallelize-flow`, merged, `036fcc2`). Applies the DAG execution
   documented in [`pipeline-execution.md`](/foundations/pipeline-execution.md):
