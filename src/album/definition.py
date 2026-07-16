@@ -1,10 +1,16 @@
-"""Loads and validates an ``album.yml`` file into ``Album`` + ``Segment`` rows.
+"""Loads and validates an ``album.yml`` file via a ``Definition`` ABC hierarchy.
+
+A generic :class:`Definition` Template Method base owns the shared parse
+(read file + validate into :class:`AlbumYAML`); :class:`AlbumDefinition` maps
+that onto ``Album`` + ``Segment`` rows and :class:`LeadFacesDefinition` onto the
+optional ``lead_faces`` block.
 
 See knowledge/reference/album-definition.md for the on-disk format and timezone rules.
 """
 
 from __future__ import annotations
 
+from abc import ABC, abstractmethod
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -117,37 +123,65 @@ class AlbumYAML(BaseModel):
         return utc
 
 
-def load_album_definition(path: Path) -> Album:
-    """Parse and validate ``path`` into an unpersisted ``Album`` with its segments."""
-    raw = yaml.safe_load(path.read_text())
-    parsed = AlbumYAML.model_validate(raw)
+class Definition[T](ABC):
+    """Template Method base for loading an ``album.yml`` into a result ``T``.
 
-    album = Album(
-        slug=parsed.slug,
-        title=parsed.title,
-        immich_album_id=parsed.immich_album_id,
-        timezone=parsed.timezone,
-        meta=parsed.meta,
-    )
-    album.segments = [
-        Segment(
-            position=position,
-            label=segment.label,
-            place=segment.place,
-            start_at=segment.start_at,
-            end_at=segment.end_at,
-        )
-        for position, segment in enumerate(parsed.segments, start=1)
-    ]
-    return album
-
-
-def load_lead_faces(path: Path) -> LeadFacesYAML | None:
-    """Parse just the ``lead_faces`` block from an ``album.yml``.
-
-    Returned separately from :func:`load_album_definition` because leads are a
-    resolution *input* (resolved via Immich in ``stages/lead_faces.py``), not
-    persisted ``Album`` state. ``None`` when the album declares no leads.
+    ``load`` owns the **invariant** step every concern shares — read the file and
+    validate it into an :class:`AlbumYAML` (the one parse, one set of validation
+    errors and UTC-normalization messages) — then delegates the variant work to
+    the abstract ``_map`` hook, which projects that validated shape onto each
+    subclass's result type. This mirrors ``flow.stages.base.Stage`` (quality-
+    practices.md §1.6.1): only the genuinely-shared step is hoisted, the schema
+    models (``AlbumYAML`` et al.) stay the validated shape, and the ABC governs
+    load/map behaviour rather than the shape (§1.6.4 — a family with real shared
+    behaviour to inherit, so nominal ABC, not a structural Protocol).
     """
-    raw = yaml.safe_load(path.read_text())
-    return AlbumYAML.model_validate(raw).lead_faces
+
+    def load(self, path: Path) -> T:
+        """Read + validate ``path``, then map the validated shape to ``T``."""
+        raw = yaml.safe_load(path.read_text())
+        parsed = AlbumYAML.model_validate(raw)
+        return self._map(parsed)
+
+    @staticmethod
+    @abstractmethod
+    def _map(parsed: AlbumYAML) -> T:
+        """Project the validated ``album.yml`` onto this concern's result type."""
+
+
+class AlbumDefinition(Definition[Album]):
+    """Loads the full album — an unpersisted ``Album`` with its ``Segment`` rows."""
+
+    @staticmethod
+    def _map(parsed: AlbumYAML) -> Album:
+        album = Album(
+            slug=parsed.slug,
+            title=parsed.title,
+            immich_album_id=parsed.immich_album_id,
+            timezone=parsed.timezone,
+            meta=parsed.meta,
+        )
+        album.segments = [
+            Segment(
+                position=position,
+                label=segment.label,
+                place=segment.place,
+                start_at=segment.start_at,
+                end_at=segment.end_at,
+            )
+            for position, segment in enumerate(parsed.segments, start=1)
+        ]
+        return album
+
+
+class LeadFacesDefinition(Definition[LeadFacesYAML | None]):
+    """Loads just the optional ``lead_faces`` block from an ``album.yml``.
+
+    Separate from :class:`AlbumDefinition` because leads are a resolution *input*
+    (resolved via Immich in ``flow/stages/lead_faces.py``), not persisted
+    ``Album`` state. ``None`` when the album declares no leads.
+    """
+
+    @staticmethod
+    def _map(parsed: AlbumYAML) -> LeadFacesYAML | None:
+        return parsed.lead_faces

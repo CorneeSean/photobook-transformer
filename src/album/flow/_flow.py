@@ -92,7 +92,7 @@ from sqlalchemy.orm import Session
 from album.db.models import Album
 from album.db.session import SessionFactory, new_session
 from album.db.similarity import PgVectorSimilarity, SimilaritySearch
-from album.definition import load_album_definition, load_lead_faces
+from album.definition import AlbumDefinition, LeadFacesDefinition
 from album.flow.photo_analyzer import PhotoAnalyzer
 from album.flow.stages.assemble import AssembleStage
 from album.flow.stages.caption import CaptionStage
@@ -153,7 +153,7 @@ def get_or_create_album(session: Session, album_slug: str, albums_dir: Path = _A
     if not album_yml.exists():
         raise FileNotFoundError(f"no album.yml at {album_yml}")
 
-    album = load_album_definition(album_yml)
+    album = AlbumDefinition().load(album_yml)
     session.add(album)
     session.flush()
     return album.id
@@ -223,7 +223,7 @@ def _resolve_leads_task(
     # from album.yml here rather than the DB; absent file/block ⇒ a clean no-op.
     album_dir = _ALBUMS_DIR / album_slug
     album_yml = album_dir / "album.yml"
-    config = load_lead_faces(album_yml) if album_yml.exists() else None
+    config = LeadFacesDefinition().load(album_yml) if album_yml.exists() else None
     LeadFaceResolver(client).run(album_id, config, album_dir, session)
 
 
