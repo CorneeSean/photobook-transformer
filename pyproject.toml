@@ -52,14 +52,16 @@ target-version = "py314"
 line-length = 100
 
 [tool.ruff.lint]
-# COM812 (require trailing commas): pairs with the formatter's magic trailing
-# comma (on by default) so multi-line collections/calls stay expanded one-per-
-# line rather than collapsing. Ruff prints an advisory that COM812 "may conflict
-# with the formatter" — kept deliberately: in this repo the check+format output
-# is stable (no ping-pong), and we want trailing commas *required*, not merely
-# respected. The magic trailing comma alone respects existing commas but can't
-# enforce them.
-select = ["E", "F", "I", "UP", "B", "C90", "COM812"]
+select = ["E", "F", "I", "UP", "B", "C90"]
+# COM812 (trailing commas) is deliberately NOT enforced by the linter: ruff
+# advises it "may conflict with the formatter" and prints that advisory on every
+# format run. We applied the one-time COM812 reformat, and the formatter's magic
+# trailing comma (on by default) keeps existing trailing commas expanded
+# one-per-line and adds them when it wraps long lines — so collections stay
+# vertical without the linter rule. Listed in ignore (not merely dropped from
+# select) to document the decision and keep the advisory silent if a broader
+# select ever re-includes it.
+ignore = ["COM812"]
 
 [tool.ruff.lint.mccabe]
 # Cheap, dependency-free complexity smell check (Sonar-style), complementing the
