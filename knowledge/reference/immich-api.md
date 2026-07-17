@@ -82,3 +82,13 @@ These notes and the client's test fixtures (`tests/fixtures/immich/`) are derive
 from the OpenAPI **contract**, not yet from a live capture. Re-verify against a
 running instance on the first real `sync` (the live run was intentionally deferred
 when steps 4–5 were built without a reachable stack).
+
+**Partly closed by the step-24 offline ML stack (2026-07-17):** the faces path
+(`upload_asset` → async detection → `get_faces` returning a real
+machine-learning face) and CLIP (smart search returning an uploaded asset, i.e.
+the embedding ran) are now exercised against a **real** Immich instance — a
+pinned, pre-baked, fully-offline stack (see
+[testcontainers.md](/build/testcontainers.md) step 24 / `poe test-immich-ml`). Still
+contract-only: album pagination on a real library, EXIF/`rating`/geocoded-place on
+real synced photos, and duplicate detection — re-verify those on the first live
+`sync`.

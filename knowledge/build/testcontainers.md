@@ -80,22 +80,54 @@ step-14 live verification minus the unreachable boundaries. Lower marginal value
 than 21/22 (the flow's wiring is already unit-tested via `prefect_test_harness`);
 take it only if the real-DB cross-stage coverage proves worth the runtime.
 
-## Explicitly deferred (optional, later)
+## Immich ML integration — done via a pre-baked model image
 
-**24. Immich ML integration** *(deferred optional — needs an internet model, or a
-pre-baked cache)*. An Immich server **can** be containerized, and its **HTTP
-contract** (upload an asset, album pagination, `get_faces` returning `[]` before
-detection) could be tested against a real instance. But **face detection and CLIP
-embeddings require downloading ML models from the internet**, so live
-faces/lead-resolution/embedding behavior stays deferred unless we **pre-bake a
-model-cache image** (heavy: Immich's `model-cache` volume baked into a fixture
-image). Until then:
-- keep the `respx`-fixture contract tests for `ImmichClient` (steps 4–5/17/17b);
-- leave live-Immich (faces appearing after the async detection job, real
-  lead-reference upload + detection timing) as the standing **manual** deferral
-  already tracked in [progress](/build/progress.md)'s Notes / blockers.
-Revisit if/when a pre-baked Immich+model-cache image is worth maintaining, or a
-real instance becomes reachable in the dev environment.
+**24. Immich ML integration** *(**done** — pre-baked offline model image)*. The
+deferral was "face detection and CLIP embeddings download ML models from the
+internet, so a hermetic test needs a pre-baked model-cache image." We now build
+exactly that, **locally** — and after a one-time setup the test fetches **no ML
+model** (ever) and **no images** from the internet.
+
+- **The bake** ([`ml-baked.Dockerfile`](../../tests/fixtures/immich/ml-baked.Dockerfile)):
+  `FROM ghcr.io/immich-app/immich-machine-learning:<pinned>`, then a build-time
+  `snapshot_download` that **mirrors `immich_ml.models.base.ModelBase._download`**
+  — same `immich-app/<model>` repo, same on-disk layout (`/cache/<task>/<model>/…`,
+  since `cache_folder=/cache`), same `*.armnn`/`*.rknn` ignore, and it drops the
+  redundant `.cache` blob dir in-layer. Only the CPU `.onnx` variants are fetched
+  (**~0.77 GB** of the ~3.6 GB repos); the image is **~3.1 GB** on disk (the base
+  ML image is ~2.3 GB — its `/opt/venv` alone is ~0.9 GB — plus the models). The
+  container runs with `HF_HUB_OFFLINE=1`/`TRANSFORMERS_OFFLINE=1` so a cache miss
+  fails loudly instead of silently reaching the network.
+- **One-time setup, then offline.** `poe bake-immich-ml` bakes that image **and**
+  pre-pulls the server/db/redis images, so it is the *only* internet-touching step;
+  `compose up` at test time then finds every image present and pulls nothing.
+- **The stack** ([`docker-compose.integration.yml`](../../tests/fixtures/immich/docker-compose.integration.yml)):
+  server + the baked ML image + the (digest-pinned) vectorchord Postgres + valkey,
+  pinned to a concrete `IMMICH_VERSION`, ephemeral, on an ephemeral host port, with
+  reverse-geocoding disabled (a second startup internet hit — out of scope). It is
+  driven from Python via testcontainers' `DockerCompose` (Ryuk-reaped teardown +
+  port resolution — no hand-rolled subprocess/cleanup), the same testcontainers
+  dependency the pgvector tests already use.
+- **The test**
+  ([`test_immich_ml_integration.py`](../../tests/album/immich/test_immich_ml_integration.py)):
+  bootstraps an admin + API key over Immich's auth API, uploads
+  `skimage.data.astronaut()` (a public-domain NASA face — no personal photo
+  committed) through the real `ImmichClient`, waits out the async job cascade, and
+  asserts (a) `get_faces` returns a real machine-learning detection, (b) the real
+  `LeadFaceResolver` `reference_image` path uploads + polls real async detection to
+  a resolved face (closes the step-17b timing deferral), and (c) smart search
+  returns the asset (CLIP embedded offline). **Opt-in** (`IMMICH_ML_INTEGRATION=1`
+  / `poe test-immich-ml`) so the ~3 GB image + multi-service stack stays out of the
+  default `poe check` gate.
+
+**Still out of scope** (no container substitute or not worth the second bake):
+- keep the `respx`-fixture contract tests for `ImmichClient` (steps 4–5/17/17b) —
+  they stay the fast default; this is the live counterpart, not a replacement;
+- **reverse-geocoding** (`city/state/country`, step 20) — disabled here; would
+  need a second geodata bake;
+- **recognition of a *named* person** — Immich clusters detected faces into
+  unnamed people; naming is a UI action, so the test asserts real detection, not a
+  named match.
 
 ## Out of scope (no container substitute)
 

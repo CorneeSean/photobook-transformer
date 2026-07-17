@@ -164,6 +164,19 @@ class ImmichClient:
         response.raise_for_status()
         return ImmichAsset.model_validate(response.json())
 
+    def smart_search(self, query: str) -> list[ImmichAsset]:
+        """CLIP smart-search for a text ``query``, via ``POST /search/smart``.
+
+        Returns the matched assets (Immich's ranked first page). The embedding
+        itself never crosses the wire (open question #1) — a hit means Immich
+        CLIP-embedded both the query and the asset, so this is the only
+        API-observable proof CLIP ran (used by the ML integration test).
+        """
+        response = self._client.post("/search/smart", json={"query": query})
+        response.raise_for_status()
+        items = response.json()["assets"]["items"]
+        return [ImmichAsset.model_validate(item) for item in items]
+
     def get_duplicates(self) -> list[ImmichDuplicate]:
         """All duplicate groups Immich has detected, via ``GET /duplicates``."""
         response = self._client.get("/duplicates")
