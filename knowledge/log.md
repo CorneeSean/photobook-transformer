@@ -2,6 +2,41 @@
 
 ## 2026-07-17
 
+* **Build step 28 done — document-driven segments (`--source-document`)**
+  (commit `1e2b0af`, branch `step-28-segments-agent`; playbook step 3 / Feature B
+  of [single-command-ingestion.md](/build/single-command-ingestion.md)). New
+  `src/album/agents/segments.py`: a second PydanticAI agent (sibling to
+  `analysis.py`) that turns a schedule document into the album's time/place
+  `segments`. `extract_segments` is the pure agent call; `extract_segments_from_pdf`
+  reads a PDF's text via `pypdf` and falls back to embedded page images for a
+  scanned/image-only PDF. The output reuses the album's own `SegmentYAML` (plus an
+  optional `title`); the agent emits ISO timestamps and the `album.yml` loader
+  (`AlbumYAML`) stays the source of truth for correctness (UTC normalization +
+  ordering/non-overlap).
+    * **Wiring.** `photobook-generator generate --source-document=<pdf>` runs the
+      agent inside `ingest` after the readiness poll, grounded on the photos'
+      capture-date range (`_capture_range` over `get_album_assets`) and the album
+      timezone, then writes the segments + a doc-suggested title into `album.yml`.
+      Title precedence is now explicit `--title` > document title > directory name
+      > slug. A loose extraction fails fast: `ingest` re-runs the real loader
+      (`_validate_materialized`) and turns a rejection into a clear `IngestError`
+      with fix-and-`--force` guidance, rather than crashing deep in the pipeline
+      after reporting success (caught in review).
+    * **Genericity held (the load-bearing constraint).** Every module/model/field/
+      function name is occasion-agnostic; only the system-prompt *string* lists
+      mixed example document kinds (itinerary/run-sheet/line-up/agenda), exactly as
+      the plan prescribes to keep extraction generic — the cleanup reviewer
+      confirmed PASS. The duplicated default-model factory was extracted to a shared
+      `agents/_model.py` used by both agents.
+    * Two adversarial Opus reviews (correctness + cleanup/genericity) — findings
+      applied (fail-fast validation, shared model factory, `SegmentYAML.model_dump`,
+      aware/naive capture-range normalization) — then a focused re-review of the
+      fixes (clean). `uv run poe check` green (277 tests). Live-Claude extraction
+      accuracy spot-check stays deferred (no `ANTHROPIC_API_KEY`), same pattern as
+      steps 9/10/12; the scanned-PDF path is exercised via weasyprint-built
+      fixtures round-tripped through pypdf. **Single-command-ingestion playbook
+      (steps 26-28) complete.**
+
 * **Build step 27 done — single-command `photobook-generator generate <dir>`**
   (commit `c1c5146`, branch `step-27-ingest-cli`; playbook step 2 / Feature A of
   [single-command-ingestion.md](/build/single-command-ingestion.md)). New
