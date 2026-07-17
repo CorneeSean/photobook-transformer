@@ -2,6 +2,22 @@
 
 ## 2026-07-17
 
+* **Plan added — [single-command ingestion](/build/single-command-ingestion.md)**
+  (handover, not yet built). Captures two user-requested UX features and how they
+  fit the current architecture: (1) `photobook-generator <dir>` — a one-shot that
+  walks a local photo directory, uploads each file to Immich (reusing the existing
+  content-deduped `ImmichClient.upload_asset`), creates an Immich album (new
+  `create_album` client method), waits out Immich's async EXIF/face jobs (mirroring
+  `LeadFaceResolver`'s poll), *materializes* a `data/albums/<slug>/album.yml`, and
+  calls the existing `pipeline(album_slug=...)` unchanged; and (2)
+  `--source-document=doc.pdf` — a new `agents/segments.py` PydanticAI agent (sibling
+  to `analysis.py`; `pypdf` already a dep) that extracts the `segments:` block from a
+  schedule/itinerary document, kept strictly occasion-agnostic per the
+  folder-structure genericity rule. Recommends the app-feature path over a bare
+  Claude skill (reproducible + testable via `TestModel`), with a thin
+  `.claude/skills/` wrapper as optional dev-time sugar. Both are additive — no stage
+  logic, data-model, or DAG changes; ~3 build steps. Indexed under Execution.
+
 * **Refactor — a stage *is* its own task; `session_factory` in the constructor**
   (branch `refactor-stage-ctor-session`, user-directed). Reshapes the stage
   interface and every usage; behaviour-preserving (static gates green; 212 unit
