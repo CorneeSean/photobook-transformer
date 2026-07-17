@@ -11,7 +11,10 @@ timestamp: 2026-07-17
 A follow-on to the [build order](/build/build-order.md) and
 [enrichment playbook](/build/enrichment.md), capturing two user-requested UX
 features and how they fit the current architecture without breaking its
-invariants. **This is a plan/handover, not yet-built code.**
+invariants. **Built** in steps 26-28 (see [progress](/build/progress.md) and
+[`log.md`](/log.md)) — this remains the design narrative; the shipped command is a
+single `photobook-generator` with `generate <dir>` and `run --album <slug>`
+subcommands.
 
 ## The two asks
 
@@ -62,7 +65,7 @@ existing boundary, not a new zero-dependency runtime. State that plainly in
 | Create an Immich album from those assets | **Missing** — client has no album-creation method | Add `create_album(name, asset_ids)` (`POST /albums`) |
 | Wait for Immich's async EXIF/face/dedupe jobs before `sync` | Partially solved — `LeadFaceResolver` already polls async face detection | Reuse that polling shape; poll job readiness before running the pipeline |
 | Produce an `album.yml` without the user writing one | `AlbumDefinition`/`AlbumYAML` load it; nothing *writes* one | Emit a minimal `album.yml` (slug/title/immich_album_id[/timezone][/segments]) |
-| A `photobook-generator <dir>` entry point | Only `album run --album <slug>` exists (`[project.scripts] album`) | Add a console script + a positional-directory command |
+| A `photobook-generator <dir>` entry point | Before this feature, only the `album.yml`-first run existed (the console script, then named `album`) | Add a `generate` subcommand taking a positional directory |
 
 Everything downstream of `sync` is already directory-agnostic — it reads our DB,
 scoped by `album_id`, exactly as it does for a hand-authored album. So the whole
@@ -110,12 +113,14 @@ feature lives **in front of** `sync`.
   `create_album` → readiness poll → `album.yml` materialization. Talks to
   `ImmichClient` + the filesystem; contains no DAG/Prefect logic. Returns the
   slug it wrote, which the CLI hands to `pipeline`.
-- **`src/album/cli.py` + `[project.scripts]`** — add a `photobook-generator`
-  console script with a **positional directory** and `--source-document`,
-  `--slug`, `--title`, `--timezone` options. Keep `album run --album <slug>` as
-  the album.yml-first path (unchanged). Reasonable shape: `photobook-generator`
-  = "dir → book"; `album run` = "existing album.yml → book". Keep `cli.py` thin
-  (arg-parse + one call into `ingest` then `pipeline`), per its current contract.
+- **`src/album/cli.py` + `[project.scripts]`** — the console script is
+  `photobook-generator` with two subcommands: `generate <dir>` (a **positional
+  directory** plus `--source-document`, `--slug`, `--title`, `--timezone`,
+  `--force`) and `run --album <slug>` (the album.yml-first path, unchanged).
+  Shape: `generate` = "dir → book"; `run` = "existing album.yml → book". (This
+  consolidated the plan's original two-script sketch into one command, per a
+  user decision — see [`log.md`](/log.md) step 27.) `cli.py` stays thin (arg-parse
+  + one call into `ingest` then `pipeline`), per its current contract.
 
 ### Title resolution
 

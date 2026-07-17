@@ -20,7 +20,8 @@ commit gate.
 
 **0. Scaffold.** `git init`. `uv init`, Python 3.14. Configure ruff,
 `basedpyright`, and pytest in `pyproject.toml`; define the `poethepoet` tasks
-(`[tool.poe.tasks]`) and the `album` console entry point (`[project.scripts]`).
+(`[tool.poe.tasks]`) and the console entry point (`[project.scripts]`) — scaffolded
+as `album`, later renamed to `photobook-generator` (single-command playbook, step 27).
 Create the [folder structure](/reference/folder-structure.md). Write a first-pass
 **`README.md`** (human-readable: what the project is, prerequisites, how to
 initialize it, how to bring the local stack up, and the `uv run poe` workflow
@@ -121,8 +122,8 @@ verify:* the PDF opens with correct trim/bleed. **Resolve
 [open question #4](/build/open-questions.md) (Lulu's spec) first** — it drives template
 dimensions. **Commit.**
 
-**14. Wire the flow.** `flow.py` + `cli.py`. *Manually verify:* `album run
---album honeymoon-2026` runs end-to-end; the Prefect UI shows it. Now that
+**14. Wire the flow.** `flow.py` + `cli.py`. *Manually verify:* `photobook-generator
+run --album honeymoon-2026` runs end-to-end; the Prefect UI shows it. Now that
 Postgres handles concurrent writes, tasks can write per-photo and keep true
 failure isolation — but **watch connection-pool sizing** under Prefect's fan-out
 (cap task concurrency, or the pool will exhaust). Update `README.md`'s
