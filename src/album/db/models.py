@@ -115,6 +115,18 @@ class Photo(Base):
     # contributes no person id.
     face_count: Mapped[int | None] = mapped_column(default=None)
     person_ids: Mapped[list[str] | None] = mapped_column(JSON, default=None)
+    # Immich's manual star rating (−1…5; NULL = unrated, or `sync` hasn't run).
+    # `select` honors it as a soft curation signal — a starred photo ranks
+    # higher, an explicitly rejected one lower. See knowledge/build/enrichment.md
+    # step 20.
+    rating: Mapped[int | None] = mapped_column(default=None)
+    # Reverse-geocoded place from Immich's `exifInfo` (NULL where the photo has
+    # no GPS, or Immich hasn't geocoded it). Grounding for `caption`; no stage
+    # *clusters* on it (cluster keeps its GPS/DBSCAN logic). See enrichment.md
+    # step 20.
+    city: Mapped[str | None] = mapped_column(default=None)
+    state: Mapped[str | None] = mapped_column(default=None)
+    country: Mapped[str | None] = mapped_column(default=None)
 
     # --- populated by `quality` ---
     blur_score: Mapped[float | None] = mapped_column(default=None)  # Laplacian variance

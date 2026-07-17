@@ -43,6 +43,11 @@ class ImmichExif(BaseModel):
     longitude: float | None = None
     make: str | None = None
     model: str | None = None
+    # Immich's reverse-geocoded place (from GPS at import) — plain field names,
+    # no alias. NULL where the photo has no GPS or Immich hasn't geocoded it.
+    city: str | None = None
+    state: str | None = None
+    country: str | None = None
 
 
 class ImmichAsset(BaseModel):
@@ -56,6 +61,8 @@ class ImmichAsset(BaseModel):
     # is absent. `sync` combines it with the zone to normalize to UTC.
     local_date_time: datetime | None = Field(default=None, alias="localDateTime")
     duplicate_id: str | None = Field(default=None, alias="duplicateId")
+    # Immich's manual star rating (−1…5); None when unrated. A `select` signal.
+    rating: int | None = None
     exif_info: ImmichExif | None = Field(default=None, alias="exifInfo")
 
 

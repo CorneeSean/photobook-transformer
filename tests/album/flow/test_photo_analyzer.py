@@ -27,6 +27,30 @@ from tests.doubles import (
 )
 
 
+@pytest.fixture
+def capturing_model() -> tuple[FunctionModel, list[str]]:
+    """A :class:`FunctionModel` plus a list capturing the text of each user prompt
+    it receives, so a test can assert what grounding ``ensure`` passed into the
+    shared analysis call. File-scoped because both ``TestPeopleGrounding`` (step
+    19) and ``TestPlaceGrounding`` (step 20) inspect the prompt — a double used
+    across a whole file lives at file scope (quality-practices.md §2.3)."""
+    prompts: list[str] = []
+
+    def handler(
+        messages: list[ModelMessage], info: AgentInfo
+    ) -> ModelResponse:  # pragma: no cover - exercised via FunctionModel
+        for message in messages:
+            for part in message.parts:
+                # ``analyze_photo`` always sends the prompt as a list
+                # (``[format_context(...), BinaryContent(...)]``), so the user
+                # part's content is a sequence; pull out its text element(s).
+                if isinstance(part, UserPromptPart) and not isinstance(part.content, str):
+                    prompts.extend(item for item in part.content if isinstance(item, str))
+        return canned_analysis_response()
+
+    return FunctionModel(handler), prompts
+
+
 class TestPhotoAnalyzer:
     """`PhotoAnalyzer.ensure`: persists all fields, and never analyzes twice."""
 
@@ -120,28 +144,6 @@ class TestPeopleGrounding:
         assert album.id is not None
         return album.id
 
-    @pytest.fixture
-    def capturing_model(self) -> tuple[FunctionModel, list[str]]:
-        """A :class:`FunctionModel` plus a list capturing the text of each user
-        prompt it receives, so a test can assert what grounding ``ensure`` passed
-        into the shared analysis call. Local to this class — it's the only one
-        that inspects the prompt (quality-practices.md §2.4)."""
-        prompts: list[str] = []
-
-        def handler(
-            messages: list[ModelMessage], info: AgentInfo
-        ) -> ModelResponse:  # pragma: no cover - exercised via FunctionModel
-            for message in messages:
-                for part in message.parts:
-                    # ``analyze_photo`` always sends the prompt as a list
-                    # (``[format_context(...), BinaryContent(...)]``), so the user
-                    # part's content is a sequence; pull out its text element(s).
-                    if isinstance(part, UserPromptPart) and not isinstance(part.content, str):
-                        prompts.extend(item for item in part.content if isinstance(item, str))
-            return canned_analysis_response()
-
-        return FunctionModel(handler), prompts
-
     def test_named_people_reach_the_prompt(
         self,
         session: Session,
@@ -213,3 +215,86 @@ class TestPeopleGrounding:
         PhotoAnalyzer(FakeThumbnails(), model=model).ensure(session, photo)
 
         assert "People in this photo" not in "\n".join(prompts)
+
+
+class TestPlaceGrounding:
+    """Step 20: a photo's reverse-geocoded place (``city``/``state``/``country``,
+    from Immich) is passed into the shared analysis call as caption grounding —
+    opt-in, and a photo with no geocoded place is unchanged."""
+
+    def _persist(self, session: Session, album: Album) -> int:
+        session.add(album)
+        session.commit()
+        assert album.id is not None
+        return album.id
+
+    def test_geocoded_place_reaches_prompt(
+        self,
+        session: Session,
+        make_album: Callable[..., Album],
+        make_photo: Callable[..., Photo],
+        capturing_model: tuple[FunctionModel, list[str]],
+    ) -> None:
+        album = make_album()
+        album.photos = [
+            make_photo(
+                album,
+                immich_asset_id="a1",
+                city="Lisbon",
+                state="Lisbon Municipality",
+                country="Portugal",
+            )
+        ]
+        self._persist(session, album)
+        photo = session.scalars(sa_select(Photo)).one()
+
+        model, prompts = capturing_model
+        PhotoAnalyzer(FakeThumbnails(), model=model).ensure(session, photo)
+
+        joined = "\n".join(prompts)
+        assert "Lisbon, Lisbon Municipality, Portugal" in joined
+
+    def test_no_geocoded_place_adds_no_location_line(
+        self,
+        session: Session,
+        make_album: Callable[..., Album],
+        make_photo: Callable[..., Photo],
+        capturing_model: tuple[FunctionModel, list[str]],
+    ) -> None:
+        # Genericity guard: no city/state/country ⇒ no Location line at all.
+        album = make_album()
+        album.photos = [make_photo(album, immich_asset_id="a1")]
+        self._persist(session, album)
+        photo = session.scalars(sa_select(Photo)).one()
+
+        model, prompts = capturing_model
+        PhotoAnalyzer(FakeThumbnails(), model=model).ensure(session, photo)
+
+        assert "Location:" not in "\n".join(prompts)
+
+    def test_duplicate_place_parts_deduped(
+        self,
+        session: Session,
+        make_album: Callable[..., Album],
+        make_photo: Callable[..., Photo],
+        capturing_model: tuple[FunctionModel, list[str]],
+    ) -> None:
+        # A city that equals its state (city-states, or Immich repeating a value)
+        # must not read as "Singapore, Singapore, Singapore".
+        album = make_album()
+        album.photos = [
+            make_photo(
+                album,
+                immich_asset_id="a1",
+                city="Singapore",
+                state="Singapore",
+                country="Singapore",
+            )
+        ]
+        self._persist(session, album)
+        photo = session.scalars(sa_select(Photo)).one()
+
+        model, prompts = capturing_model
+        PhotoAnalyzer(FakeThumbnails(), model=model).ensure(session, photo)
+
+        assert "Location: Singapore." in "\n".join(prompts)

@@ -68,10 +68,18 @@ class TestImmichClient:
 
         assert asset.original_file_name == "IMG_0002.jpg"
         assert asset.duplicate_id == "dup-group-7"
+        # step 20: manual star rating + reverse-geocoded place come off data
+        # `sync` already fetches — no extra call.
+        assert asset.rating == 4
         assert asset.exif_info is not None
         assert asset.exif_info.time_zone == "Europe/Podgorica"
         assert asset.exif_info.model == "iPhone 15 Pro"
         assert asset.exif_info.latitude == 42.44
+        assert (asset.exif_info.city, asset.exif_info.state, asset.exif_info.country) == (
+            "Lisbon",
+            "Lisbon Municipality",
+            "Portugal",
+        )
         assert asset.exif_info.date_time_original is not None
         # ISO string with 'Z' parses to a timezone-aware instant.
         assert asset.exif_info.date_time_original.tzinfo is not None

@@ -35,6 +35,14 @@ no recognized faces (``person_ids`` empty ⇒ byte-for-byte the old result):
   of already-picked photos simply stays unselected, so the book isn't padded with
   look-alikes just to make a face appear. Only **leads** bypass that guard.
 
+**Rating awareness** (Immich's manual star ``rating``, −1…5; enrichment playbook
+step 20) folds into the same effective score as a small per-star ``rating_boost``,
+honoring the user's own curation: a starred photo edges out comparable frames and
+a rejected one (negative rating) is pushed below them. It is a *soft* tie-break on
+the people-boost scale (a full 5 stars ≈ +0.10) that reorders *comparable* photos
+— a clearly better shot still wins — and is inert for an unrated album (``rating``
+NULL/0 ⇒ no change, genericity guard).
+
 ``clip_embedding`` is nullable (data-model.md) — a candidate or already-picked
 photo without one simply skips the CLIP check rather than crashing the stage;
 the ``duplicate_group_id`` check still applies.
@@ -76,6 +84,13 @@ _DEFAULT_SIMILARITY_THRESHOLD = 0.9
 # outranks the group tie-break (lead_boost > group_boost * a handful of people).
 _DEFAULT_LEAD_BOOST = 0.05
 _DEFAULT_GROUP_BOOST = 0.01
+# Per-star boost honoring Immich's manual `rating` (−1…5; enrichment.md step 20).
+# A soft signal on the people-boost scale: a 5-star photo gains +0.10 (≈2× a
+# lead), a rejected one (−1) loses 0.02. It reorders *comparable* photos — a
+# clearly better shot (a wider aesthetic gap) still wins — and is inert for an
+# unrated album. Lead coverage is guaranteed separately (Phase 2), so a rating
+# boost never drops a lead; it only reorders which shot represents a scene.
+_DEFAULT_RATING_BOOST = 0.02
 
 
 @dataclass
@@ -107,12 +122,14 @@ class SelectStage(Stage[SelectResult]):
         threshold: float = _DEFAULT_SIMILARITY_THRESHOLD,
         lead_boost: float = _DEFAULT_LEAD_BOOST,
         group_boost: float = _DEFAULT_GROUP_BOOST,
+        rating_boost: float = _DEFAULT_RATING_BOOST,
     ) -> None:
         super().__init__(album_id, session_factory, force=force)
         self._similarity = similarity
         self._threshold = threshold
         self._lead_boost = lead_boost
         self._group_boost = group_boost
+        self._rating_boost = rating_boost
 
     def _process(self) -> SelectResult:
         """Pick the best, diverse photos per scene in ``self._album``. Idempotent."""
@@ -171,13 +188,18 @@ class SelectStage(Stage[SelectResult]):
         return len(picked)
 
     def _effective_score(self, photo: Photo, lead_ids: set[str]) -> float:
-        """Aesthetic score plus the small per-person / per-lead ranking boosts
-        (see the module docstring). Exactly ``aesthetic_score`` (or -inf) when the
-        photo has no recognized people, so a face-free album ranks as before."""
+        """Aesthetic score plus the small per-person / per-lead / per-star ranking
+        boosts (see the module docstring). Exactly ``aesthetic_score`` (or -inf)
+        when the photo has no recognized people and no rating, so a face-free,
+        unrated album ranks as before."""
         base = photo.aesthetic_score if photo.aesthetic_score is not None else float("-inf")
         people = photo.person_ids or []
         num_leads = self._count_leads(people, lead_ids)
-        boost = self._group_boost * len(people) + self._lead_boost * num_leads
+        boost = (
+            self._group_boost * len(people)
+            + self._lead_boost * num_leads
+            + self._rating_boost * (photo.rating or 0)
+        )
         return base + boost
 
     @staticmethod

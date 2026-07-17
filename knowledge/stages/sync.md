@@ -26,6 +26,13 @@ that photo's face columns NULL rather than aborting the album. An album with no
 recognized faces lands `person_ids=[]`, and every downstream people-aware stage
 reduces to its face-free behavior (genericity guard).
 
+`sync` also copies two optional, cost-free signals off the data it already
+fetches (enrichment step 20): the manual star `rating` (a `select` curation
+signal) and the reverse-geocoded place `city`/`state`/`country` (a `caption`
+grounding signal). Both land in nullable columns, so an album with neither is
+unaffected. OCR — the third step-20 signal — is deferred (a separate per-asset
+endpoint; see [Immich enrichment](/build/enrichment.md) step 20).
+
 > Immich exposes no CLIP embeddings — resolved, see [Immich API notes](/reference/immich-api.md); `quality` computes them via `open_clip`.
 
 Feeds [`quality`](./quality.md) and every stage after it.

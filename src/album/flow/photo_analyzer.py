@@ -49,6 +49,21 @@ def _resolve_person_names(photo: Photo) -> list[str]:
     return [name for pid in photo.person_ids if (name := names_by_id.get(pid)) is not None]
 
 
+def _format_place(photo: Photo) -> str | None:
+    """The photo's reverse-geocoded place as one line — the caption's location
+    grounding (enrichment step 20).
+
+    Joins Immich's ``city``/``state``/``country`` (most-to-least specific),
+    dropping any that are unset and de-duplicating repeats so a city that equals
+    its state doesn't read as "Singapore, Singapore". ``None`` when the photo has
+    no geocoded place at all (no GPS, or Immich didn't geocode it), leaving the
+    prompt unchanged (genericity guard)."""
+    # dict.fromkeys → unique, order-preserving (same dedup idiom as sync's
+    # person_ids); the trailing `or None` turns the all-empty case into None.
+    parts = dict.fromkeys(part for part in (photo.city, photo.state, photo.country) if part)
+    return ", ".join(parts) or None
+
+
 class PhotoAnalyzer:
     """Runs (and persists) the shared vision call for a photo, exactly once.
 
@@ -117,12 +132,15 @@ class PhotoAnalyzer:
     def _build_context(photo: Photo) -> PhotoContext:
         """The ``PhotoContext`` for ``photo``'s vision call: segment label/place
         (both optional — an unsegmented album or out-of-range photo gets neither,
-        never an error), ``Album.meta``, and the photo's named people."""
+        never an error), ``Album.meta``, the photo's named people, and its
+        reverse-geocoded place (all optional; each absent one simply adds no
+        grounding, never an error)."""
         return PhotoContext(
             segment_label=photo.segment.label if photo.segment is not None else None,
             segment_place=photo.segment.place if photo.segment is not None else None,
             album_meta=photo.album.meta,
             person_names=_resolve_person_names(photo),
+            photo_place=_format_place(photo),
         )
 
     @staticmethod

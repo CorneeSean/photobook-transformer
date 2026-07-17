@@ -112,6 +112,15 @@ class Photo(Base):
     # distinct from a fetched-but-faceless photo (face_count=0, person_ids=[]).
     face_count: Mapped[int | None]                # all detected faces (portrait vs landscape)
     person_ids: Mapped[list[str] | None] = mapped_column(JSON)  # assigned Immich person UUIDs only
+    # Immich's manual star rating (−1…5); NULL = unrated (or not yet synced).
+    # `select` honors it as a soft curation signal.
+    rating: Mapped[int | None]
+    # Reverse-geocoded place from Immich's exifInfo; NULL where the photo has no
+    # GPS / Immich hasn't geocoded it. `caption` grounding only — no stage
+    # *clusters* on it (cluster keeps its GPS/DBSCAN logic).
+    city: Mapped[str | None]
+    state: Mapped[str | None]
+    country: Mapped[str | None]
 
     # --- populated by `quality` ---
     blur_score: Mapped[float | None]           # Laplacian variance
@@ -197,6 +206,17 @@ class Person(Base):
   `sync` hasn't fetched faces yet); an album with no recognized faces leaves
   `person_ids=[]` and every people-aware stage reduces to its face-free behavior
   (genericity guard). See [Immich enrichment](/build/enrichment.md).
+- **`rating` + geocoded place are optional `sync` signals (enrichment step 20).**
+  Both come off data `sync` already fetches (the asset + its `exifInfo`), so they
+  cost no extra Immich call. `rating` (Immich's −1…5 stars) is a *soft* `select`
+  boost honoring the user's own curation — a starred photo edges out comparable
+  frames, a rejected (negative) one is pushed below them, never overriding a
+  clearly better shot. `city`/`state`/`country` are `caption` grounding only;
+  `cluster` deliberately keeps its GPS/DBSCAN logic and does not cluster on place
+  *names*. All four are nullable for the usual reason (NULL = not synced, or the
+  photo simply has none), so an unrated / un-geocoded album behaves byte-for-byte
+  as before (genericity guard). OCR — the third enrichment-step-20 signal — is
+  deferred; see [Immich enrichment](/build/enrichment.md) step 20.
 - **`Album.meta` is deliberately dumb.** No stage branches on its contents; it's
   interpolated into caption prompts and templates only. Anything a stage needs to
   *reason* about belongs in a real column or a `Segment`.

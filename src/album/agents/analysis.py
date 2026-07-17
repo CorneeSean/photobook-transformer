@@ -80,6 +80,11 @@ class PhotoContext:
     # ``Photo.person_ids`` — see ``PhotoAnalyzer._resolve_person_names`` for how,
     # and for why an empty list leaves the prompt unchanged (genericity guard).
     person_names: list[str] = field(default_factory=list)
+    # The photo's reverse-geocoded place (Immich ``city``/``state``/``country``,
+    # joined by ``PhotoAnalyzer._format_place``) — the most specific location
+    # grounding, below the segment. ``None`` when the photo has no geocoded place,
+    # leaving the prompt unchanged (genericity guard). See enrichment.md step 20.
+    photo_place: str | None = None
 
 
 _agent = Agent(output_type=AnalysisResult, system_prompt=_SYSTEM_PROMPT)
@@ -105,12 +110,38 @@ def format_context(context: PhotoContext) -> str:
     """Build the text half of the prompt from whatever grounding the album has.
     Standalone and pure so it's directly unit-testable, like ``quality.py``'s
     ``compute_blur_score``."""
-    lines = ["Analyze this photo."]
-    if context.segment_label:
-        place = f" in {context.segment_place}" if context.segment_place else ""
-        lines.append(f"Context: {context.segment_label}{place}.")
-    if context.person_names:
-        lines.append(f"People in this photo: {', '.join(context.person_names)}.")
-    if context.album_meta:
-        lines.append(f"Album context: {context.album_meta}.")
-    return "\n".join(lines)
+    return "\n".join(["Analyze this photo.", *_grounding_lines(context)])
+
+
+def _grounding_lines(context: PhotoContext) -> list[str]:
+    """The optional grounding lines, in prompt order, omitting any the album
+    lacks — so an album with no structure yields none and the base prompt is
+    byte-for-byte the no-context one (genericity guard)."""
+    candidates = (
+        _segment_line(context),
+        _location_line(context),
+        _people_line(context),
+        _meta_line(context),
+    )
+    return [line for line in candidates if line is not None]
+
+
+def _segment_line(context: PhotoContext) -> str | None:
+    if not context.segment_label:
+        return None
+    place = f" in {context.segment_place}" if context.segment_place else ""
+    return f"Context: {context.segment_label}{place}."
+
+
+def _location_line(context: PhotoContext) -> str | None:
+    return f"Location: {context.photo_place}." if context.photo_place else None
+
+
+def _people_line(context: PhotoContext) -> str | None:
+    if not context.person_names:
+        return None
+    return f"People in this photo: {', '.join(context.person_names)}."
+
+
+def _meta_line(context: PhotoContext) -> str | None:
+    return f"Album context: {context.album_meta}." if context.album_meta else None

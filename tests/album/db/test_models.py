@@ -73,6 +73,19 @@ class TestModels:
         assert photo.face_count is None
         assert photo.person_ids is None
 
+    def test_photo_rating_and_place_columns_default_null(
+        self, session: Session, make_album: Callable[..., Album], make_photo: Callable[..., Photo]
+    ) -> None:
+        # step 20: rating + reverse-geocoded place are optional `sync` signals —
+        # NULL until fetched, and NULL for an album/photo that simply has none.
+        album = make_album()
+        photo = make_photo(album, immich_asset_id="asset-10")
+        session.add(album)
+        session.commit()
+
+        assert photo.rating is None
+        assert (photo.city, photo.state, photo.country) == (None, None, None)
+
     def test_segment_position_unique_per_album(
         self,
         session: Session,

@@ -163,11 +163,26 @@ class SyncStage(Stage[SyncResult]):
         photo.filename = asset.original_file_name
         photo.timestamp = timestamp
         photo.duplicate_group_id = asset.duplicate_id
-        exif = asset.exif_info
-        photo.camera_model = self._camera_model(exif)
-        photo.gps_lat = exif.latitude if exif else None
-        photo.gps_lon = exif.longitude if exif else None
+        photo.rating = asset.rating
+        photo.camera_model = self._camera_model(asset.exif_info)
+        self._apply_location(photo, asset.exif_info)
         return photo
+
+    @staticmethod
+    def _apply_location(photo: Photo, exif: ImmichExif | None) -> None:
+        """Copy GPS coordinates + reverse-geocoded place off ``exif`` onto ``photo``.
+
+        Clears all of them first, so a re-sync that no longer sees exif leaves no
+        stale values behind (the same clear-on-update posture the columns had when
+        gps was set inline). Extracted from :meth:`_upsert_photo` to keep that
+        method under the complexity gate.
+        """
+        photo.gps_lat = photo.gps_lon = None
+        photo.city = photo.state = photo.country = None
+        if exif is None:
+            return
+        photo.gps_lat, photo.gps_lon = exif.latitude, exif.longitude
+        photo.city, photo.state, photo.country = exif.city, exif.state, exif.country
 
     def _sync_faces(
         self, run: _SyncRun, asset: ImmichAsset, photo: Photo, session: Session

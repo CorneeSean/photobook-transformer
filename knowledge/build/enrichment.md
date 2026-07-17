@@ -236,6 +236,28 @@ nullable columns; `select` may use `rating` as an additional soft signal;
 `caption`/`cluster` may interpolate the place name. Each is independently
 skippable. **Commit.**
 
+> **Scope decision (2026-07-17): built rating + geocoded place; deferred OCR.**
+> Rating and place come off data `sync` already fetches (the asset + its
+> `exifInfo`), so they cost **no extra Immich call**; each landed as a nullable
+> column plus a thin, genericity-safe consumer — `rating` a soft per-star
+> `select` boost (starred up, rejected down, never overriding aesthetics),
+> `city`/`state`/`country` a `caption` `Location:` grounding line. **Place feeds
+> `caption` only — `cluster` keeps its GPS/DBSCAN logic**; clustering on place
+> *names* was judged speculative and a risk to well-tested scene detection, for
+> no clear gain.
+>
+> **OCR deferred**, on four counts: (1) it's the only signal that isn't free — a
+> separate `GET /assets/{id}/ocr` endpoint, i.e. a *second* per-asset N+1 over
+> the album on top of the faces N+1; (2) the playbook itself rates it the weakest
+> ("minor … signs, menus", "if wired"); (3) its contract isn't in our pinned
+> (v3.0.2) API snapshot, so it'd be modeled blind and land as another
+> "re-verify live" deferral; (4) consuming it well is a real design problem —
+> dumping raw OCR (menu/sign fragments) into a caption prompt can *worsen*
+> captions, so doing it right needs prompt work + tests, turning "small" into
+> not-small. Revisit only when a concrete album shows OCR would help; the columns
+> for it can be added the same cost-free way rating/place were if the data ever
+> moves onto the asset DTO.
+
 ## Docs to update alongside
 
 - **[Immich API notes](/reference/immich-api.md)** — it's pinned to the stale v3.0.2

@@ -41,7 +41,7 @@ are in the same boat — internal only. What *is* exposed:
 | Need | Endpoint | Notes |
 |---|---|---|
 | List an album's assets | `POST /search/metadata` `{albumIds, page, size}` | **Not** `GET /albums/{id}` — as of v3.0.2 that no longer embeds an `assets` array. Paginated: response `assets.items` + `assets.nextPage` (string page number, `null` when done). |
-| Asset + EXIF | `GET /assets/{id}` | `exifInfo` sub-object; see timezone note below. |
+| Asset + EXIF | `GET /assets/{id}` | `exifInfo` sub-object; see timezone note below. Also carries `rating` (top-level, −1…5 manual stars) and `exifInfo.city`/`state`/`country` (reverse-geocoded place) — both consumed by `sync` from step 20, no extra call. |
 | Duplicate groups | `GET /duplicates` | list of `{duplicateId, assets[], suggestedKeepAssetIds}`. |
 | Thumbnail bytes | `GET /assets/{id}/thumbnail?size=thumbnail` | for `quality`/`enhance`. |
 | Original bytes | `GET /assets/{id}/original` | full-resolution source pixels, for `render` (darktable-cli's input — XMP sidecars carry only edit instructions, not pixels). |
@@ -50,6 +50,14 @@ are in the same boat — internal only. What *is* exposed:
 
 Auth is the `x-api-key` header (key from Immich's web UI → Account Settings → API
 Keys), base URL includes the `/api` prefix (e.g. `http://localhost:2283/api`).
+
+**OCR (`GET /assets/{id}/ocr`) is deliberately not consumed (step 20).** It's the
+third enrichment-step-20 signal but was deferred: unlike `rating`/geocoded place
+(fields on data `sync` already fetches), OCR is a *separate per-asset endpoint* —
+a second N+1 over the album, on top of the faces N+1 — for what the
+[enrichment playbook](/build/enrichment.md) itself rates a "minor" signal, and its
+contract isn't in this (v3.0.2) snapshot. Revisit if a concrete need appears; see
+the enrichment step-20 write-up for the full tradeoff.
 
 ## Timezone (informs open question #3)
 

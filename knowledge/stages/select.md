@@ -34,6 +34,14 @@ MMR when a scene has no recognized faces (byte-for-byte):
   non-leads — honoring the near-dup guard strictly (chosen posture), a non-lead
   seen only in near-duplicates stays unselected rather than padding the book.
 
+**Rating awareness** (Immich's manual `rating`, −1…5; enrichment step 20) folds
+into the same effective score as a small per-star `rating_boost` — honoring the
+user's own curation (a starred photo edges out comparable frames, a rejected one
+is pushed below them). A *soft* tie-break on the people-boost scale (a full 5
+stars ≈ +0.10) that reorders comparable photos — a clearly better shot still
+wins — and inert for an unrated album (`rating` NULL/0 ⇒ byte-for-byte). Lead
+coverage is guaranteed separately, so a rating boost never drops a lead.
+
 Pure logic over data already in the [DB](/reference/data-model.md) — **the single most
 important stage to test thoroughly.** The `pgvector` similarity query sits behind
 a substitutable interface (`db/similarity.py`) so the MMR logic is testable on

@@ -207,6 +207,66 @@ class TestSync:
         assert photo.camera_model == "Apple iPhone 15 Pro"
         assert (photo.gps_lat, photo.gps_lon) == (42.4, 18.7)
 
+    def test_maps_rating_and_geocoded_place(
+        self, session: Session, make_album: Callable[..., Album]
+    ) -> None:
+        # step 20: rating (top-level) + city/state/country (on exifInfo) land in
+        # their nullable columns — from data `sync` already fetches, no extra call.
+        album_id = self._persist(session, make_album(immich_album_id="immich-abc"))
+        asset = ImmichAsset.model_validate(
+            {
+                "id": "a1",
+                "originalFileName": "IMG.jpg",
+                "rating": 5,
+                "exifInfo": {
+                    "city": "Lisbon",
+                    "state": "Lisbon Municipality",
+                    "country": "Portugal",
+                },
+            }
+        )
+        SyncStage(FakeImmich([asset]), album_id, reuse(session)).run()
+
+        photo = session.scalars(select(Photo)).one()
+        assert photo.rating == 5
+        assert (photo.city, photo.state, photo.country) == (
+            "Lisbon",
+            "Lisbon Municipality",
+            "Portugal",
+        )
+
+    def test_rating_and_place_absent_stay_null(
+        self, session: Session, make_album: Callable[..., Album]
+    ) -> None:
+        # Genericity: an asset with no rating and no geocoded place leaves every
+        # step-20 column NULL, so an album that has none behaves exactly as before.
+        album_id = self._persist(session, make_album(immich_album_id="immich-abc"))
+
+        SyncStage(FakeImmich([self._asset("a1")]), album_id, reuse(session)).run()
+
+        photo = session.scalars(select(Photo)).one()
+        assert photo.rating is None
+        assert (photo.city, photo.state, photo.country) == (None, None, None)
+
+    def test_resync_clears_stale_place_when_exif_gone(
+        self, session: Session, make_album: Callable[..., Album]
+    ) -> None:
+        # If a photo had a geocoded place and a later sync sees no exif at all, the
+        # place columns must clear rather than keep stale values (same clear-on-update
+        # posture as gps_lat/gps_lon).
+        album_id = self._persist(session, make_album(immich_album_id="immich-abc"))
+        with_place = ImmichAsset.model_validate(
+            {"id": "a1", "originalFileName": "IMG.jpg", "exifInfo": {"city": "Lisbon"}}
+        )
+        SyncStage(FakeImmich([with_place]), album_id, reuse(session)).run()
+        assert session.scalars(select(Photo)).one().city == "Lisbon"
+
+        # Re-sync with the same asset id but no exif this time.
+        SyncStage(FakeImmich([self._asset("a1")]), album_id, reuse(session)).run()
+
+        photo = session.scalars(select(Photo)).one()
+        assert (photo.city, photo.state, photo.country) == (None, None, None)
+
     def test_populates_faces_and_upserts_people(
         self, session: Session, make_album: Callable[..., Album]
     ) -> None:

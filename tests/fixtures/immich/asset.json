@@ -5,12 +5,16 @@
   "localDateTime": "2026-05-03T09:00:00.000Z",
   "fileCreatedAt": "2026-05-03T07:00:00.000Z",
   "duplicateId": "dup-group-7",
+  "rating": 4,
   "exifInfo": {
     "dateTimeOriginal": "2026-05-03T07:00:00.000Z",
     "timeZone": "Europe/Podgorica",
     "latitude": 42.44,
     "longitude": 18.78,
     "make": "Apple",
-    "model": "iPhone 15 Pro"
+    "model": "iPhone 15 Pro",
+    "city": "Lisbon",
+    "state": "Lisbon Municipality",
+    "country": "Portugal"
   }
 }

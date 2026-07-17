@@ -343,6 +343,7 @@ class TestPeopleAwareSelect:
             aesthetic_score: float | None,
             clip_embedding: list[float] | None = None,
             person_ids: list[str] | None = None,
+            rating: int | None = None,
         ) -> Photo:
             return make_photo(
                 album,
@@ -352,6 +353,7 @@ class TestPeopleAwareSelect:
                 aesthetic_score=aesthetic_score,
                 clip_embedding=clip_embedding,
                 person_ids=person_ids,
+                rating=rating,
             )
 
         return _make
@@ -598,6 +600,96 @@ class TestPeopleAwareSelect:
         assert photos["b"].selected is True
         assert photos["c"].selected is False  # near-dup of a, dropped exactly as plain MMR
         assert result.selected == 2
+
+    def test_rating_breaks_tie_between_near_duplicates(
+        self, session: Session, make_album: Callable[..., Album], photo: Callable[..., Photo]
+    ) -> None:
+        # step 20: among near-duplicates with equal aesthetic score, the
+        # higher-rated photo (user curation) wins the tie.
+        album = make_album(immich_album_id="immich-abc")
+        # `unrated` is added first (lower id), so without the rating boost the
+        # deterministic id-order tie would pick it; the boost must flip that.
+        unrated = photo(
+            album, "unrated", scene_id=1, aesthetic_score=0.8, clip_embedding=_A, rating=None
+        )
+        rated = photo(
+            album, "rated", scene_id=1, aesthetic_score=0.8, clip_embedding=_A_NEAR, rating=5
+        )
+        album.photos = [unrated, rated]
+        album_id = self._persist(session, album)
+
+        result = SelectStage(StubSimilarity(), album_id, reuse(session), threshold=0.9).run()
+
+        photos = self._by_asset(session)
+        assert photos["rated"].selected is True
+        assert photos["unrated"].selected is False
+        assert result.selected == 1
+
+    def test_negative_rating_is_penalized(
+        self, session: Session, make_album: Callable[..., Album], photo: Callable[..., Photo]
+    ) -> None:
+        # A rejected photo (rating -1) is pushed *below* an unrated near-duplicate,
+        # even though it was added first (lower id would otherwise win the tie).
+        album = make_album(immich_album_id="immich-abc")
+        rejected = photo(
+            album, "rejected", scene_id=1, aesthetic_score=0.8, clip_embedding=_A, rating=-1
+        )
+        unrated = photo(
+            album, "unrated", scene_id=1, aesthetic_score=0.8, clip_embedding=_A_NEAR, rating=None
+        )
+        album.photos = [rejected, unrated]
+        album_id = self._persist(session, album)
+
+        result = SelectStage(StubSimilarity(), album_id, reuse(session), threshold=0.9).run()
+
+        photos = self._by_asset(session)
+        assert photos["unrated"].selected is True
+        assert photos["rejected"].selected is False
+        assert result.selected == 1
+
+    def test_rating_is_a_soft_signal_not_an_override(
+        self, session: Session, make_album: Callable[..., Album], photo: Callable[..., Photo]
+    ) -> None:
+        # Magnitude guard: the boost is small enough that a clearly better *unrated*
+        # photo (0.9) still beats a 5-star but much weaker near-duplicate (0.6+0.10);
+        # a too-large rating_boost would regress this. (The three tests above prove
+        # the feature *exists*; this one bounds how strong it is.)
+        album = make_album(immich_album_id="immich-abc")
+        great = photo(
+            album, "great", scene_id=1, aesthetic_score=0.9, clip_embedding=_A, rating=None
+        )
+        weak_5star = photo(
+            album, "weak_5star", scene_id=1, aesthetic_score=0.6, clip_embedding=_A_NEAR, rating=5
+        )
+        album.photos = [great, weak_5star]
+        album_id = self._persist(session, album)
+
+        SelectStage(StubSimilarity(), album_id, reuse(session), threshold=0.9).run()
+
+        photos = self._by_asset(session)
+        assert photos["great"].selected is True
+        assert photos["weak_5star"].selected is False
+
+    def test_rating_boost_is_configurable(
+        self, session: Session, make_album: Callable[..., Album], photo: Callable[..., Photo]
+    ) -> None:
+        # With rating_boost=0 the tie falls back to deterministic id order (the
+        # earlier, lower-rated photo), proving the kwarg is wired.
+        album = make_album(immich_album_id="immich-abc")
+        first = photo(album, "first", scene_id=1, aesthetic_score=0.8, clip_embedding=_A, rating=0)
+        rated = photo(
+            album, "rated", scene_id=1, aesthetic_score=0.8, clip_embedding=_A_NEAR, rating=5
+        )
+        album.photos = [first, rated]
+        album_id = self._persist(session, album)
+
+        SelectStage(
+            StubSimilarity(), album_id, reuse(session), threshold=0.9, rating_boost=0.0
+        ).run()
+
+        photos = self._by_asset(session)
+        assert photos["first"].selected is True  # boost off ⇒ id order wins
+        assert photos["rated"].selected is False
 
     def test_lead_in_another_album_does_not_leak(
         self, session: Session, make_album: Callable[..., Album], photo: Callable[..., Photo]

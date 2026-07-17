@@ -91,6 +91,20 @@ class TestFormatContext:
         assert prompt  # non-empty; the agent still has something to work from
         assert "Context:" not in prompt  # no segment info leaked in when there is none
 
+    def test_includes_photo_place(self) -> None:
+        # step 20: the photo's reverse-geocoded place is grounding for the caption.
+        context = PhotoContext(photo_place="Lisbon, Portugal")
+
+        prompt = format_context(context)
+
+        assert "Lisbon, Portugal" in prompt
+
+    def test_omits_location_line_when_no_place(self) -> None:
+        # Genericity guard: no geocoded place ⇒ no Location line, prompt unchanged.
+        prompt = format_context(PhotoContext())
+
+        assert "Location:" not in prompt
+
     def test_includes_person_names(self) -> None:
         context = PhotoContext(person_names=["Alex", "Sam"])
 

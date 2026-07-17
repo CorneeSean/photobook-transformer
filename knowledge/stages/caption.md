@@ -20,6 +20,10 @@ grounded as the metadata allows:
 
 - Segment name and place, if the album has segments → *"Late afternoon at the
   harbour in Lisbon"*
+- The photo's own reverse-geocoded place (Immich `city`/`state`/`country`, joined
+  most-to-least specific; enrichment step 20) → a `Location:` line, the finest
+  location grounding below the segment
+- The names of recognized people in the photo (enrichment step 19)
 - `Album.meta` extras (couple's names, event type) if present
 - Nothing at all → still produces an accurate, if generic, caption
 
