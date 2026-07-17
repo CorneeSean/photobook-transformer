@@ -2,6 +2,43 @@
 
 ## 2026-07-17
 
+* **TestContainers step 24 done — offline Immich ML integration via a pre-baked
+  model image** (commit `ad86550`, branch `step-24-immich-ml-integration`;
+  [testcontainers.md](/build/testcontainers.md) step 24). User-directed, out of
+  strict order (step 23 still todo). Closes the long-deferred *live* verification
+  of Immich's ML paths without fetching any ML model from the internet at test time.
+    * **The bake** (`tests/fixtures/immich/ml-baked.Dockerfile`): `FROM
+      immich-machine-learning:v3.0.3`, a build-time `snapshot_download` mirroring
+      `immich_ml.models.base.ModelBase._download` (same `immich-app/<model>` repo,
+      `/cache/<task>/<model>` layout, `*.armnn`/`*.rknn` ignore), CPU `.onnx` only
+      (~0.77 GB), `.cache` dropped in-layer, `HF_HUB_OFFLINE=1`. `poe bake-immich-ml`
+      also pre-pulls server/db/redis, so it is the one internet-touching step; test
+      runs then find every image present and pull nothing.
+    * **The test** (`tests/album/immich/test_immich_ml_integration.py`; opt-in
+      `IMMICH_ML_INTEGRATION=1` / `poe test-immich-ml`; `@integration`, skipped in
+      `poe check`): a real 4-service stack (server + baked ML + vectorchord Postgres
+      + valkey) driven via testcontainers `DockerCompose`; uploads
+      `skimage.data.astronaut()` (public-domain NASA face, no personal photo
+      committed) through the real `ImmichClient` and asserts (a) a real
+      machine-learning face via `get_faces` (closes step 17's live deferral), (b) the
+      real `LeadFaceResolver` reference_image path uploads + polls real async
+      detection to an ML-detected face (closes 17b timing), (c) smart search returns
+      the asset — CLIP embedded offline (open Q1). New `ImmichClient.smart_search`.
+    * Two adversarial Opus reviews (correctness + cleanup); all findings applied:
+      harness moved from a hand-rolled `docker compose` subprocess to testcontainers
+      `DockerCompose` (Ryuk cleanup + robust port resolution); pre-pull for a
+      truly-offline run and corrected the "fully offline" overclaim; digest-pinned
+      db/redis; `smart_search` added so the test drops private `_client` access; lead
+      assertion tightened to require an ML-sourced face; `wait_jobs_idle` waits for
+      the cascade to start before draining; the SQLite engine is guarded in a
+      fixture; the bake command + version pin DRYed into the harness.
+    * **Follow-up noted (not a blocker):** the baked image is ~3.1 GB, dominated by
+      the base ML image (~2.3 GB; `/opt/venv` ~0.9 GB) — our models add only
+      ~0.77 GB, so little to reclaim in our layer; a slim/multi-stage base is
+      possible future work.
+    * `uv run poe check` green (290 passed, 3 skipped); `uv run poe test-immich-ml`
+      green (3 passed, real offline stack).
+
 * **Enrichment step 20 done — rating + geocoded place; OCR deferred; enrichment
   playbook (17–20) complete** (commit `bb430d2`, branch
   `worktree-step-20-rating-place`; [enrichment.md](/build/enrichment.md) step 20).

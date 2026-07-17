@@ -27,14 +27,13 @@ the audit trail. Keep this split accurate — it is part of the per-step
 
 ## Outstanding (TODO)
 
-The implementing agent takes the **lowest-numbered** step here. Both below are
-optional/deferred — nothing is blocked on missing code (see
+The implementing agent takes the **lowest-numbered** step here. The remaining item
+is optional/deferred — nothing is blocked on missing code (see
 [Notes / blockers](#notes--blockers)).
 
 | # | Step | Playbook | Status | Branch | Notes |
 |---|------|----------|--------|--------|-------|
 | 23 | DB-backed flow smoke test (optional) | testcontainers | todo | — | whole flow on real Postgres, Immich/Claude/Lulu as doubles — largely subsumed by step 25's `test_flow_integration.py` (real `pipeline()` on a pgvector container, every external boundary doubled); revisit only if a gap remains |
-| 24 | Immich ML integration (deferred optional) | testcontainers | todo | — | needs internet CLIP/face models or a pre-baked model-cache image — see the playbook |
 
 ## Completed (DONE)
 
@@ -78,9 +77,10 @@ optional/deferred — nothing is blocked on missing code (see
 |---|------|--------|--------|--------|-------|
 | 21 | pgvector schema + integration harness | step-21-pgvector-integration (merged, deleted) | done | ac2cd14 | alembic-migrated pgvector container fixture; `select` over the real `PgVectorSimilarity` (near-dup skip, idempotent; lead coverage with a negative control + `person_ids` JSON round-trip); migrations reach head + no drift; migration round-trip; `integration` marker + `poe test-fast`. 2-agent review (fixed a fileConfig/caplog cross-test leak). 211 tests |
 | 22 | darktable-cli render integration | step-22-darktable-render (merged, deleted) | done | 8aac81b | real `DarktableRenderer` inside the shipped app image renders a real `write_xmp_sidecar` sidecar → asserts output JPEG exists, decodes, **visibly brighter** (`tests/test_render_integration.py`). Validated the darktable XMP history-stack format — see [enhance.md](/stages/enhance.md). Closes step-11's deferred manual check. Shells to `docker` CLI (docker-py build breaks on the py3.14 gcloud cred-helper landmine). |
+| 24 | Immich ML integration (pre-baked offline model image) | step-24-immich-ml-integration (merged, deleted) | done | ad86550 | user-directed, out of strict order (23 still todo). Pre-baked ML image (CLIP `ViT-B-32__openai` + faces `buffalo_l`, CPU ONNX, `HF_HUB_OFFLINE=1`) mirroring `ModelBase._download`'s layout; real 4-service stack (server + baked ML + vectorchord Postgres + valkey) driven via testcontainers `DockerCompose`; uploads `skimage.data.astronaut()` through the real `ImmichClient` and asserts a real ML face (`get_faces`, closes step 17), the real `LeadFaceResolver` reference_image upload+async-detection poll to an ML-detected face (closes 17b timing), and smart search returning the asset (CLIP embedded offline, open Q1). New `ImmichClient.smart_search`. Opt-in (`IMMICH_ML_INTEGRATION=1`/`poe test-immich-ml`), skipped in `poe check`. `poe bake-immich-ml` (bake + pre-pull) is the one internet-touching step; runs are offline after. 2 adversarial Opus reviews; all findings applied. **Follow-up (not blocking):** baked image ~3.1 GB, base-ML-dominated (~2.3 GB; models only ~0.77 GB) — slimming deferred. 290 pass/3 skip + 3 live pass |
 | 25 | Parallelize the flow (fan-out groups) | step-25-parallelize-flow (merged, deleted) | done | 036fcc2 | DAG execution per `pipeline-execution.md`: 4 sequential stages keep the shared session; 6 grouped stages (`resolve-leads`/`quality`/`cluster`/`enhance`/`render`/`caption`) take a `session_factory` and open their own pooled connection via a new `_owns_session` decorator (+ sibling `_autocommit` for the 4 sequential tasks); two `submit()`/`result()` fences — group 1 (`resolve-leads`‖`quality`‖`cluster`, join at `select`) and group 2 (`enhance`, then `render`‖`caption`, join at `assemble`). Commit-before-fanout/`expire_all()`-after-join at both fences. Review caught a real bug in the original design sketch: `enhance`‖`caption` running fully concurrently raced on `PhotoAnalyzer.ensure`'s shared idempotency columns (double vision-model call + conflicting-write race) — fixed by joining `enhance`'s future before `render`/`caption` are even submitted. New `tests/album/test_flow_integration.py`: real concurrent per-task sessions against a Postgres+pgvector testcontainer, external boundaries doubled, incl. a counting-model regression guard for the caught bug. 3-agent Opus review (correctness/cleanup/tests) + a re-review after the fix; 218 tests. Live `photobook-generator run` end-to-end stays deferred (no reachable Immich/Claude/darktable/Lulu), same standing note as every prior step. |
 
-*(Steps 23-24 are outstanding — see [Outstanding (TODO)](#outstanding-todo).)*
+*(Step 23 is outstanding — see [Outstanding (TODO)](#outstanding-todo).)*
 
 ### Single-command ingestion playbook (see [single-command-ingestion.md](/build/single-command-ingestion.md))
 
@@ -92,6 +92,22 @@ optional/deferred — nothing is blocked on missing code (see
 
 ## Notes / blockers
 
+- **TestContainers step 24 done — offline Immich ML integration (2026-07-17,
+  user-directed):** the deferred "needs an internet model" step is closed by a
+  **pre-baked** ML image — CLIP + face CPU ONNX baked in at build time (mirroring
+  `immich_ml.models.base.ModelBase._download`'s layout), run with
+  `HF_HUB_OFFLINE=1`. The opt-in `poe test-immich-ml` (`@integration`, skipped in
+  `poe check`) stands up a real 4-service Immich stack via testcontainers
+  `DockerCompose` and, through the real `ImmichClient`, verifies real ML face
+  detection (closes step 17's live deferral), the real `LeadFaceResolver`
+  reference-upload + async-detection timing (closes 17b), and offline CLIP via
+  smart search (open Q1). `poe bake-immich-ml` (bake + pre-pull server/db/redis) is
+  the one internet-touching step; test runs are offline after. **Follow-up (not a
+  blocker):** the baked image is ~3.1 GB, dominated by the base ML image (~2.3 GB;
+  our models add only ~0.77 GB), so there's little to reclaim in our layer — a
+  slim/multi-stage base is possible future work if image size ever matters. **Next:
+  only the optional step 23 (DB-backed flow smoke test) remains — largely subsumed
+  by step 25's `test_flow_integration.py`.**
 - **Enrichment step 20 done — rating + geocoded place; OCR deferred; enrichment
   playbook complete (2026-07-17):** `sync` now copies two optional signals off the
   data it already fetches (no extra Immich call): the manual star `rating`
