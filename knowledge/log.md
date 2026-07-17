@@ -2,6 +2,19 @@
 
 ## 2026-07-17
 
+* **Ruff trailing commas + `SimilaritySearch` → `Sequence` (user-directed,
+  not a build step).** Widened `db/similarity.py`'s
+  `SimilaritySearch`/`PgVectorSimilarity`/`StubSimilarity` inputs to
+  `Sequence[float]`/`Sequence[int]` (read-only seam, consistent with
+  `selected_photos`; commit `110c35a`). Enabled `COM812` and applied a repo-wide
+  trailing-comma reformat (52 files; commit `ae8f4dd`) so multi-line
+  collections stay vertical. Ruff's advisory that `COM812` "may conflict with
+  the formatter" led to moving it to `lint.ignore` (commit `de49b50`) — the
+  reformat stays and the formatter's magic trailing comma maintains vertical
+  collections, but trailing commas are no longer linter-enforced. `uv run poe
+  check` green throughout (293 pass / 3 skip). Recorded in
+  [progress.md](/build/progress.md) Notes.
+
 * **Open question 7 resolved — shared `selected_photos` query hoisted**
   (new `src/album/db/queries.py` + `tests/album/db/test_queries.py`;
   [open-questions.md](/build/open-questions.md) Q7 marked resolved). The

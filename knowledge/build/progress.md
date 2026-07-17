@@ -93,6 +93,32 @@ is optional/deferred — nothing is blocked on missing code (see
 
 ## Notes / blockers
 
+- **Ruff trailing-comma reformat + `SimilaritySearch` → `Sequence` (2026-07-17,
+  user-directed, not a build step):** enabled `COM812` and applied a repo-wide
+  reformat (52 files) so multi-line collections/calls stay expanded one-per-line
+  (the formatter's magic trailing comma). Ruff prints an advisory that `COM812`
+  "may conflict with the formatter", so `COM812` was then moved to
+  `lint.ignore` — the reformat stays and the formatter maintains vertical
+  collections, but trailing commas are no longer linter-*enforced* (only
+  maintained by the formatter). Also widened the `db/similarity.py`
+  `SimilaritySearch`/`PgVectorSimilarity`/`StubSimilarity` inputs to
+  `Sequence[float]`/`Sequence[int]` (read-only seam, consistent with
+  `selected_photos`). Commits `110c35a` (Sequence), `ae8f4dd` (reformat),
+  `de49b50` (ignore). `uv run poe check` green throughout (293 pass / 3 skip).
+- **Open Q7 resolved — shared `selected_photos` query hoisted (2026-07-17,
+  user-directed, not a build step):** the "album's selected photos, ordered by
+  id" read, previously copied near-identically in `caption`/`enhance`/`render`,
+  is now a single `db/queries.py::selected_photos(album_id, session)` (option A —
+  a query-functions module, deliberately **not** a Repository framework:
+  SQLAlchemy's `Session` already is a Unit of Work / Identity Map, so a
+  repository layer would be redundant for a 4-model pipeline and would fight the
+  step-25 per-task session ownership). Fixed the latent drift the Q7 note flagged
+  — `caption` lacked the `.order_by(Photo.id)` the other two had (determinism
+  only, no behavior change). Two adversarial reviews (correctness clean; one
+  low-severity test-strength note addressed). Commit `13cf941`; see
+  [open-questions.md](/build/open-questions.md) Q7. (Related follow-up: the
+  offline-analysis proposal is tracked as **outstanding step 29**, and open Q5 —
+  AI-pass cost — is resolved; see [ai-cost-estimate.md](/build/ai-cost-estimate.md).)
 - **TestContainers step 24 done — offline Immich ML integration (2026-07-17,
   user-directed):** the deferred "needs an internet model" step is closed by a
   **pre-baked** ML image — CLIP + face CPU ONNX baked in at build time (mirroring
