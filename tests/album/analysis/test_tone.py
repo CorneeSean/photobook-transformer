@@ -1,11 +1,10 @@
-"""Tests for :class:`~album.flow.tone.ToneParams` — the tone value object and its
-conversions to/from ``AnalysisResult`` and the ``Photo`` row.
+"""Tests for :class:`~album.analysis.tone.ToneParams` — the tone value object and
+its conversion to/from the ``Photo`` row.
 
 The behaviour worth pinning directly (rather than only via ``enhance``/
-``photo_analyzer``) is the two asymmetries between the three representations:
-``from_photo`` coalesces an unset ``enhance_*`` column to ``0.0``, and
-``from_analysis`` drops the caption (not a tone knob). ``write_to`` must write
-the four ``enhance_*`` columns and leave ``caption`` untouched.
+``photo_analyzer``) is: ``from_photo`` coalesces an unset ``enhance_*`` column to
+``0.0``, and ``write_to`` writes the four ``enhance_*`` columns while leaving
+``caption`` untouched.
 """
 
 from __future__ import annotations
@@ -14,26 +13,8 @@ from collections.abc import Callable
 
 import pytest
 
-from album.agents.analysis import AnalysisResult
+from album.analysis.tone import ToneParams
 from album.db.models import Album, Photo
-from album.flow.tone import ToneParams
-
-
-class TestFromAnalysis:
-    """`AnalysisResult -> ToneParams`: copy the four knobs, drop the caption."""
-
-    def test_copies_the_four_knobs_and_drops_caption(self) -> None:
-        analysis = AnalysisResult(
-            exposure_ev=0.5,
-            temp_shift_k=150.0,
-            shadows=0.2,
-            highlights=-0.3,
-            caption="A caption that must not survive.",
-        )
-
-        tone = ToneParams.from_analysis(analysis)
-
-        assert tone == ToneParams(exposure_ev=0.5, temp_shift_k=150.0, shadows=0.2, highlights=-0.3)
 
 
 class TestFromPhoto:

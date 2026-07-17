@@ -20,6 +20,8 @@ import argparse
 import sys
 from pathlib import Path
 
+from album.analysis.captioner import Captioner, build_captioner, captioner_names
+from album.config import get_settings
 from album.flow import pipeline
 from album.ingest import _ALBUMS_DIR, IngestError, ingest_directory
 
@@ -71,6 +73,7 @@ def _add_generate_parser(subparsers: argparse._SubParsersAction[argparse.Argumen
         action="store_true",
         help="Re-run the pipeline for an already-imported slug (album.yml left untouched)",
     )
+    _add_captioner_arg(parser)
     parser.set_defaults(func=_generate)
 
 
@@ -82,7 +85,29 @@ def _add_run_parser(subparsers: argparse._SubParsersAction[argparse.ArgumentPars
         metavar="SLUG",
         help="Album slug (data/albums/<slug>/album.yml)",
     )
+    parser.add_argument(
+        "--force",
+        action="store_true",
+        help="Re-process an already-run album (e.g. to A/B a different --captioner)",
+    )
+    _add_captioner_arg(parser)
     parser.set_defaults(func=_run)
+
+
+def _add_captioner_arg(parser: argparse.ArgumentParser) -> None:
+    """The shared ``--captioner`` selector (both subcommands). Omitted ⇒ the
+    ``CAPTIONER`` env default, else ``template`` (the offline, no-API-key default)."""
+    parser.add_argument(
+        "--captioner",
+        choices=captioner_names(),
+        help="Caption source (default: the CAPTIONER env var, else 'template')",
+    )
+
+
+def _resolve_captioner(name: str | None) -> Captioner:
+    """The CLI-selected captioner: the ``--captioner`` flag if given, else the
+    ``CAPTIONER`` env default. ``build_captioner`` validates either."""
+    return build_captioner(name or get_settings().captioner)
 
 
 def _generate(args: argparse.Namespace) -> None:
@@ -96,7 +121,7 @@ def _generate(args: argparse.Namespace) -> None:
             source_document=Path(args.source_document) if args.source_document else None,
             force=args.force,
         )
-        pipeline(album_slug=slug)
+        pipeline(album_slug=slug, captioner=_resolve_captioner(args.captioner), force=args.force)
     except (FileNotFoundError, ValueError, IngestError) as exc:
         # User-fixable errors get a clean message + non-zero exit; anything
         # unexpected keeps its full traceback.
@@ -110,7 +135,11 @@ def _generate(args: argparse.Namespace) -> None:
 
 def _run(args: argparse.Namespace) -> None:
     try:
-        pipeline(album_slug=args.album)
+        pipeline(
+            album_slug=args.album,
+            captioner=_resolve_captioner(args.captioner),
+            force=args.force,
+        )
     except (FileNotFoundError, ValueError) as exc:
         # Expected, user-fixable errors (no album.yml, unknown album id, etc.) —
         # a clean one-line message, not a full traceback through Prefect's

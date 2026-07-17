@@ -1,67 +1,48 @@
-"""Tests for :class:`~album.flow.photo_analyzer.PhotoAnalyzer` — the shared
-"one combined vision call" trigger.
+"""Tests for :class:`~album.flow.photo_analyzer.PhotoAnalyzer` — the shared per-photo
+analysis trigger (step 29 split it into a tone estimator + a captioner).
 
-``ensure`` is the single point that runs (and persists) the vision call for a
-photo, exactly once; both ``EnhanceStage`` and ``CaptionStage`` route through it.
-Its no-double-call contract is tested explicitly with PydanticAI's
-``TestModel``/``FunctionModel`` (build-order step 10).
+``ensure`` is the single point that runs (and persists) a photo's analysis, at most
+once; both ``EnhanceStage`` and ``CaptionStage`` route through it. Covers: it persists
+all five fields and returns the raw tone delta; the no-double-analysis contract; the
+offline default (no model); grounding reaching a ``ClaudeCaptioner`` prompt; and the
+per-run A/B path (re-caption under ``force`` with a different captioner, tone
+unchanged because it's deterministic).
 """
 
 from __future__ import annotations
 
 from collections.abc import Callable
 
-import pytest
-from pydantic_ai.messages import ModelMessage, ModelResponse, UserPromptPart
-from pydantic_ai.models.function import AgentInfo, FunctionModel
+import cv2
+import numpy as np
 from sqlalchemy import select as sa_select
 from sqlalchemy.orm import Session
 
+from album.analysis.captioner import ClaudeCaptioner
+from album.analysis.tone import ToneParams
 from album.db.models import Album, Person, Photo
 from album.flow.photo_analyzer import PhotoAnalyzer
 from tests.doubles import (
     FakeThumbnails,
-    analysis_test_model,
-    canned_analysis_response,
-    counting_analysis_model,
+    FixedTone,
+    RecordingCaptioner,
+    ZeroToneEstimator,
+    capturing_caption_model,
 )
 
+_DECODABLE_IMAGE = cv2.imencode(".png", np.full((8, 8, 3), 128, np.uint8))[1].tobytes()
 
-@pytest.fixture
-def capturing_model() -> tuple[FunctionModel, list[str]]:
-    """A :class:`FunctionModel` plus a list capturing the text of each user prompt
-    it receives, so a test can assert what grounding ``ensure`` passed into the
-    shared analysis call. File-scoped because both ``TestPeopleGrounding`` (step
-    19) and ``TestPlaceGrounding`` (step 20) inspect the prompt — a double used
-    across a whole file lives at file scope (quality-practices.md §2.3)."""
-    prompts: list[str] = []
 
-    def handler(
-        messages: list[ModelMessage],
-        info: AgentInfo,
-    ) -> ModelResponse:  # pragma: no cover - exercised via FunctionModel
-        for message in messages:
-            for part in message.parts:
-                # ``analyze_photo`` always sends the prompt as a list
-                # (``[format_context(...), BinaryContent(...)]``), so the user
-                # part's content is a sequence; pull out its text element(s).
-                if isinstance(part, UserPromptPart) and not isinstance(part.content, str):
-                    prompts.extend(item for item in part.content if isinstance(item, str))
-        return canned_analysis_response()
-
-    return FunctionModel(handler), prompts
+def _persist(session: Session, album: Album) -> None:
+    session.add(album)
+    session.commit()
+    assert album.id is not None
 
 
 class TestPhotoAnalyzer:
     """`PhotoAnalyzer.ensure`: persists all fields, and never analyzes twice."""
 
-    def _persist(self, session: Session, album: Album) -> int:
-        session.add(album)
-        session.commit()
-        assert album.id is not None
-        return album.id
-
-    def test_calls_agent_and_persists_all_fields(
+    def test_persists_all_fields_and_returns_the_raw_tone(
         self,
         session: Session,
         make_album: Callable[..., Album],
@@ -69,21 +50,23 @@ class TestPhotoAnalyzer:
     ) -> None:
         album = make_album()
         album.photos = [make_photo(album, immich_asset_id="a1")]
-        self._persist(session, album)
+        _persist(session, album)
         photo = session.scalars(sa_select(Photo)).one()
 
+        tone = ToneParams(exposure_ev=0.2, temp_shift_k=100.0, shadows=0.1, highlights=-0.1)
         analyzer = PhotoAnalyzer(
             FakeThumbnails(),
-            model=analysis_test_model(caption="A test photo."),
+            tone_estimator=FixedTone(tone),
+            captioner=RecordingCaptioner("A test photo."),
         )
         result = analyzer.ensure(session, photo)
 
-        assert result is not None
-        assert photo.enhance_exposure_ev == result.exposure_ev
-        assert photo.enhance_temp_shift_k == result.temp_shift_k
-        assert photo.enhance_shadows == result.shadows
-        assert photo.enhance_highlights == result.highlights
-        assert photo.caption == result.caption
+        assert result == tone  # the raw delta is returned for enhance to reconcile
+        assert photo.enhance_exposure_ev == 0.2
+        assert photo.enhance_temp_shift_k == 100.0
+        assert photo.enhance_shadows == 0.1
+        assert photo.enhance_highlights == -0.1
+        assert photo.caption == "A test photo."
 
     def test_is_not_repeated_for_an_already_populated_photo(
         self,
@@ -93,20 +76,40 @@ class TestPhotoAnalyzer:
     ) -> None:
         album = make_album()
         album.photos = [make_photo(album, immich_asset_id="a1")]
-        self._persist(session, album)
+        _persist(session, album)
         photo = session.scalars(sa_select(Photo)).one()
 
-        model, calls = counting_analysis_model()
+        captioner = RecordingCaptioner()
         thumbnails = FakeThumbnails()
-        analyzer = PhotoAnalyzer(thumbnails, model=model)
+        analyzer = PhotoAnalyzer(
+            thumbnails, tone_estimator=ZeroToneEstimator(), captioner=captioner
+        )
 
         first = analyzer.ensure(session, photo)
         second = analyzer.ensure(session, photo)
 
         assert first is not None
         assert second is None  # no-op: already analyzed
-        assert calls == [1]  # the model was called exactly once
+        assert len(captioner.calls) == 1  # captioner ran exactly once
         assert thumbnails.calls == ["a1"]  # thumbnail fetched only once
+
+    def test_offline_default_needs_no_model(
+        self,
+        session: Session,
+        make_album: Callable[..., Album],
+        make_photo: Callable[..., Photo],
+    ) -> None:
+        # The headline win: the default analyzer (classical tone + template caption)
+        # captions a photo with no model and no ANTHROPIC_API_KEY.
+        album = make_album()
+        album.photos = [make_photo(album, immich_asset_id="a1")]
+        _persist(session, album)
+        photo = session.scalars(sa_select(Photo)).one()
+
+        result = PhotoAnalyzer(FakeThumbnails(default=_DECODABLE_IMAGE)).ensure(session, photo)
+
+        assert result is not None
+        assert photo.caption
 
     def test_handles_no_segment_context_without_erroring(
         self,
@@ -116,10 +119,14 @@ class TestPhotoAnalyzer:
     ) -> None:
         album = make_album()  # no segments
         album.photos = [make_photo(album, immich_asset_id="a1", segment=None)]
-        self._persist(session, album)
+        _persist(session, album)
         photo = session.scalars(sa_select(Photo)).one()
 
-        analyzer = PhotoAnalyzer(FakeThumbnails(), model=analysis_test_model())
+        analyzer = PhotoAnalyzer(
+            FakeThumbnails(),
+            tone_estimator=ZeroToneEstimator(),
+            captioner=RecordingCaptioner(),
+        )
         result = analyzer.ensure(session, photo)
 
         assert result is not None
@@ -133,47 +140,81 @@ class TestPhotoAnalyzer:
     ) -> None:
         album = make_album()
         album.photos = [make_photo(album, immich_asset_id="a1")]
-        self._persist(session, album)
+        _persist(session, album)
         photo = session.scalars(sa_select(Photo)).one()
 
-        model, calls = counting_analysis_model()
-        analyzer = PhotoAnalyzer(FakeThumbnails(), model=model)
+        captioner = RecordingCaptioner()
+        analyzer = PhotoAnalyzer(
+            FakeThumbnails(),
+            tone_estimator=ZeroToneEstimator(),
+            captioner=captioner,
+        )
 
         analyzer.ensure(session, photo)
         forced = analyzer.ensure(session, photo, force=True)
 
         assert forced is not None
-        assert calls == [1, 1]  # called again under force
+        assert len(captioner.calls) == 2  # analyzed again under force
+
+
+class TestForceRecaption:
+    """Per-run A/B: re-run an already-captioned photo with a *different* captioner
+    under ``force`` — the caption swaps, and the (deterministic classical) tone is
+    unchanged, so the A/B axis is isolated to the caption."""
+
+    def test_force_overwrites_caption_keeps_tone(
+        self,
+        session: Session,
+        make_album: Callable[..., Album],
+        make_photo: Callable[..., Photo],
+    ) -> None:
+        album = make_album()
+        album.photos = [make_photo(album, immich_asset_id="a1")]
+        _persist(session, album)
+        photo = session.scalars(sa_select(Photo)).one()
+
+        tone = FixedTone(ToneParams(exposure_ev=0.3, temp_shift_k=0.0, shadows=0.0, highlights=0.0))
+        PhotoAnalyzer(
+            FakeThumbnails(),
+            tone_estimator=tone,
+            captioner=RecordingCaptioner("template caption"),
+        ).ensure(session, photo)
+        assert photo.caption == "template caption"
+        tone_before = ToneParams.from_photo(photo)
+
+        PhotoAnalyzer(
+            FakeThumbnails(),
+            tone_estimator=tone,
+            captioner=RecordingCaptioner("claude caption"),
+        ).ensure(session, photo, force=True)
+
+        assert photo.caption == "claude caption"  # the A/B swap took effect
+        assert ToneParams.from_photo(photo) == tone_before  # tone unchanged (isolated)
 
 
 class TestPeopleGrounding:
-    """Step 19: a photo's *named* people are resolved (via the album-scoped
-    ``Person`` cache) and passed into the shared analysis call's grounding
-    context, so captions can name subjects — opt-in, and a face-free photo is
-    unchanged."""
-
-    def _persist(self, session: Session, album: Album) -> int:
-        session.add(album)
-        session.commit()
-        assert album.id is not None
-        return album.id
+    """Step 19: a photo's *named* people are resolved (via the album-scoped ``Person``
+    cache) and reach the ``ClaudeCaptioner`` prompt — opt-in, face-free unchanged."""
 
     def test_named_people_reach_the_prompt(
         self,
         session: Session,
         make_album: Callable[..., Album],
         make_photo: Callable[..., Photo],
-        capturing_model: tuple[FunctionModel, list[str]],
     ) -> None:
         album = make_album()
         album.people.append(Person(immich_person_id="p-alex", name="Alex"))
         album.people.append(Person(immich_person_id="p-sam", name="Sam"))
         album.photos = [make_photo(album, immich_asset_id="a1", person_ids=["p-alex", "p-sam"])]
-        self._persist(session, album)
+        _persist(session, album)
         photo = session.scalars(sa_select(Photo)).one()
 
-        model, prompts = capturing_model
-        PhotoAnalyzer(FakeThumbnails(), model=model).ensure(session, photo)
+        model, prompts = capturing_caption_model()
+        PhotoAnalyzer(
+            FakeThumbnails(),
+            tone_estimator=ZeroToneEstimator(),
+            captioner=ClaudeCaptioner(model=model),
+        ).ensure(session, photo)
 
         joined = "\n".join(prompts)
         assert "Alex" in joined
@@ -184,26 +225,22 @@ class TestPeopleGrounding:
         session: Session,
         make_album: Callable[..., Album],
         make_photo: Callable[..., Photo],
-        capturing_model: tuple[FunctionModel, list[str]],
     ) -> None:
-        # A recognized-but-unnamed person (Person.name is None) and a person_id
-        # with no cached Person row both contribute no name — and no "None" or raw
-        # id leaks into the prompt.
         album = make_album()
         album.people.append(Person(immich_person_id="p-alex", name="Alex"))
         album.people.append(Person(immich_person_id="p-unnamed", name=None))
         album.photos = [
-            make_photo(
-                album,
-                immich_asset_id="a1",
-                person_ids=["p-alex", "p-unnamed", "p-ghost"],
-            ),
+            make_photo(album, immich_asset_id="a1", person_ids=["p-alex", "p-unnamed", "p-ghost"]),
         ]
-        self._persist(session, album)
+        _persist(session, album)
         photo = session.scalars(sa_select(Photo)).one()
 
-        model, prompts = capturing_model
-        PhotoAnalyzer(FakeThumbnails(), model=model).ensure(session, photo)
+        model, prompts = capturing_caption_model()
+        PhotoAnalyzer(
+            FakeThumbnails(),
+            tone_estimator=ZeroToneEstimator(),
+            captioner=ClaudeCaptioner(model=model),
+        ).ensure(session, photo)
 
         joined = "\n".join(prompts)
         assert "Alex" in joined
@@ -216,38 +253,31 @@ class TestPeopleGrounding:
         session: Session,
         make_album: Callable[..., Album],
         make_photo: Callable[..., Photo],
-        capturing_model: tuple[FunctionModel, list[str]],
     ) -> None:
-        # Genericity guard: person_ids unset (never synced / no faces) ⇒ no
-        # people line at all, so the prompt matches the pre-step-19 behavior.
         album = make_album()
         album.photos = [make_photo(album, immich_asset_id="a1", person_ids=None)]
-        self._persist(session, album)
+        _persist(session, album)
         photo = session.scalars(sa_select(Photo)).one()
 
-        model, prompts = capturing_model
-        PhotoAnalyzer(FakeThumbnails(), model=model).ensure(session, photo)
+        model, prompts = capturing_caption_model()
+        PhotoAnalyzer(
+            FakeThumbnails(),
+            tone_estimator=ZeroToneEstimator(),
+            captioner=ClaudeCaptioner(model=model),
+        ).ensure(session, photo)
 
         assert "People in this photo" not in "\n".join(prompts)
 
 
 class TestPlaceGrounding:
-    """Step 20: a photo's reverse-geocoded place (``city``/``state``/``country``,
-    from Immich) is passed into the shared analysis call as caption grounding —
-    opt-in, and a photo with no geocoded place is unchanged."""
-
-    def _persist(self, session: Session, album: Album) -> int:
-        session.add(album)
-        session.commit()
-        assert album.id is not None
-        return album.id
+    """Step 20: a photo's reverse-geocoded place reaches the ``ClaudeCaptioner``
+    prompt as caption grounding — opt-in, and a place-less photo is unchanged."""
 
     def test_geocoded_place_reaches_prompt(
         self,
         session: Session,
         make_album: Callable[..., Album],
         make_photo: Callable[..., Photo],
-        capturing_model: tuple[FunctionModel, list[str]],
     ) -> None:
         album = make_album()
         album.photos = [
@@ -259,30 +289,35 @@ class TestPlaceGrounding:
                 country="Portugal",
             ),
         ]
-        self._persist(session, album)
+        _persist(session, album)
         photo = session.scalars(sa_select(Photo)).one()
 
-        model, prompts = capturing_model
-        PhotoAnalyzer(FakeThumbnails(), model=model).ensure(session, photo)
+        model, prompts = capturing_caption_model()
+        PhotoAnalyzer(
+            FakeThumbnails(),
+            tone_estimator=ZeroToneEstimator(),
+            captioner=ClaudeCaptioner(model=model),
+        ).ensure(session, photo)
 
-        joined = "\n".join(prompts)
-        assert "Lisbon, Lisbon Municipality, Portugal" in joined
+        assert "Lisbon, Lisbon Municipality, Portugal" in "\n".join(prompts)
 
     def test_no_geocoded_place_adds_no_location_line(
         self,
         session: Session,
         make_album: Callable[..., Album],
         make_photo: Callable[..., Photo],
-        capturing_model: tuple[FunctionModel, list[str]],
     ) -> None:
-        # Genericity guard: no city/state/country ⇒ no Location line at all.
         album = make_album()
         album.photos = [make_photo(album, immich_asset_id="a1")]
-        self._persist(session, album)
+        _persist(session, album)
         photo = session.scalars(sa_select(Photo)).one()
 
-        model, prompts = capturing_model
-        PhotoAnalyzer(FakeThumbnails(), model=model).ensure(session, photo)
+        model, prompts = capturing_caption_model()
+        PhotoAnalyzer(
+            FakeThumbnails(),
+            tone_estimator=ZeroToneEstimator(),
+            captioner=ClaudeCaptioner(model=model),
+        ).ensure(session, photo)
 
         assert "Location:" not in "\n".join(prompts)
 
@@ -291,10 +326,7 @@ class TestPlaceGrounding:
         session: Session,
         make_album: Callable[..., Album],
         make_photo: Callable[..., Photo],
-        capturing_model: tuple[FunctionModel, list[str]],
     ) -> None:
-        # A city that equals its state (city-states, or Immich repeating a value)
-        # must not read as "Singapore, Singapore, Singapore".
         album = make_album()
         album.photos = [
             make_photo(
@@ -305,10 +337,14 @@ class TestPlaceGrounding:
                 country="Singapore",
             ),
         ]
-        self._persist(session, album)
+        _persist(session, album)
         photo = session.scalars(sa_select(Photo)).one()
 
-        model, prompts = capturing_model
-        PhotoAnalyzer(FakeThumbnails(), model=model).ensure(session, photo)
+        model, prompts = capturing_caption_model()
+        PhotoAnalyzer(
+            FakeThumbnails(),
+            tone_estimator=ZeroToneEstimator(),
+            captioner=ClaudeCaptioner(model=model),
+        ).ensure(session, photo)
 
         assert "Location: Singapore." in "\n".join(prompts)

@@ -6,9 +6,9 @@ images); histogram-match baseline offset over small fixture images with known
 brightness properties; XMP sidecar output parses as valid XML with the expected
 darktable tags; then the stage itself — XMP written for selected photos,
 cross-camera reconciliation within a scene, per-photo failure isolation,
-idempotency/force, and the selected-but-unclustered flag. The shared vision call
-lives behind an injected :class:`~album.flow.photo_analyzer.PhotoAnalyzer`, driven by
-PydanticAI's ``TestModel``.
+idempotency/force, and the selected-but-unclustered flag. The shared analysis lives
+behind an injected :class:`~album.flow.photo_analyzer.PhotoAnalyzer`, here driven by a
+fixed tone-estimator double so the reconciliation math is observable.
 """
 
 from __future__ import annotations
@@ -25,6 +25,7 @@ import pytest
 from sqlalchemy import select as sa_select
 from sqlalchemy.orm import Session
 
+from album.analysis.tone import ToneParams
 from album.db.models import Album, Photo
 from album.db.session import SessionFactory, reuse
 from album.flow.photo_analyzer import PhotoAnalyzer
@@ -36,8 +37,7 @@ from album.flow.stages.enhance import (
     reconcile_tone,
     write_xmp_sidecar,
 )
-from album.flow.tone import ToneParams
-from tests.doubles import FakeThumbnails, analysis_test_model
+from tests.doubles import FakeThumbnails, FixedTone, RecordingCaptioner
 
 
 def _solid_jpeg_bytes(value: int) -> bytes:
@@ -51,17 +51,9 @@ def _solid_jpeg_bytes(value: int) -> bytes:
 _DARK = _solid_jpeg_bytes(40)
 _BRIGHT = _solid_jpeg_bytes(200)
 
-
-def _valid_model() -> object:
-    """A TestModel returning a fixed non-zero AI tone delta (so the cross-camera
-    baseline math is observable) plus a caption."""
-    return analysis_test_model(
-        exposure_ev=0.2,
-        temp_shift_k=100.0,
-        shadows=0.1,
-        highlights=-0.1,
-        caption="A test photo.",
-    )
+# A fixed non-zero delta so the cross-camera baseline reconciliation math is
+# observable (independent of the fixture image).
+_VALID_TONE = ToneParams(exposure_ev=0.2, temp_shift_k=100.0, shadows=0.1, highlights=-0.1)
 
 
 class TestReconcileTone:
@@ -80,7 +72,7 @@ class TestReconcileTone:
 
     def test_clamps_to_ai_result_bounds(self) -> None:
         # Even if a baseline is extreme, the combined result stays within the same
-        # bounds AnalysisResult enforces (AGENTS.md rule 5 — never drastic).
+        # tone bounds the estimator holds to (AGENTS.md rule 5 — never drastic).
         baseline = ToneParams(exposure_ev=5.0, temp_shift_k=5000.0, shadows=5.0, highlights=-5.0)
         ai_delta = ToneParams()
 
@@ -192,10 +184,13 @@ class TestEnhanceStage:
         album_id: int,
         session_factory: SessionFactory,
         *,
-        model: object | None = None,
         force: bool = False,
     ) -> EnhanceStage:
-        analyzer = PhotoAnalyzer(thumbnails, model=model or _valid_model())  # pyright: ignore[reportArgumentType]
+        analyzer = PhotoAnalyzer(
+            thumbnails,
+            tone_estimator=FixedTone(_VALID_TONE),
+            captioner=RecordingCaptioner("A test photo."),
+        )
         return EnhanceStage(
             analyzer,
             thumbnails,

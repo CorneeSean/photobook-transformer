@@ -61,9 +61,9 @@ build-order.md step 14's connection-pool-sizing warning still applies if a
 stage's *internal* per-photo loop later becomes Prefect-level fan-out.
 
 **Class-based wiring.** :class:`Pipeline` holds the injected collaborators (DB
-session, Immich client, similarity search, quality scorer/embedder, the vision
-model, the renderer, the output ``Printer``), each defaulting to the real thing
-built from ``config.py`` (the ``Printer`` defaults to
+session, Immich client, similarity search, quality scorer/embedder, the tone
+estimator + captioner, the renderer, the output ``Printer``), each defaulting to the
+real thing built from ``config.py`` (the ``Printer`` defaults to
 :class:`~album.printers.html.HtmlPrinter`). It constructs each stage from those
 collaborators and hands the constructed stage to the stage's own ``@task`` — so
 dependency injection stays in this wiring layer, not the task. The module-level
@@ -94,10 +94,11 @@ from collections.abc import Callable
 from pathlib import Path
 
 from prefect import Flow, flow
-from pydantic_ai.models import Model
 from sqlalchemy import select as sa_select
 from sqlalchemy.orm import Session
 
+from album.analysis.captioner import Captioner
+from album.analysis.tone_estimator import ToneEstimator
 from album.db.models import Album
 from album.db.session import SessionFactory, new_session, reuse
 from album.db.similarity import PgVectorSimilarity, SimilaritySearch
@@ -125,7 +126,7 @@ _ALBUMS_DIR = Path("data/albums")
 class _UnavailableQualityModel:
     """Placeholder for the real LAION-style aesthetic predictor + CLIP
     embedder — see this module's docstring. One model would produce both
-    (same reasoning as the shared vision call in ``agents/analysis.py``), so
+    (same reasoning as the shared thumbnail fetch in the ``analysis`` package), so
     one placeholder implements both protocols. Raises rather than
     fabricating a score/embedding; ``quality()`` catches it per-photo."""
 
@@ -265,7 +266,9 @@ class Pipeline:
         embedder: Embedder | None = None,
         renderer: Renderer | None = None,
         printer: Printer | None = None,
-        model: Model | None = None,
+        tone_estimator: ToneEstimator | None = None,
+        captioner: Captioner | None = None,
+        force: bool = False,
     ) -> None:
         self._session = session
         self._session_factory = session_factory if session_factory is not None else new_session
@@ -274,7 +277,12 @@ class Pipeline:
         self._aesthetic, self._embedder = _resolve_quality_deps(aesthetic, embedder)
         self._renderer = _default_renderer(renderer)
         self._printer = _default_printer(printer)
-        self._model = model
+        # None → PhotoAnalyzer resolves the offline classical defaults
+        # (ClassicalToneEstimator + TemplateCaptioner); inject a ClaudeCaptioner for
+        # the opt-in rich-caption mode. Both are passed straight through per fan-out.
+        self._tone_estimator = tone_estimator
+        self._captioner = captioner
+        self._force = force
 
     def run(self, album_slug: str) -> None:
         """Run every stage, in dependency order, for one album.
@@ -317,13 +325,13 @@ class Pipeline:
         self._run_group_1(album_id, client, album_slug)
         db_session.expire_all()  # re-read what group 1's own-session workers committed
 
-        SelectStage(self._similarity, album_id, shared).run_as_task()
+        SelectStage(self._similarity, album_id, shared, force=self._force).run_as_task()
 
         self._run_group_2(album_id, client)
         db_session.expire_all()  # re-read render's/caption's committed writes
 
-        AssembleStage(_ALBUMS_DIR, album_id, shared).run_as_task()
-        FulfillStage(self._printer, album_id, shared).run_as_task()
+        AssembleStage(_ALBUMS_DIR, album_id, shared, force=self._force).run_as_task()
+        FulfillStage(self._printer, album_id, shared, force=self._force).run_as_task()
 
     def _run_group_1(self, album_id: int, client: ImmichClient, album_slug: str) -> None:
         """resolve-leads ‖ quality ‖ cluster — independent after ``sync``; join at
@@ -339,10 +347,17 @@ class Pipeline:
         config = _load_lead_faces(album_dir)
         futures = [
             LeadFaceResolver(client, album_id, config, album_dir, factory).to_task().submit(),
-            QualityStage(client, self._aesthetic, album_id, factory, embedder=self._embedder)
+            QualityStage(
+                client,
+                self._aesthetic,
+                album_id,
+                factory,
+                embedder=self._embedder,
+                force=self._force,
+            )
             .to_task()
             .submit(),
-            ClusterStage(album_id, factory).to_task().submit(),
+            ClusterStage(album_id, factory, force=self._force).to_task().submit(),
         ]
         for future in futures:
             future.result()
@@ -365,20 +380,50 @@ class Pipeline:
         """
         factory = self._session_factory
         enhance_future = (
-            EnhanceStage(PhotoAnalyzer(client, model=self._model), client, album_id, factory)
+            EnhanceStage(
+                self._build_analyzer(client),
+                client,
+                album_id,
+                factory,
+                force=self._force,
+            )
             .to_task()
             .submit()
         )
         enhance_future.result()
 
-        render_future = RenderStage(client, self._renderer, album_id, factory).to_task().submit()
+        render_future = (
+            RenderStage(client, self._renderer, album_id, factory, force=self._force)
+            .to_task()
+            .submit()
+        )
+        # Caption carries the same global force. It's what re-captions the
+        # *unclustered* selected photos enhance skips (scene_id is None): without it
+        # a `--force --captioner X` A/B run would leave those with their stale
+        # caption. The cost: for a *clustered* photo this repeats the shared analysis
+        # a second time (enhance, joined above, already re-ran it under force) — cheap
+        # for the offline TemplateCaptioner, but a second thumbnail fetch + a second
+        # paid call for ClaudeCaptioner. So `--force --captioner claude` on an
+        # already-run album is ~2× the API cost on clustered photos; prefer a fresh
+        # slug for a large online A/B. Under normal (non-force) runs caption still
+        # skips (the DB idempotency gate), so the one-analysis-per-photo invariant
+        # holds where it matters. See progress.md's step-29 note.
         caption_future = (
-            CaptionStage(PhotoAnalyzer(client, model=self._model), album_id, factory)
+            CaptionStage(self._build_analyzer(client), album_id, factory, force=self._force)
             .to_task()
             .submit()
         )
         for future in (render_future, caption_future):
             future.result()
+
+    def _build_analyzer(self, client: ImmichClient) -> PhotoAnalyzer:
+        """A ``PhotoAnalyzer`` wrapping the Immich client as the thumbnail source and
+        the pipeline's tone estimator + captioner (``None`` ⇒ the offline defaults)."""
+        return PhotoAnalyzer(
+            client,
+            tone_estimator=self._tone_estimator,
+            captioner=self._captioner,
+        )
 
     @classmethod
     def flow(cls) -> Flow[..., None]:
@@ -409,7 +454,9 @@ class Pipeline:
             embedder: Embedder | None = None,
             renderer: Renderer | None = None,
             printer: Printer | None = None,
-            model: Model | None = None,
+            tone_estimator: ToneEstimator | None = None,
+            captioner: Captioner | None = None,
+            force: bool = False,
         ) -> None:
             cls(
                 session=session,
@@ -420,7 +467,9 @@ class Pipeline:
                 embedder=embedder,
                 renderer=renderer,
                 printer=printer,
-                model=model,
+                tone_estimator=tone_estimator,
+                captioner=captioner,
+                force=force,
             ).run(album_slug)
 
         return pipeline

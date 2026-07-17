@@ -73,10 +73,18 @@ class Settings(BaseSettings):
 
     database_url: str
 
-    # Claude, via PydanticAI (used by src/album/agents/analysis.py). Kept flat
-    # under its conventional env name; defaulted so importing the agent module
-    # never requires a key — only building the real (non-test) model does.
+    # Claude, via PydanticAI (used by album/analysis/captioner.py's ClaudeCaptioner
+    # and album/agents/segments.py). Kept flat under its conventional env name;
+    # defaulted so importing those modules never requires a key — only building the
+    # real (non-test) model does.
     anthropic_api_key: str = ""
+
+    # The default captioner for a run (step 29): "template" (offline, no API key,
+    # deterministic) or "claude" (opt-in rich caption). Flat like the two above (a
+    # single value, conventional env name ``CAPTIONER``); a ``--captioner`` CLI flag
+    # overrides it per run, and ``build_captioner`` validates the value — kept out of
+    # this module to avoid importing the captioner registry (an import cycle).
+    captioner: str = "template"
 
     immich: ImmichSettings = ImmichSettings()
     lulu: LuluSettings = LuluSettings()

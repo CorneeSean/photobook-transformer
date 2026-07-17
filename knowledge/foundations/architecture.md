@@ -85,17 +85,23 @@ string). PydanticAI gives a validated Pydantic output model with automatic retry
 on malformed output, instead of hand-parsing JSON from a text response. It also
 provides `TestModel`, which is what makes these stages unit-testable at all.
 
-**One combined vision call, not two.** [`enhance`](/stages/enhance.md) and
+**One shared analysis, one fetch — not two.** [`enhance`](/stages/enhance.md) and
 [`caption`](/stages/caption.md) both need a downscaled thumbnail of the same
-*selected* photos — and uploading that image is the expensive part of a vision
-request. So there is a **single agent** (`agents/analysis.py`) whose one output
-model carries *both* the bounded tone deltas *and* the caption, called **once per
-selected photo**. Its result is persisted (tone-delta columns + `caption`) and
-the call is idempotent — skipped when the row is already populated. The `enhance`
-and `caption` stages each consume their slice of that stored result rather than
-each making their own API round-trip. Because the caption half needs grounding,
-the shared call assembles whatever context the album has (segment name/place,
-`Album.meta`) and passes it in, regardless of which stage triggers it first.
+*selected* photos — and fetching that image is the expensive part. So a **single
+collaborator** ([`PhotoAnalyzer`](/stages/enhance.md)) produces *both* the bounded tone
+deltas *and* the caption from one fetch, **once per selected photo**. Its result is
+persisted (tone-delta columns + `caption`) and idempotent — skipped when the row is
+already populated. `enhance` and `caption` each consume their slice rather than each
+re-fetching. Because the caption needs grounding, the analysis assembles whatever
+context the album has (segment name/place, place, people, capture time, `Album.meta`)
+and passes it in, regardless of which stage triggers it first.
+
+As of **step 29** ([local-analysis.md](/build/local-analysis.md)) both halves are
+**classical and offline by default** — tone from a `ClassicalToneEstimator` (CV) and
+the caption from a `TemplateCaptioner` (metadata templating) — behind injectable
+`ToneEstimator`/`Captioner` seams, so a default run needs **no external API and no
+key**. A `ClaudeCaptioner` is the opt-in "rich caption" upgrade (selectable per run),
+mirroring the `Printer` boundary's `HtmlPrinter`/`LuluPrinter` split.
 
 ## Containers
 

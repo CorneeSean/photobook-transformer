@@ -1,16 +1,16 @@
-"""``enhance`` — AI estimates bounded tone parameters; classical code applies
-them via XMP sidecars, scoped by ``album_id``.
+"""``enhance`` — classical CV estimates bounded tone parameters; classical code
+applies them via XMP sidecars, scoped by ``album_id``.
 
 Two responsibilities, per [enhance.md](/stages/enhance.md):
 
-1. **Trigger the shared vision call** via the injected
-   :class:`~album.flow.photo_analyzer.PhotoAnalyzer` — the "one combined vision call"
-   design in [architecture.md](/foundations/architecture.md): a single agent call per
-   selected photo produces bounded tone deltas *and* a caption together, because
-   uploading the thumbnail is the expensive part. This stage and ``caption`` both
-   receive the same kind of analyzer and call its idempotent ``ensure`` (which
-   guarantees exactly one round-trip per photo against the DB), so neither
-   reimplements that no-op check.
+1. **Trigger the shared per-photo analysis** via the injected
+   :class:`~album.flow.photo_analyzer.PhotoAnalyzer` — the shared-fetch design in
+   [architecture.md](/foundations/architecture.md): one thumbnail fetch per selected photo
+   produces bounded tone deltas *and* a caption together, because fetching the
+   thumbnail is the expensive part (step 29 made both halves classical/offline by
+   default — see local-analysis.md). This stage and ``caption`` both receive the same
+   kind of analyzer and call its idempotent ``ensure`` (which guarantees the photo is
+   analyzed at most once against the DB), so neither reimplements that no-op check.
 2. **Reconcile cross-camera color consistency** (:func:`compute_camera_baseline`
    + :func:`reconcile_tone`) and write the final per-photo parameters as **XMP
    sidecar files** that [`render`](./render.py) (darktable-cli) will read.
@@ -68,18 +68,24 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import ClassVar
 
-import cv2
 import numpy as np
 from skimage.exposure import match_histograms
 from sqlalchemy.orm import Session
 
-from album.agents.analysis import AnalysisResult
+from album.analysis._image import decode_gray
+from album.analysis.tone import (
+    EXPOSURE_EV_BOUND,
+    HIGHLIGHTS_BOUND,
+    SHADOWS_BOUND,
+    TEMP_SHIFT_K_BOUND,
+    ToneParams,
+    clamp,
+)
 from album.db.models import Photo
 from album.db.queries import selected_photos
 from album.db.session import SessionFactory
 from album.flow.photo_analyzer import PhotoAnalyzer, ThumbnailSource
 from album.flow.stages.base import Stage
-from album.flow.tone import ToneParams
 
 _log = logging.getLogger(__name__)
 
@@ -104,7 +110,7 @@ _BLENDOP_VERSION = 11
 _BLENDOP_OFF = "gz10eJxjYGBgYAFiCQYYOOHEgAYY0QVwggZ7CB6pfOygYtaVAyCMi08IAAB5xiOg"
 
 # Kelvin -> red/blue channel-multiplier swing. temp_shift_k is clamped to
-# ±2000 K (AnalysisResult); at that bound this yields a ~±0.15 multiplier — a
+# ±2000 K (TEMP_SHIFT_K_BOUND); at that bound this yields a ~±0.15 multiplier — a
 # clearly visible but bounded warm/cool shift (AGENTS.md rule 5, never drastic).
 _TEMP_K_TO_MULT = 7.5e-5
 
@@ -124,24 +130,20 @@ def reconcile_tone(baseline: ToneParams, ai_delta: ToneParams) -> ToneParams:
     """Combine a per-camera baseline correction with the AI's per-photo delta.
 
     Per enhance.md: "Different cameras land on a common footing first;
-    individual exposure mistakes get fixed second" — baseline first, AI delta
-    on top, i.e. a plain sum per channel. The result is clamped to the same
-    bounds :class:`AnalysisResult` enforces on the AI's own output (AGENTS.md
-    rule 5 — AI/derived corrections are bounded, never drastic), even though
-    the baseline itself is computed independently of that model.
+    individual exposure mistakes get fixed second" — baseline first, per-photo
+    delta on top, i.e. a plain sum per channel. The result is clamped to the same
+    :mod:`~album.analysis.tone` bounds the estimator holds its own output to
+    (AGENTS.md rule 5 — derived corrections are bounded, never drastic), even
+    though the baseline itself is computed independently.
 
     Pure function, no DB/image I/O — directly unit-testable.
     """
     return ToneParams(
-        exposure_ev=_clamp(baseline.exposure_ev + ai_delta.exposure_ev, -2.0, 2.0),
-        temp_shift_k=_clamp(baseline.temp_shift_k + ai_delta.temp_shift_k, -2000.0, 2000.0),
-        shadows=_clamp(baseline.shadows + ai_delta.shadows, -1.0, 1.0),
-        highlights=_clamp(baseline.highlights + ai_delta.highlights, -1.0, 1.0),
+        exposure_ev=clamp(baseline.exposure_ev + ai_delta.exposure_ev, EXPOSURE_EV_BOUND),
+        temp_shift_k=clamp(baseline.temp_shift_k + ai_delta.temp_shift_k, TEMP_SHIFT_K_BOUND),
+        shadows=clamp(baseline.shadows + ai_delta.shadows, SHADOWS_BOUND),
+        highlights=clamp(baseline.highlights + ai_delta.highlights, HIGHLIGHTS_BOUND),
     )
-
-
-def _clamp(value: float, low: float, high: float) -> float:
-    return max(low, min(high, value))
 
 
 def compute_camera_baseline(reference_image: bytes, camera_image: bytes) -> ToneParams:
@@ -159,8 +161,8 @@ def compute_camera_baseline(reference_image: bytes, camera_image: bytes) -> Tone
     baselines the same way, but exposure is the dominant cross-camera drift in
     practice and is what enhance.md's example targets.
     """
-    reference = _decode_gray(reference_image)
-    camera = _decode_gray(camera_image)
+    reference = decode_gray(reference_image)
+    camera = decode_gray(camera_image)
     matched = match_histograms(camera, reference)
 
     camera_mean = float(np.mean(camera))
@@ -170,15 +172,7 @@ def compute_camera_baseline(reference_image: bytes, camera_image: bytes) -> Tone
     else:
         exposure_ev = float(np.log2(max(matched_mean, 1e-6) / camera_mean))
 
-    return ToneParams(exposure_ev=_clamp(exposure_ev, -2.0, 2.0))
-
-
-def _decode_gray(image: bytes) -> np.ndarray:
-    buffer = np.frombuffer(image, dtype=np.uint8)
-    decoded = cv2.imdecode(buffer, cv2.IMREAD_GRAYSCALE)
-    if decoded is None:
-        raise ValueError("could not decode image bytes")
-    return decoded.astype(np.float64)
+    return ToneParams(exposure_ev=clamp(exposure_ev, EXPOSURE_EV_BOUND))
 
 
 def _exposure_params(exposure_ev: float) -> str:
@@ -290,7 +284,7 @@ class EnhanceStage(Stage[EnhanceResult]):
     """`enhance` — reconcile cross-camera tone and write XMP sidecars. Idempotent.
 
     Two collaborators, injected: the shared :class:`~album.flow.photo_analyzer.PhotoAnalyzer`
-    (the one combined vision call — see architecture.md) and a
+    (the shared per-photo analysis — see architecture.md) and a
     :class:`~album.flow.photo_analyzer.ThumbnailSource`, which this stage *also* needs
     directly for the classical histogram-match baseline (not just via the analyzer).
     ``data_root`` is construction-time config, alongside the ``album_id`` +
@@ -369,8 +363,8 @@ class EnhanceStage(Stage[EnhanceResult]):
                 continue
 
             try:
-                analysis = self._analyzer.ensure(session, photo, force=force)
-                ai_delta = self._ai_delta(photo, analysis)
+                tone = self._analyzer.ensure(session, photo, force=force)
+                ai_delta = self._ai_delta(photo, tone)
                 baseline, reference_image = self._baseline(photo, reference, reference_image)
                 combined = reconcile_tone(baseline, ai_delta)
                 write_xmp_sidecar(_xmp_path(self._data_root, album_slug, photo.filename), combined)
@@ -391,14 +385,14 @@ class EnhanceStage(Stage[EnhanceResult]):
             result.enhanced += 1
 
     @staticmethod
-    def _ai_delta(photo: Photo, analysis: AnalysisResult | None) -> ToneParams:
-        """The raw per-photo AI tone delta, from a fresh analysis or the stored columns."""
-        if analysis is not None:
-            return ToneParams.from_analysis(analysis)
-        # analysis is None only when force=False and the photo was already analyzed
+    def _ai_delta(photo: Photo, tone: ToneParams | None) -> ToneParams:
+        """The raw per-photo tone delta, from a fresh estimate or the stored columns."""
+        if tone is not None:
+            return tone
+        # tone is None only when force=False and the photo was already analyzed
         # but never reconciled/xmp_written (e.g. a previous run crashed between the
-        # analysis call and the XMP write) — the stored columns still hold the
-        # untouched raw AI delta.
+        # analysis and the XMP write) — the stored columns still hold the untouched
+        # raw delta.
         return ToneParams.from_photo(photo)
 
     def _baseline(

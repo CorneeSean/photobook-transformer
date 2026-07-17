@@ -101,3 +101,25 @@ class TestNestedGroups:
 
         assert settings.database_url == "postgresql+psycopg://u:p@host:5432/db"
         assert settings.anthropic_api_key == "anthropic-secret"
+
+
+class TestCaptionerSetting:
+    """The flat ``captioner`` default (step 29): the shipped default is the offline
+    ``template``, overridable by the bare ``CAPTIONER`` env var."""
+
+    @pytest.fixture(autouse=True)
+    def _env(self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> Iterator[None]:
+        monkeypatch.chdir(tmp_path)  # isolate from the repo .env
+        monkeypatch.setenv("DATABASE_URL", "postgresql+psycopg://u:p@host:5432/db")
+        monkeypatch.delenv("CAPTIONER", raising=False)
+        get_settings.cache_clear()
+        yield
+        get_settings.cache_clear()
+
+    def test_default_is_template(self) -> None:
+        assert get_settings().captioner == "template"
+
+    def test_env_override(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("CAPTIONER", "claude")
+
+        assert get_settings().captioner == "claude"

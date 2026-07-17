@@ -1,7 +1,7 @@
 ---
 type: Playbook
 title: Implementation workflow (per-step handoff)
-description: How an agent implements one build step at a time — branch, TDD, sub-agent review (≤3 broad-scope agents), user review, checks, squash, merge, push.
+description: How an agent implements one build step at a time — branch, TDD, sub-agent review (up to 4 broad-scope agents — 2 adversarial, style, architecture), user review, checks, squash, merge, push.
 tags: [workflow, process, review, git, branching, handoff]
 timestamp: 2026-07-12
 ---
@@ -58,21 +58,29 @@ review chain, squash, merge, push) around it.
    basedpyright + pytest) until green. For a step with no automated test, perform
    the manual verification the [build step](/build/build-order.md) describes and write
    down the result. **No review starts until checks are green.**
-6. **Sub-agent review (only on green checks).** Invoke a **review sub-agent** on
+6. **Sub-agent review (only on green checks).** Invoke **review sub-agents** on
    the step's diff (`main..HEAD`) — e.g. via the repo's code-review tooling —
-   giving it the step's context. If it has comments: address them, **re-run
-   `uv run poe check` until green**, then re-review. **Repeat until the reviewer
-   returns no further comments.** Record `agent-review: passed` in the tracker.
-   **Cap the review at a maximum of 3 essential, broad-scope review sub-agents
-   to keep token cost bounded** — do *not* fan out into many narrow single-angle
-   agents. Give each remaining agent a broad remit, e.g.: (1) correctness across
-   the whole diff, (2) cleanup — reuse/simplification/efficiency, (3)
-   tests/conventions/docs. Use fewer when the diff is small: one broad-scope
-   reviewer is enough for a modest change, and a trivial docs-only change the
-   user directed needs none. If you drive the review through the `/code-review`
-   skill, prefer a **low/medium effort** level (fewer agents) over high/max
-   (which fans out widely) unless the diff is large or risky enough to justify
-   the extra spend.
+   giving each the step's context. If any has comments: address them, **re-run
+   `uv run poe check` until green**, then re-review. **Repeat until the reviewers
+   return no further comments.** Record `agent-review: passed` in the tracker.
+
+   **The standard panel is up to 4 broad-scope reviewers, each with a distinct
+   remit** (do *not* fan out into many narrow single-angle agents beyond these):
+   1. **Adversarial — correctness/bugs**: hunt for real defects across the diff.
+   2. **Adversarial — correctness/bugs (independent)**: a *second, independent*
+      correctness pass prompted to *refute* the change — two adversaries catch
+      failure modes one misses.
+   3. **Style / reuse / conventions**: quality-practices.md §1–§2 adherence,
+      DRY/simplification, dead code, docstring accuracy, test conventions.
+   4. **Architecture & software design**: package boundaries, dependency
+      direction, seam/abstraction granularity, cohesion/coupling, pattern fit
+      (§1.6), extensibility.
+
+   Scale *down* for a small diff: a modest change is fine with one adversarial +
+   one style reviewer, and a trivial docs-only change the user directed needs
+   none. Reserve the full 4-agent panel for substantive or risky steps. If you
+   drive the review through the `/code-review` skill, pick an effort level that
+   yields this panel rather than a wide narrow-angle fan-out.
 7. **User review (only on green checks + a satisfied sub-agent).** Present the
    step to the **user** (summary of what changed, how it was verified, the diff).
    If the user requests changes: make them, **re-run `uv run poe check` until

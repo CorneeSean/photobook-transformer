@@ -38,7 +38,7 @@ from album.db.similarity import PgVectorSimilarity
 from album.flow import pipeline
 from album.immich.client import ImmichAsset, ImmichFace
 from alembic import command
-from tests.doubles import ConstantAesthetic, ConstantEmbedder, counting_analysis_model
+from tests.doubles import ConstantAesthetic, ConstantEmbedder, RecordingCaptioner
 from tests.pgvector_support import PGVECTOR_IMAGE
 from tests.pgvector_support import alembic_config as _alembic_config
 from tests.pgvector_support import database_url as _database_url
@@ -164,12 +164,14 @@ class TestPipelineConcurrentPerTaskSessions:
             ]
             client = _FakeImmich(assets, image_bytes=photo_bytes)
 
-            # A counting model, not just a fixed-output one: this is also the
-            # regression guard for the enhance/caption race review caught —
-            # both now wait_for enhance, so the shared vision call must still
-            # fire exactly once per selected photo despite running concurrent
-            # per-task sessions, not once from enhance and again from caption.
-            model, vision_calls = counting_analysis_model()
+            # A call-counting captioner, not just a fixed-output one: this is also
+            # the regression guard for the enhance/caption race review caught —
+            # enhance is joined before caption is submitted, so the shared analysis
+            # must still fire exactly once per selected photo despite concurrent
+            # per-task sessions, not once from enhance and again from caption. The
+            # same instance backs both stages' analyzers, so its call log is the
+            # cross-stage total. (Tone stays the default classical estimator.)
+            captioner = RecordingCaptioner()
 
             pipeline(
                 album_slug="step25-concurrency",
@@ -180,7 +182,7 @@ class TestPipelineConcurrentPerTaskSessions:
                 aesthetic=ConstantAesthetic(),
                 embedder=ConstantEmbedder(),
                 renderer=_FakeRenderer(photo_bytes),
-                model=model,
+                captioner=captioner,
                 # printer left at its default (HtmlPrinter) — also a real,
                 # relative-path write, kept inside tmp_path by the chdir above.
             )
@@ -210,9 +212,9 @@ class TestPipelineConcurrentPerTaskSessions:
                 assert Path(photo.rendered_path).exists()
                 assert photo.caption is not None
 
-            # Exactly one shared vision call per selected photo — not two
+            # Exactly one shared analysis per selected photo — not two
             # (one from `enhance`, one from a concurrently-racing `caption`).
-            assert len(vision_calls) == len(photos)
+            assert len(captioner.calls) == len(photos)
 
             refreshed_album = session.get(Album, album_id)
             assert refreshed_album is not None

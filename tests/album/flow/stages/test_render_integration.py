@@ -33,8 +33,8 @@ import numpy as np
 import pytest
 from PIL import Image
 
+from album.analysis.tone import ToneParams
 from album.flow.stages.enhance import write_xmp_sidecar
-from album.flow.tone import ToneParams
 
 pytestmark = pytest.mark.integration
 

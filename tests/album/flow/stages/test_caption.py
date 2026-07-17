@@ -1,17 +1,17 @@
 """Tests for :class:`~album.flow.stages.caption.CaptionStage` (build step 12).
 
-Per caption.md / architecture.md's "one combined vision call": this stage's whole
-job is to guarantee every *selected* photo ends up with a stored caption, routing
-through the shared :class:`~album.flow.photo_analyzer.PhotoAnalyzer` rather than
-reimplementing it, so there is exactly one API round-trip per photo across the
-whole pipeline. Covers: no second call for a photo already analyzed by ``enhance``;
-a segment-less album still gets a caption (genericity guard); ``caption`` running
-*before* ``enhance`` still triggers the shared call (order independence); per-photo
-failure isolation; album scoping and unknown-album handling.
+Per caption.md / architecture.md's shared-analysis design: this stage's whole job is
+to guarantee every *selected* photo ends up with a stored caption, routing through
+the shared :class:`~album.flow.photo_analyzer.PhotoAnalyzer` rather than reimplementing
+it, so a photo is analyzed at most once across the whole pipeline. Covers: no second
+call for a photo already analyzed by ``enhance``; a segment-less album still gets a
+caption (genericity guard); ``caption`` running *before* ``enhance`` still triggers
+the shared call (order independence); per-photo failure isolation; album scoping and
+unknown-album handling.
 
-Manual spot-check of ~20 captions for accuracy/non-genericity (build-order
-step 12) is deferred — no ``ANTHROPIC_API_KEY`` in this environment; see
-progress.md.
+The captioner is a :class:`~tests.doubles.RecordingCaptioner` (a deterministic fake
+that counts calls) rather than a real model — the live-caption spot-check stays
+deferred (no ``ANTHROPIC_API_KEY``; see progress.md).
 """
 
 from __future__ import annotations
@@ -22,11 +22,12 @@ import pytest
 from sqlalchemy import select as sa_select
 from sqlalchemy.orm import Session
 
+from album.analysis.captioner import Captioner
 from album.db.models import Album, Photo, Segment
 from album.db.session import SessionFactory, reuse
-from album.flow.photo_analyzer import PhotoAnalyzer
+from album.flow.photo_analyzer import PhotoAnalyzer, ThumbnailSource
 from album.flow.stages.caption import CaptionResult, CaptionStage
-from tests.doubles import FakeThumbnails, analysis_test_model, counting_analysis_model
+from tests.doubles import FakeThumbnails, RecordingCaptioner, ZeroToneEstimator
 
 
 class RaisingThumbnails:
@@ -49,15 +50,15 @@ class TestCaptionStage:
 
     def _stage(
         self,
-        thumbnails: object,
-        model: object,
+        thumbnails: ThumbnailSource,
+        captioner: Captioner,
         album_id: int,
         session_factory: SessionFactory,
         *,
         force: bool = False,
     ) -> CaptionStage:
         return CaptionStage(
-            PhotoAnalyzer(thumbnails, model=model),  # pyright: ignore[reportArgumentType]
+            PhotoAnalyzer(thumbnails, tone_estimator=ZeroToneEstimator(), captioner=captioner),
             album_id,
             session_factory,
             force=force,
@@ -84,10 +85,10 @@ class TestCaptionStage:
         self._mark_analyzed(photo, "Already captioned.")
         session.flush()
 
-        model, calls = counting_analysis_model()
-        result = self._stage(FakeThumbnails(), model, album_id, reuse(session)).run()
+        captioner = RecordingCaptioner()
+        result = self._stage(FakeThumbnails(), captioner, album_id, reuse(session)).run()
 
-        assert calls == []  # no API call made
+        assert captioner.calls == []  # no analysis performed
         assert isinstance(result, CaptionResult)
         assert result.skipped == 1
         assert result.captioned == 0
@@ -106,12 +107,7 @@ class TestCaptionStage:
         ]
         album_id = self._persist(session, album)
 
-        result = self._stage(
-            FakeThumbnails(),
-            analysis_test_model(),
-            album_id,
-            reuse(session),
-        ).run()
+        result = self._stage(FakeThumbnails(), RecordingCaptioner(), album_id, reuse(session)).run()
 
         assert result.captioned == 1
         assert result.failed == 0
@@ -139,12 +135,7 @@ class TestCaptionStage:
         ]
         album_id = self._persist(session, album)
 
-        result = self._stage(
-            FakeThumbnails(),
-            analysis_test_model(),
-            album_id,
-            reuse(session),
-        ).run()
+        result = self._stage(FakeThumbnails(), RecordingCaptioner(), album_id, reuse(session)).run()
 
         assert result.captioned == 1
         photo = session.scalars(sa_select(Photo)).one()
@@ -162,7 +153,7 @@ class TestCaptionStage:
 
         result = self._stage(
             FakeThumbnails({"a1": b"img"}),
-            analysis_test_model(),
+            RecordingCaptioner(),
             album_id,
             reuse(session),
         ).run()
@@ -170,8 +161,8 @@ class TestCaptionStage:
         assert result.captioned == 1
         photo = session.scalars(sa_select(Photo)).one()
         assert photo.caption == "A generic caption."
-        # The tone-delta columns enhance owns are populated too, since it's the
-        # same underlying analysis call/row write via PhotoAnalyzer.ensure.
+        # The tone-delta columns enhance owns are populated too, since it's the same
+        # underlying analysis/row write via PhotoAnalyzer.ensure (ZeroToneEstimator).
         assert photo.enhance_exposure_ev == 0.0
 
     def test_after_enhance_reads_back_without_second_call(
@@ -186,16 +177,19 @@ class TestCaptionStage:
         photo = session.scalars(sa_select(Photo)).one()
 
         # A prior analysis run (as enhance would trigger).
-        PhotoAnalyzer(FakeThumbnails({"a1": b"img"}), model=analysis_test_model()).ensure(
-            session,
-            photo,
-        )
+        PhotoAnalyzer(
+            FakeThumbnails({"a1": b"img"}),
+            tone_estimator=ZeroToneEstimator(),
+            captioner=RecordingCaptioner(),
+        ).ensure(session, photo)
         session.flush()
 
-        model, calls = counting_analysis_model()
-        result = self._stage(FakeThumbnails({"a1": b"img"}), model, album_id, reuse(session)).run()
+        captioner = RecordingCaptioner()
+        result = self._stage(
+            FakeThumbnails({"a1": b"img"}), captioner, album_id, reuse(session)
+        ).run()
 
-        assert calls == []
+        assert captioner.calls == []
         assert result.skipped == 1
         assert result.captioned == 0
 
@@ -209,12 +203,7 @@ class TestCaptionStage:
         album.photos = [make_photo(album, immich_asset_id="a1", filename="a1.jpg", selected=False)]
         album_id = self._persist(session, album)
 
-        result = self._stage(
-            FakeThumbnails(),
-            analysis_test_model(),
-            album_id,
-            reuse(session),
-        ).run()
+        result = self._stage(FakeThumbnails(), RecordingCaptioner(), album_id, reuse(session)).run()
 
         assert result.captioned == 0
         assert result.skipped == 0
@@ -236,7 +225,7 @@ class TestCaptionStage:
 
         result = self._stage(
             RaisingThumbnails(),
-            analysis_test_model(),
+            RecordingCaptioner(),
             album_id,
             reuse(session),
         ).run()
@@ -264,7 +253,7 @@ class TestCaptionStage:
         ]
         target_id = self._persist(session, target_album)
 
-        self._stage(FakeThumbnails(), analysis_test_model(), target_id, reuse(session)).run()
+        self._stage(FakeThumbnails(), RecordingCaptioner(), target_id, reuse(session)).run()
 
         other_photo = session.scalars(sa_select(Photo).where(Photo.album_id == other_id)).one()
         assert other_photo.caption is None
@@ -273,7 +262,7 @@ class TestCaptionStage:
 
     def test_raises_for_unknown_album(self, session: Session) -> None:
         with pytest.raises(ValueError):
-            self._stage(FakeThumbnails(), analysis_test_model(), 999, reuse(session)).run()
+            self._stage(FakeThumbnails(), RecordingCaptioner(), 999, reuse(session)).run()
 
     def test_force_reanalyzes_already_captioned_photo(
         self,
@@ -290,7 +279,7 @@ class TestCaptionStage:
 
         result = self._stage(
             FakeThumbnails({"a1": b"img"}),
-            analysis_test_model(),
+            RecordingCaptioner("A fresh caption."),
             album_id,
             reuse(session),
             force=True,
@@ -298,4 +287,4 @@ class TestCaptionStage:
 
         assert result.captioned == 1
         photo = session.scalars(sa_select(Photo)).one()
-        assert photo.caption == "A generic caption."
+        assert photo.caption == "A fresh caption."

@@ -1,16 +1,21 @@
 ---
 type: Proposal
 title: Offline analysis — replace the Claude vision call with a classical approach
-description: Proposal (not yet planned) to drop the pipeline's last external API dependency by replacing the single Claude vision call with classical, ML-free logic — tone via computer vision, captions via metadata templating — keeping Claude/a local VLM injectable as an optional richer mode.
-tags: [proposal, offline, classical, caption, enhance, analysis, next-step, needs-planning]
+description: DONE (step 29). Dropped the pipeline's last external API dependency by replacing the single Claude vision call with classical, ML-free logic — tone via computer vision, captions via metadata templating — keeping Claude/a local VLM injectable as an optional richer mode.
+tags: [offline, classical, caption, enhance, analysis, done]
 timestamp: 2026-07-17
 ---
 
 # Offline analysis — replace the Claude vision call with a classical approach
 
-**Status: proposal — needs proper planning before any implementation.** This is a
-summary to anchor a later planning pass (brainstorming →
-[writing a plan](/process/implementation-workflow.md)), not a plan itself.
+**Status: implemented — build step 29 (see [progress.md](/build/progress.md)).** Delivered
+as designed below: a `ClassicalToneEstimator` (CV tone) + a `Captioner` seam
+(`TemplateCaptioner` offline default, `ClaudeCaptioner` opt-in, selectable per run via
+`CAPTIONER`/`--captioner`), composed by `PhotoAnalyzer`; tone is now always classical.
+A default `photobook-generator run` needs no external API and no key. Two design points
+that shifted during implementation: tone lives behind its own `ToneEstimator` seam
+(always classical, no LLM tone path), and a local VLM was deferred (future `Captioner`
+registry entry). The rest below is the original proposal, kept as the rationale of record.
 
 ## Motivation
 

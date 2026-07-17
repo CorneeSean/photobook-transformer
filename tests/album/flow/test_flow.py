@@ -53,7 +53,6 @@ from typing import Protocol
 
 import pytest
 from prefect.testing.utilities import prefect_test_harness
-from pydantic_ai.models.test import TestModel
 from sqlalchemy.orm import Session
 
 import album.flow._flow as flow_module
@@ -196,7 +195,7 @@ class TestPipelineWiring:
 
     def _deps(self) -> dict[str, object]:
         """The injectable collaborators as harmless doubles (never exercised — the
-        stages' ``run`` is stubbed), plus a PydanticAI ``TestModel``."""
+        stages' ``run`` is stubbed), including the analysis tone estimator + captioner."""
         return {
             "immich_client": _FakeImmichClient(),
             "similarity": object(),
@@ -204,7 +203,8 @@ class TestPipelineWiring:
             "embedder": object(),
             "renderer": object(),
             "printer": object(),
-            "model": TestModel(),
+            "tone_estimator": object(),
+            "captioner": object(),
         }
 
     def test_runs_every_stage_once_respecting_the_dag_partial_order(
@@ -286,6 +286,37 @@ class TestPipelineWiring:
         for name in ("sync", "select", "assemble", "fulfill"):
             with received[name]() as reused:
                 assert reused is session
+
+    def test_force_threads_to_the_reprocessing_stages_including_caption(
+        self,
+        session: Session,
+        monkeypatch: pytest.MonkeyPatch,
+        make_album: Callable[..., Album],
+    ) -> None:
+        """A ``--force`` run reaches every force-accepting stage — in particular
+        ``caption`` (step 29: it's what re-captions the unclustered selected photos
+        ``enhance`` skips). ``sync`` has no idempotency and never carries force."""
+        self._persist(session, make_album(slug="honeymoon-2026", immich_album_id="immich-1"))
+
+        forced: dict[str, object] = {}
+        lock = threading.Lock()
+
+        def _make_run(name: str) -> Callable[..., object]:
+            def _run(self: object) -> None:
+                with lock:
+                    forced[name] = getattr(self, "_force", None)  # resolve-leads has none
+
+            return _run
+
+        _patch_runs(monkeypatch, _make_run)
+
+        pipeline(album_slug="honeymoon-2026", session=session, force=True, **self._deps())  # pyright: ignore[reportArgumentType]
+
+        assert forced["enhance"] is True
+        assert forced["caption"] is True  # the step-29 fix
+        assert forced["select"] is True
+        assert forced["assemble"] is True
+        assert forced["sync"] is False  # no idempotency → force never threaded
 
     def test_group_1_failure_aborts_before_select(
         self,

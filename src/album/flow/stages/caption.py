@@ -2,21 +2,21 @@
 by ``album_id``.
 
 Per [caption.md](/stages/caption.md): the caption is produced by the **shared
-analysis call** described under [`enhance`](./enhance.py) (one agent, one
-round-trip per selected photo, producing tone deltas and a caption together).
-If `enhance` already ran for a photo, the caption is simply read back; if
-`caption` runs first, it triggers that same idempotent call. Either way there
-is **exactly one API round-trip per photo** across the whole pipeline — this
-stage does not reimplement that idempotency, it routes through the injected
-:class:`~album.flow.photo_analyzer.PhotoAnalyzer`'s ``ensure``, the single shared
-trigger point both stages use (see its docstring for the exact no-op contract).
+per-photo analysis** described under [`enhance`](./enhance.py) (one thumbnail fetch
+per selected photo, producing tone deltas and a caption together; both are classical
+and offline by default — step 29/local-analysis.md). If `enhance` already ran for a
+photo, the caption is simply read back; if `caption` runs first, it triggers that
+same idempotent call. Either way the photo is analyzed **at most once** across the
+whole pipeline — this stage does not reimplement that idempotency, it routes through
+the injected :class:`~album.flow.photo_analyzer.PhotoAnalyzer`'s ``ensure``, the single
+shared trigger point both stages use (see its docstring for the exact no-op contract).
 
 This stage's own job is narrow: iterate the album's ``selected`` photos, call
 ``analyzer.ensure`` for each (passing ``force`` through), and count outcomes.
-Context grounding (segment label/place, ``Album.meta``) is assembled inside
-``PhotoAnalyzer.ensure``/``analyze_photo`` — a segment-less album or an
-out-of-segment photo still gets an accurate, if generic, caption rather than
-erroring (AGENTS.md rule 1 — genericity).
+Context grounding (segment label/place, ``Album.meta``, people, place, time) is
+assembled inside ``PhotoAnalyzer.ensure`` — a segment-less album or an out-of-segment
+photo still gets an accurate, if generic, caption rather than erroring (AGENTS.md
+rule 1 — genericity).
 
 :class:`CaptionStage` is a :class:`~album.flow.stages.base.Stage` (folder-structure.md
 rule) — it takes its ``album_id`` + ``session_factory`` at construction, opens the
@@ -55,10 +55,11 @@ class CaptionResult:
 class CaptionStage(Stage[CaptionResult]):
     """`caption` — guarantee every selected photo has a stored caption. Idempotent.
 
-    Owns no vision logic of its own: it routes through the same injected
+    Owns no caption logic of its own: it routes through the same injected
     :class:`~album.flow.photo_analyzer.PhotoAnalyzer` that ``enhance`` uses, so the
-    caption is produced by the one shared call (exactly one API round-trip per
-    photo across the whole pipeline, regardless of stage order).
+    caption is produced by the one shared analysis (the photo is analyzed at most
+    once across the whole pipeline, regardless of stage order — and, by default,
+    fully offline with no API call).
     """
 
     task_name: ClassVar[str] = "caption"
@@ -102,13 +103,13 @@ class CaptionStage(Stage[CaptionResult]):
         thumbnail, unparseable model response) doesn't sink the whole album's
         captioning run."""
         try:
-            analysis = self._analyzer.ensure(session, photo, force=force)
+            outcome = self._analyzer.ensure(session, photo, force=force)
         except Exception:
             _log.warning("failed to caption photo %s (%s)", photo.id, photo.filename, exc_info=True)
             result.failed += 1
             return
 
-        if analysis is None:
+        if outcome is None:
             result.skipped += 1
         else:
             result.captioned += 1

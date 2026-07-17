@@ -1,24 +1,27 @@
 ---
 type: Pipeline Stage
 title: enhance
-description: AI estimates bounded tone parameters; classical code applies them via XMP. Cross-camera consistency folded in.
-tags: [stage, ai, enhance, xmp, color-consistency]
+description: Bounded tone parameters estimated by classical CV; classical code applies them via XMP. Cross-camera consistency folded in.
+tags: [stage, enhance, xmp, color-consistency, classical]
 timestamp: 2026-07-12
 ---
 
-# `enhance` — AI estimates parameters; classical code applies them
+# `enhance` — estimate bounded parameters; classical code applies them
 
-Core principle: **AI as parameter estimator, never as pixel generator.** No
+Core principle: **estimate bounded parameters, never generate pixels.** No
 invented detail.
 
-1. Ensure the **shared analysis call** (see the "One combined vision call" note
-   in [Architecture](/foundations/architecture.md)) has run for each *selected* photo — one
-   agent, one call per photo, producing bounded numeric deltas (exposure EV,
-   white-balance shift, shadows, highlights) *alongside* the caption, from a
-   single downscaled thumbnail. Bounds enforced by Pydantic
-   (`Field(ge=..., le=...)`), so a bad model call can be slightly wrong but never
-   drastic. `enhance` consumes the tone deltas; the caption it also produced is
-   left for the [`caption`](./caption.md) stage to read.
+1. Ensure the **shared per-photo analysis** (see the "One shared analysis, one
+   fetch" note in [Architecture](/foundations/architecture.md)) has run for each
+   *selected* photo — one thumbnail fetch per photo, producing bounded numeric tone
+   deltas (exposure EV, white-balance shift, shadows, highlights) *alongside* the
+   caption. As of **step 29** ([local-analysis.md](/build/local-analysis.md)) the tone
+   deltas come from a classical, offline [`ClassicalToneEstimator`](../../src/album/analysis/tone_estimator.py)
+   (auto-exposure to a target luminance, gray-world white balance, histogram-percentile
+   shadow/highlight), not an LLM — every delta clamped to the
+   [`ToneParams`](../../src/album/analysis/tone.py) bounds, so a correction can be slightly
+   wrong but never drastic. `enhance` consumes the tone deltas; the caption produced by
+   the same analysis is left for the [`caption`](./caption.md) stage to read.
 2. **Reconcile with cross-camera consistency** (below) into a final parameter set
    per photo.
 3. Write the result as **XMP sidecar files** — non-destructive metadata that
