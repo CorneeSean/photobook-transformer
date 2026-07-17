@@ -56,6 +56,14 @@ order, one at a time.
 | 24 | Immich ML integration (deferred optional) | — | todo | — | needs internet CLIP/face models or a pre-baked model-cache image — see the playbook |
 | 25 | Parallelize the flow (fan-out groups) | step-25-parallelize-flow (merged, deleted) | done | 036fcc2 | DAG execution per `pipeline-execution.md`: 4 sequential stages keep the shared session; 6 grouped stages (`resolve-leads`/`quality`/`cluster`/`enhance`/`render`/`caption`) take a `session_factory` and open their own pooled connection via a new `_owns_session` decorator (+ sibling `_autocommit` for the 4 sequential tasks); two `submit()`/`result()` fences — group 1 (`resolve-leads`‖`quality`‖`cluster`, join at `select`) and group 2 (`enhance`, then `render`‖`caption`, join at `assemble`). Commit-before-fanout/`expire_all()`-after-join at both fences. Review caught a real bug in the original design sketch: `enhance`‖`caption` running fully concurrently raced on `PhotoAnalyzer.ensure`'s shared idempotency columns (double vision-model call + conflicting-write race) — fixed by joining `enhance`'s future before `render`/`caption` are even submitted. New `tests/album/test_flow_integration.py`: real concurrent per-task sessions against a Postgres+pgvector testcontainer, external boundaries doubled, incl. a counting-model regression guard for the caught bug. 3-agent Opus review (correctness/cleanup/tests) + a re-review after the fix; 218 tests. Live `album run` end-to-end stays deferred (no reachable Immich/Claude/darktable/Lulu), same standing note as every prior step. |
 
+### Single-command ingestion playbook (see [single-command-ingestion.md](/build/single-command-ingestion.md))
+
+| # | Step | Branch | Status | Commit | Notes |
+|---|------|--------|--------|--------|-------|
+| 26 | Immich album creation in the client (`create_album` + `get_jobs`) | step-26-immich-album-create (merged, deleted) | done | 94fba06 | playbook step 1 — `create_album` (`POST /albums`, returns id) + `get_jobs` (`GET /jobs` → `dict[str, ImmichJobCounts]`, the readiness signal for step 27); lean boundary models (jobCounts flattened), respx fixtures. Modelled against the OpenAPI contract, not a live capture (same deferral as steps 4-5) — re-verify on first live ingestion. 2 adversarial reviews (correctness clean; cleanup/reuse applied) + a focused re-review; 241 tests green |
+| 27 | `ingest.py` + `photobook-generator` entry point (Feature A) | — | todo | — | playbook step 2 — dir walk → upload → create album → readiness poll → materialize `album.yml` → `pipeline` |
+| 28 | `agents/segments.py` + `--source-document` (Feature B) | — | todo | — | playbook step 3 — PydanticAI segments-extraction agent + wiring |
+
 ## Notes / blockers
 
 - **Enrichment step 19 done; live-Claude caption spot-check deferred

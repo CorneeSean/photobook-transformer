@@ -2,6 +2,24 @@
 
 ## 2026-07-17
 
+* **Build step 26 done — Immich album creation in the client** (commit `94fba06`,
+  branch `step-26-immich-album-create`; playbook step 1 of
+  [single-command-ingestion.md](/build/single-command-ingestion.md)). Adds two
+  methods to `ImmichClient`: `create_album(name, asset_ids)` (`POST /albums`,
+  returns the new album id — Immich creates the album and seeds its assets in one
+  call) and `get_jobs()` (`GET /jobs`, returns `dict[str, ImmichJobCounts]`) — the
+  readiness signal single-command ingestion (step 27) polls to wait out Immich's
+  async EXIF/face/dedupe processing before running the pipeline. Boundary models
+  stay lean per the `ImmichAsset`/`ImmichFace` pattern: `ImmichJobCounts` carries
+  only the consumed `active`/`waiting` counts, with the per-queue `jobCounts`
+  flattened up to the boundary (the single-field wrapper was dropped in review).
+  Modelled against the Immich OpenAPI contract, not a live capture — same deferral
+  as steps 4-5; re-verify on the first live ingestion run. Two adversarial Opus
+  sub-agent reviews (correctness clean; cleanup/reuse findings applied) plus a
+  focused correctness re-review after the fixes. `uv run poe check` green (241
+  tests). **Next: step 27** (`ingest.py` + `photobook-generator` entry point —
+  Feature A).
+
 * **Plan added — [single-command ingestion](/build/single-command-ingestion.md)**
   (handover, not yet built). Captures two user-requested UX features and how they
   fit the current architecture: (1) `photobook-generator <dir>` — a one-shot that
