@@ -47,7 +47,7 @@
   timeout — undated photos are handled downstream by `sync`/`cluster`), and
   materializes a minimal `data/albums/<slug>/album.yml`. It then calls the
   **unchanged** `pipeline(album_slug=...)` — `album.yml` stays the single source
-  of truth and the hand-authored `album run` path is untouched. Prefect-free and
+  of truth and the hand-authored `photobook-generator run` path is untouched. Prefect-free and
   occasion-agnostic (genericity rule holds); shaped like `LeadFaceResolver`
   (injected Protocol client + poll/sleep).
     * **Two user-directed CLI decisions this step.** (1) Ingest is a *separate
@@ -377,7 +377,7 @@
       `ConstantAesthetic`/`ConstantEmbedder` test doubles deduplicated into
       `tests/doubles.py`.
     * 218 tests green (`uv run poe check`); no `stages/*.py` gained a
-      Prefect import. Live `album run` end-to-end stays deferred (no
+      Prefect import. Live `photobook-generator run` end-to-end stays deferred (no
       reachable Immich/Claude/darktable/Lulu), same standing note as every
       prior step.
 
@@ -693,7 +693,7 @@
   `tests/fixtures/albums/wedding.yml` unit test.
     * **Manual verification**, mirroring step 14: `docker compose up -d db
       prefect-server` + `uv run poe migrate` against real Postgres+pgvector
-      (already at head, chain applies cleanly); `uv run album run --album
+      (already at head, chain applies cleanly); `uv run photobook-generator run --album
       smith-wedding` against that real stack bootstrapped a real `Album` + 3
       `Segment` rows into Postgres (verified via `psql`: correct
       label/place/position, correct `Europe/London` → UTC conversion),
@@ -730,7 +730,7 @@
     * **Manual verification:** brought up real Postgres (`pgvector/pgvector:pg16`)
       + a real Prefect server via `docker compose up -d db prefect-server`;
       `alembic upgrade head` applied the full migration chain (steps 2, 13,
-      15) cleanly. `album run --album e2e-smoke-test` against that stack
+      15) cleanly. `photobook-generator run --album e2e-smoke-test` against that stack
       bootstrapped a real `Album` row into Postgres, started a real
       Prefect-tracked flow run (confirmed via the API — state `FAILED`,
       exactly what the Prefect UI would show), and failed cleanly with
