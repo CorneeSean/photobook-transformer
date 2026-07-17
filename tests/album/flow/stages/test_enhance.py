@@ -26,6 +26,7 @@ from sqlalchemy import select as sa_select
 from sqlalchemy.orm import Session
 
 from album.db.models import Album, Photo
+from album.db.session import SessionFactory, reuse
 from album.flow.photo_analyzer import PhotoAnalyzer
 from album.flow.stages.enhance import (
     _NAMESPACES,  # pyright: ignore[reportPrivateUsage]
@@ -180,10 +181,19 @@ class TestEnhanceStage:
         return album.id
 
     def _stage(
-        self, thumbnails: FakeThumbnails, tmp_path: Path, model: object | None = None
+        self,
+        thumbnails: FakeThumbnails,
+        tmp_path: Path,
+        album_id: int,
+        session_factory: SessionFactory,
+        *,
+        model: object | None = None,
+        force: bool = False,
     ) -> EnhanceStage:
         analyzer = PhotoAnalyzer(thumbnails, model=model or _valid_model())  # pyright: ignore[reportArgumentType]
-        return EnhanceStage(analyzer, thumbnails, data_root=tmp_path)
+        return EnhanceStage(
+            analyzer, thumbnails, album_id, session_factory, data_root=tmp_path, force=force
+        )
 
     def test_writes_xmp_and_sets_flag_for_selected_photos(
         self,
@@ -205,7 +215,9 @@ class TestEnhanceStage:
         ]
         album_id = self._persist(session, album)
 
-        result = self._stage(FakeThumbnails({"a1": _DARK}), tmp_path).run(album_id, session)
+        result = self._stage(
+            FakeThumbnails({"a1": _DARK}), tmp_path, album_id, reuse(session)
+        ).run()
 
         assert isinstance(result, EnhanceResult)
         assert result.enhanced == 1
@@ -228,7 +240,7 @@ class TestEnhanceStage:
         ]
         album_id = self._persist(session, album)
 
-        result = self._stage(FakeThumbnails(), tmp_path).run(album_id, session)
+        result = self._stage(FakeThumbnails(), tmp_path, album_id, reuse(session)).run()
 
         assert result.enhanced == 0
         photo = session.scalars(sa_select(Photo)).one()
@@ -247,11 +259,10 @@ class TestEnhanceStage:
         ]
         album_id = self._persist(session, album)
         thumbs = FakeThumbnails({"a1": _DARK})
-        stage = self._stage(thumbs, tmp_path)
 
-        first = stage.run(album_id, session)
-        second = stage.run(album_id, session)
-        forced = stage.run(album_id, session, force=True)
+        first = self._stage(thumbs, tmp_path, album_id, reuse(session)).run()
+        second = self._stage(thumbs, tmp_path, album_id, reuse(session)).run()
+        forced = self._stage(thumbs, tmp_path, album_id, reuse(session), force=True).run()
 
         assert first.enhanced == 1
         assert second.enhanced == 0
@@ -290,9 +301,9 @@ class TestEnhanceStage:
         album.photos = [ref, other]
         album_id = self._persist(session, album)
 
-        self._stage(FakeThumbnails({"ref": _DARK, "other": _BRIGHT}), tmp_path).run(
-            album_id, session
-        )
+        self._stage(
+            FakeThumbnails({"ref": _DARK, "other": _BRIGHT}), tmp_path, album_id, reuse(session)
+        ).run()
 
         photos = {p.immich_asset_id: p for p in session.scalars(sa_select(Photo))}
         # The brighter camera's final exposure correction should be pulled down
@@ -330,7 +341,7 @@ class TestEnhanceStage:
         album_id = self._persist(session, album)
         thumbs = FakeThumbnails({"good": _DARK, "bad": b"not-an-image"})
 
-        result = self._stage(thumbs, tmp_path).run(album_id, session)
+        result = self._stage(thumbs, tmp_path, album_id, reuse(session)).run()
 
         assert result.enhanced == 1
         assert result.failed == 1
@@ -360,7 +371,7 @@ class TestEnhanceStage:
         ]
         target_id = self._persist(session, target_album)
 
-        self._stage(FakeThumbnails(), tmp_path).run(target_id, session)
+        self._stage(FakeThumbnails(), tmp_path, target_id, reuse(session)).run()
 
         other_photo = session.scalars(sa_select(Photo).where(Photo.album_id == other_id)).one()
         assert other_photo.xmp_written is False
@@ -369,7 +380,7 @@ class TestEnhanceStage:
 
     def test_raises_for_unknown_album(self, session: Session, tmp_path: Path) -> None:
         with pytest.raises(ValueError):
-            self._stage(FakeThumbnails(), tmp_path).run(999, session)
+            self._stage(FakeThumbnails(), tmp_path, 999, reuse(session)).run()
 
     def test_flags_selected_but_unclustered_photo_instead_of_dropping_it(
         self,
@@ -388,7 +399,7 @@ class TestEnhanceStage:
         ]
         album_id = self._persist(session, album)
 
-        result = self._stage(FakeThumbnails(), tmp_path).run(album_id, session)
+        result = self._stage(FakeThumbnails(), tmp_path, album_id, reuse(session)).run()
 
         assert result.unclustered == 1
         assert result.enhanced == 0
@@ -426,9 +437,9 @@ class TestEnhanceStage:
         )
         album.photos = [ref, other]
         album_id = self._persist(session, album)
-        stage = self._stage(FakeThumbnails({"ref": _DARK, "other": _BRIGHT}), tmp_path)
+        thumbs = FakeThumbnails({"ref": _DARK, "other": _BRIGHT})
 
-        stage.run(album_id, session)
+        self._stage(thumbs, tmp_path, album_id, reuse(session)).run()
         other_photo = session.scalars(
             sa_select(Photo).where(Photo.immich_asset_id == "other")
         ).one()
@@ -436,7 +447,7 @@ class TestEnhanceStage:
 
         # Force a second run — same AI model/inputs, should reproduce the same
         # reconciled result rather than drifting further from it.
-        stage.run(album_id, session, force=True)
+        self._stage(thumbs, tmp_path, album_id, reuse(session), force=True).run()
         other_photo = session.scalars(
             sa_select(Photo).where(Photo.immich_asset_id == "other")
         ).one()
@@ -476,9 +487,9 @@ class TestEnhanceStage:
         album.photos = [ref, other]
         album_id = self._persist(session, album)
 
-        self._stage(FakeThumbnails({"ref": _DARK, "other": _BRIGHT}), tmp_path).run(
-            album_id, session
-        )
+        self._stage(
+            FakeThumbnails({"ref": _DARK, "other": _BRIGHT}), tmp_path, album_id, reuse(session)
+        ).run()
 
         photos = {p.immich_asset_id: p for p in session.scalars(sa_select(Photo))}
         assert photos["other"].enhance_exposure_ev < photos["ref"].enhance_exposure_ev  # pyright: ignore[reportOperatorIssue]

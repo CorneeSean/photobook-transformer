@@ -8,13 +8,15 @@ timestamp: 2026-07-15
 
 # Pipeline execution shape
 
-> **Status (updated 2026-07-16): implemented, then restructured.** The fan-out
+> **Status (updated 2026-07-17): implemented, then restructured.** The fan-out
 > DAG that the sections below propose as a "change"/"sketch" was applied in build
 > [step 25](/build/progress.md) and later restructured by a refactor. In the
-> current code each stage **co-locates its own Prefect `@task`** in
-> `flow/stages/*.py`; the shared-session-vs-own-session commit wrappers live in
-> `flow/_tasks.py`; and the single `@flow` is produced by the **class-based
-> `Pipeline.flow()`** factory in `flow/_flow.py`. Everywhere below, read
+> current code each stage **is its own Prefect task** via the `TaskUnit` base
+> (`task_name` + `to_task()`/`run_as_task()`) — there are no module-level `@task`
+> functions and no `flow/_tasks.py`; a stage opens and commits its own session
+> inside `run` (sequential stages reuse the flow's shared session via a `reuse()`
+> factory, fan-out stages open their own). The single `@flow` is produced by the
+> **class-based `Pipeline.flow()`** factory in `flow/_flow.py`. Everywhere below, read
 > **`flow.py`** as **`flow/_flow.py`**, and the "as it runs today — a linear
 > chain" reading as the *original* design the DAG replaced. The
 > dependency-graph analysis and the two invariants (commit-before-fan-out,
@@ -129,67 +131,63 @@ only at `sync` (the boundary — see [architecture](/foundations/architecture.md
 
 One structural idea — an **own session per concurrent task** — plus a couple of
 `submit()` / `result()` fences. This began as a sketch; it is now implemented in
-`flow/_flow.py` (via the `Pipeline` class + the `flow/_tasks.py` wrappers) — see
-the status note at the top.
+`flow/_flow.py` (via the `Pipeline` class) — see the status note at the top.
 
 ### 1 · Session ownership
 
-A shared SQLAlchemy `Session` isn't thread-safe, so the six grouped stages stop
-taking the flow's shared session and take a **factory**, opening their own
-pooled connection:
+A shared SQLAlchemy `Session` isn't thread-safe, so a stage takes a `session_factory`
+(never a live `Session`) and opens the session **inside `run`**, on whichever thread
+runs it. A stage carrying no live session is what makes the same instance safe to
+`.submit()` to a worker thread:
 
 ```python
-SessionFactory = Callable[[], Session]
+SessionFactory = Callable[[], AbstractContextManager[Session]]
 
-# before — receives the flow's one shared session
-def _quality_task(album_id, session, client, aesthetic, embedder):
-    QualityStage(client, aesthetic, embedder=embedder).run(album_id, session)
-    session.commit()
+# sequential — reuses the flow's shared session (a `reuse()` singleton factory that
+# yields it without closing) and runs inline; run() commits the shared session
+SyncStage(client, album_id, reuse(db_session)).run_as_task()
 
-# after — its OWN pooled connection, never the shared one
-def _quality_task(album_id, session_factory, client, aesthetic, embedder):
-    with session_factory() as session:
-        QualityStage(client, aesthetic, embedder=embedder).run(album_id, session)
-        session.commit()
+# fan-out — its OWN pooled connection per worker thread; run() opens it, commits,
+# and closes it. No builder needed: the unit holds only the factory.
+QualityStage(client, aesthetic, album_id, session_factory, embedder=embedder).to_task().submit()
 ```
 
-The four sequential stages (`sync`, `select`, `assemble`, `fulfill`) keep the
-shared session untouched.
+The four sequential stages (`sync`, `select`, `assemble`, `fulfill`) reuse the
+shared session; the six grouped stages own theirs.
 
 ### 2 · The flow body
 
 `.submit()` schedules on Prefect 3's default `ThreadPoolTaskRunner`; `.result()`
-blocks and re-raises. Passing a future as `wait_for` keeps `render` chained
-behind `enhance` while `caption` runs alongside.
+blocks and re-raises. Joining `enhance`'s future *before* `render`/`caption` are
+even submitted keeps them strictly after `enhance`'s commit (a real `enhance`
+failure then surfaces its own error, not a masked `UpstreamTaskError`).
 
 ```python
-_sync_task(album_id, db_session, client)
-db_session.commit()                 # publish sync's writes before fan-out
+shared = reuse(db_session)          # sequential stages reuse this; run() commits, never closes
+
+SyncStage(client, album_id, shared).run_as_task()   # inline; run() commits the shared session
 
 # ── group 1: independent after sync ──
 g1 = [
-    _resolve_leads_task.submit(album_id, session_factory, client, album_slug),
-    _quality_task.submit(album_id, session_factory, client, aesthetic_m, embedder_m),
-    _cluster_task.submit(album_id, session_factory),
+    LeadFaceResolver(client, album_id, config, album_dir, session_factory).to_task().submit(),
+    QualityStage(client, aesthetic, album_id, session_factory, embedder=e).to_task().submit(),
+    ClusterStage(album_id, session_factory).to_task().submit(),
 ]
 for f in g1:
     f.result()                      # join: blocks + re-raises any stage error
 
 db_session.expire_all()             # drop stale identity-map state from before fan-out
-_select_task(album_id, db_session, similarity)
-db_session.commit()
+SelectStage(similarity, album_id, shared).run_as_task()
 
-# ── group 2: enhance‖caption, render chained behind enhance ──
-enhance_f = _enhance_task.submit(album_id, session_factory, client, model)
-caption_f = _caption_task.submit(album_id, session_factory, client, model)
-render_f  = _render_task.submit(album_id, session_factory, client, renderer,
-                                wait_for=[enhance_f])   # needs enhance's XMP sidecars
+# ── group 2: enhance first, then render‖caption ──
+EnhanceStage(analyzer, client, album_id, session_factory).to_task().submit().result()
+render_f  = RenderStage(client, renderer, album_id, session_factory).to_task().submit()
+caption_f = CaptionStage(analyzer, album_id, session_factory).to_task().submit()
 for f in (render_f, caption_f):
     f.result()
 
-_assemble_task(album_id, db_session)
-db_session.commit()
-_fulfill_task(album_id, db_session, printer)
+AssembleStage(albums_dir, album_id, shared).run_as_task()
+FulfillStage(printer, album_id, shared).run_as_task()
 ```
 
 ## What it costs

@@ -50,10 +50,11 @@ Sidecar path: ``<data_root>/<album.slug>/xmp/<photo.filename>.xmp`` (e.g.
 (folder-structure.md). ``data_root`` defaults to ``data/albums`` but is an
 injectable parameter so tests never touch the real filesystem.
 
-:class:`EnhanceStage` itself is Prefect-free logic (folder-structure.md rule) —
-its ``run`` takes ``album_id`` first and is unit-testable without an orchestrator —
-while this module also exports :func:`enhance_task`, the co-located Prefect
-``@task`` wrapping it (quality-practices.md §1.5). Idempotent: skips photos whose
+:class:`EnhanceStage` is a :class:`~album.flow.stages.base.Stage` (folder-structure.md
+rule) — it takes its ``album_id`` + ``session_factory`` at construction, opens the
+session inside ``run``, and is unit-testable without an orchestrator; it runs as a
+Prefect task via the ``run_as_task`` / ``to_task`` glue inherited from ``TaskUnit``
+(quality-practices.md §1.5). Idempotent: skips photos whose
 ``xmp_written`` is already ``True`` unless ``force=True``; per-photo failures are
 isolated (try/except + log + continue), consistent with ``quality.py``.
 """
@@ -65,17 +66,17 @@ import struct
 import xml.etree.ElementTree as ET
 from dataclasses import dataclass
 from pathlib import Path
+from typing import ClassVar
 
 import cv2
 import numpy as np
-from prefect import task
 from skimage.exposure import match_histograms
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from album.agents.analysis import AnalysisResult
-from album.db.models import Album, Photo
-from album.flow._tasks import owns_session
+from album.db.models import Photo
+from album.db.session import SessionFactory
 from album.flow.photo_analyzer import PhotoAnalyzer, ThumbnailSource
 from album.flow.stages.base import Stage
 from album.flow.tone import ToneParams
@@ -291,22 +292,29 @@ class EnhanceStage(Stage[EnhanceResult]):
     (the one combined vision call — see architecture.md) and a
     :class:`~album.flow.photo_analyzer.ThumbnailSource`, which this stage *also* needs
     directly for the classical histogram-match baseline (not just via the analyzer).
-    ``data_root`` is construction-time config; ``run`` takes ``album_id`` first.
+    ``data_root`` is construction-time config, alongside the ``album_id`` +
+    ``session_factory`` the base takes; ``run`` takes no arguments.
     """
+
+    task_name: ClassVar[str] = "enhance"
 
     def __init__(
         self,
         analyzer: PhotoAnalyzer,
         thumbnails: ThumbnailSource,
+        album_id: int,
+        session_factory: SessionFactory,
         *,
+        force: bool = False,
         data_root: Path = _DEFAULT_DATA_ROOT,
     ) -> None:
+        super().__init__(album_id, session_factory, force=force)
         self._analyzer = analyzer
         self._thumbnails = thumbnails
         self._data_root = data_root
 
-    def _process(self, album: Album, session: Session, *, force: bool) -> EnhanceResult:
-        """Enhance every ``selected`` photo in ``album``: ensure the shared
+    def _process(self) -> EnhanceResult:
+        """Enhance every ``selected`` photo in ``self._album``: ensure the shared
         analysis has run, reconcile cross-camera baseline with the AI's per-photo
         delta, and write an XMP sidecar. Idempotent unless ``force``.
 
@@ -319,6 +327,7 @@ class EnhanceStage(Stage[EnhanceResult]):
         reasonable stand-in for "how this moment actually looked" before any
         per-camera drift.
         """
+        album, session = self._album, self._session
         photos = list(
             session.scalars(
                 select(Photo)
@@ -344,9 +353,8 @@ class EnhanceStage(Stage[EnhanceResult]):
                 result.unclustered += 1
 
         for scene_id in sorted(by_scene):
-            self._enhance_scene(by_scene[scene_id], session, album.slug, force, result)
+            self._enhance_scene(by_scene[scene_id], session, album.slug, self._force, result)
 
-        session.flush()
         return result
 
     def _enhance_scene(
@@ -419,18 +427,10 @@ class EnhanceStage(Stage[EnhanceResult]):
         return compute_camera_baseline(reference_image, camera_image), reference_image
 
 
-@task(name="enhance")
-@owns_session
-def enhance_task(stage: EnhanceStage, album_id: int, session: Session) -> None:
-    """``enhance`` as a Prefect ``@task`` on its own pooled session (``owns_session``)."""
-    stage.run(album_id, session)
-
-
 __all__ = [
     "EnhanceResult",
     "EnhanceStage",
     "compute_camera_baseline",
-    "enhance_task",
     "reconcile_tone",
     "write_xmp_sidecar",
 ]

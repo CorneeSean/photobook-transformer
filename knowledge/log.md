@@ -1,6 +1,47 @@
 # Directory Update Log
 
-## 2026-07-16
+## 2026-07-17
+
+* **Refactor — a stage *is* its own task; `session_factory` in the constructor**
+  (branch `refactor-stage-ctor-session`, user-directed). Reshapes the stage
+  interface and every usage; behaviour-preserving (static gates green; 212 unit
+  tests + the `test_flow_integration.py` real-Postgres concurrency test + the
+  pgvector integration test all pass). Two adversarial Opus reviews
+  (correctness; cleanup/tests/docs) — correctness found no defects; the doc/test
+  findings were applied.
+    * **New `TaskUnit` / `Stage` bases** (`flow/stages/base.py`). `TaskUnit[ResultT]`
+      turns any unit into a named Prefect task from a class-level `task_name` and a
+      no-argument `run`: `to_task()` = `task(name=task_name)(self.run)`,
+      `run_as_task()` = `to_task()()`. `Stage[ResultT](TaskUnit)` is the Template
+      Method for a stage.
+    * **A stage is constructed with `(album_id, session_factory, *, force)` and holds
+      no live `Session`.** `run()` opens the session from the factory, resolves +
+      guards the album into `self._album`, runs the argument-free `_process`
+      (reading `self._album`/`self._session`/`self._force`), then flushes + commits.
+      Opening the session *inside* `run` is what makes the same instance safe to
+      `.submit()` to a worker thread — a fan-out stage's session must be created on
+      its own thread. This overturns the intermediate "`album_id` + live `Session`
+      in the constructor" shape and the earlier session-per-call `run(album_id,
+      session)`.
+    * **`db/session.py` gains `reuse(session)`** — a `SessionFactory`
+      (now `Callable[[], AbstractContextManager[Session]]`) that yields the shared
+      session without closing it. The four sequential stages run inline via
+      `run_as_task()` on `reuse(db_session)` (each commits the shared session before
+      the next fan-out); the six fan-out units (incl. the `LeadFaceResolver`, now a
+      sibling `TaskUnit`) run via `to_task().submit()` on the real pooled
+      `session_factory`, opening/committing/closing their own session per worker
+      thread.
+    * **Deleted `flow/_tasks.py`** (the `autocommit`/`owns_session` wrappers) and
+      **all module-level `*_task` functions** — `run()` owns the session lifecycle +
+      commit, so there is no shared transaction wrapper or task glue left to hold.
+      `flow/_flow.py` builds each stage and runs it via `run_as_task()` /
+      `to_task().submit()`; the commit-before-fan-out and `expire_all()`-after-join
+      invariants are unchanged.
+    * **Docs updated on the branch:** `quality-practices.md` §1.2/§1.5/§1.6.1,
+      `folder-structure.md` (tree + structure rules), `pipeline-execution.md`
+      (§1/§2 + status note) and its `.html` mirror, `_flow.py` module docstring, and
+      every stage module/class docstring. New `tests/album/db/test_session.py`
+      asserts `reuse()`'s non-closing contract directly.
 
 * **Refactor — co-locate each stage's `@task`; class-based `Pipeline` via factory**
   (branch `refactor-04-flow-tasks`). Four coupled changes to the flow layer,

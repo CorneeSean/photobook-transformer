@@ -18,9 +18,10 @@ explicitly (flagged in ``ClusterResult.undated``, left unassigned).
 
 Pure logic over the DB — no external calls. Idempotent: it resets
 ``segment_id``/``scene_id`` for the album up front, so re-running is a no-op-equivalent.
-:class:`ClusterStage` itself is Prefect-free logic — its ``run`` takes ``album_id``
-first and is unit-testable without an orchestrator — while this module also exports
-:func:`cluster_task`, the co-located Prefect ``@task`` wrapping it
+:class:`ClusterStage` is a :class:`~album.flow.stages.base.Stage` — it takes its
+``album_id`` + ``session_factory`` at construction, opens the session inside
+``run``, and is unit-testable without an orchestrator; it runs as a Prefect task via
+the ``run_as_task`` / ``to_task`` glue inherited from ``TaskUnit``
 (quality-practices.md §1.5).
 """
 
@@ -29,15 +30,15 @@ from __future__ import annotations
 import logging
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
+from typing import ClassVar
 
 import numpy as np
-from prefect import task
 from sklearn.cluster import DBSCAN
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from album.db.models import Album, Photo, Segment
-from album.flow._tasks import owns_session
+from album.db.models import Photo, Segment
+from album.db.session import SessionFactory
 from album.flow.stages.base import Stage
 
 _log = logging.getLogger(__name__)
@@ -63,20 +64,28 @@ class ClusterStage(Stage[ClusterResult]):
     Pure logic over the DB — no injected collaborator. It's a class (rather than a
     function) because it owns several private helpers plus the ``time_gap`` /
     ``spatial_eps_m`` tunables the scene detector shares; those are construction-time
-    configuration, while ``run`` takes the request-scoped ``album_id`` + ``Session``.
+    configuration, alongside the ``album_id`` + ``session_factory`` (base
+    :class:`~album.flow.stages.base.Stage`). ``run`` takes no arguments.
     """
+
+    task_name: ClassVar[str] = "cluster"
 
     def __init__(
         self,
+        album_id: int,
+        session_factory: SessionFactory,
         *,
+        force: bool = False,
         time_gap: timedelta = _DEFAULT_TIME_GAP,
         spatial_eps_m: float = _DEFAULT_SPATIAL_EPS_M,
     ) -> None:
+        super().__init__(album_id, session_factory, force=force)
         self._time_gap = time_gap
         self._spatial_eps_m = spatial_eps_m
 
-    def _process(self, album: Album, session: Session, *, force: bool) -> ClusterResult:
-        """Assign photos in ``album`` to segments and scenes. Idempotent."""
+    def _process(self) -> ClusterResult:
+        """Assign photos in ``self._album`` to segments and scenes. Idempotent."""
+        album, session = self._album, self._session
         photos = self._load_photos(album.id, session)
         self._reset_photos(photos)
 
@@ -87,7 +96,6 @@ class ClusterStage(Stage[ClusterResult]):
         groups = self._assign_segments(album.segments, dated, result)
         result.scenes = self._assign_scenes(groups)
 
-        session.flush()
         return result
 
     @staticmethod
@@ -204,10 +212,3 @@ def _as_naive_utc(dt: datetime | None) -> datetime:
     if dt is None:  # callers pass only non-None timestamps here
         raise ValueError("cannot order a photo with no timestamp")
     return dt.astimezone(UTC).replace(tzinfo=None) if dt.tzinfo is not None else dt
-
-
-@task(name="cluster")
-@owns_session
-def cluster_task(stage: ClusterStage, album_id: int, session: Session) -> None:
-    """``cluster`` as a Prefect ``@task`` on its own pooled session (``owns_session``)."""
-    stage.run(album_id, session)

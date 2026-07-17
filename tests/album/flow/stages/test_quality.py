@@ -14,6 +14,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from album.db.models import Album, Photo
+from album.db.session import reuse
 from album.flow.stages.quality import QualityResult, QualityStage, compute_blur_score
 from tests.doubles import ConstantAesthetic, ConstantEmbedder
 
@@ -65,7 +66,7 @@ class TestQuality:
         album_id = self._persist(session, album)
         thumbs = FakeThumbnails({"sharp": _SHARP, "blurry": _BLURRY})
 
-        result = QualityStage(thumbs, ConstantAesthetic(0.7)).run(album_id, session)
+        result = QualityStage(thumbs, ConstantAesthetic(0.7), album_id, reuse(session)).run()
 
         assert result == QualityResult(scored=2)
         photos = {p.immich_asset_id: p for p in session.scalars(select(Photo))}
@@ -82,10 +83,9 @@ class TestQuality:
         album_id = self._persist(session, album)
         thumbs = FakeThumbnails({})
         aesthetic = ConstantAesthetic()
-        stage = QualityStage(thumbs, aesthetic)
 
-        first = stage.run(album_id, session)
-        second = stage.run(album_id, session)
+        first = QualityStage(thumbs, aesthetic, album_id, reuse(session)).run()
+        second = QualityStage(thumbs, aesthetic, album_id, reuse(session)).run()
 
         assert first == QualityResult(scored=1)
         assert second == QualityResult(skipped=1)
@@ -100,8 +100,10 @@ class TestQuality:
         album_id = self._persist(session, album)
         aesthetic = ConstantAesthetic()
 
-        QualityStage(FakeThumbnails({}), aesthetic).run(album_id, session)
-        result = QualityStage(FakeThumbnails({}), aesthetic).run(album_id, session, force=True)
+        QualityStage(FakeThumbnails({}), aesthetic, album_id, reuse(session)).run()
+        result = QualityStage(
+            FakeThumbnails({}), aesthetic, album_id, reuse(session), force=True
+        ).run()
 
         assert result == QualityResult(scored=1)
         assert aesthetic.calls == 2
@@ -116,7 +118,7 @@ class TestQuality:
         target.photos = [make_photo(target, immich_asset_id="target-1")]
         target_id = self._persist(session, target)
 
-        QualityStage(FakeThumbnails({}), ConstantAesthetic()).run(target_id, session)
+        QualityStage(FakeThumbnails({}), ConstantAesthetic(), target_id, reuse(session)).run()
 
         other_photo = session.scalars(select(Photo).where(Photo.album_id == other_id)).one()
         assert other_photo.blur_score is None  # untouched
@@ -132,7 +134,9 @@ class TestQuality:
         album.photos = [make_photo(album, immich_asset_id="a1")]
         album_id = self._persist(session, album)
 
-        result = QualityStage(FakeThumbnails({}), RaisingAesthetic()).run(album_id, session)
+        result = QualityStage(
+            FakeThumbnails({}), RaisingAesthetic(), album_id, reuse(session)
+        ).run()
 
         assert result == QualityResult(failed=1)
         photo = session.scalars(select(Photo)).one()
@@ -147,9 +151,9 @@ class TestQuality:
         album_id = self._persist(session, album)
         embedder = ConstantEmbedder()
 
-        QualityStage(FakeThumbnails({}), ConstantAesthetic(), embedder=embedder).run(
-            album_id, session
-        )
+        QualityStage(
+            FakeThumbnails({}), ConstantAesthetic(), album_id, reuse(session), embedder=embedder
+        ).run()
 
         assert embedder.calls == 1
         photo = session.scalars(select(Photo)).one()
@@ -167,7 +171,7 @@ class TestQuality:
         album_id = self._persist(session, album)
         thumbs = FakeThumbnails({"good": _SHARP, "bad": b"not-an-image"})
 
-        result = QualityStage(thumbs, ConstantAesthetic()).run(album_id, session)
+        result = QualityStage(thumbs, ConstantAesthetic(), album_id, reuse(session)).run()
 
         assert result == QualityResult(scored=1, failed=1)
         photos = {p.immich_asset_id: p for p in session.scalars(select(Photo))}

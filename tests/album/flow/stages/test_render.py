@@ -20,6 +20,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from album.db.models import Album, Photo
+from album.db.session import reuse
 from album.flow.stages.render import RenderResult, RenderStage
 
 
@@ -92,7 +93,9 @@ class TestRenderStage:
         originals = FakeOriginals({"a1": b"raw-bytes"})
         renderer = FakeRenderer()
 
-        result = RenderStage(originals, renderer, data_root=tmp_path).run(album_id, session)
+        result = RenderStage(
+            originals, renderer, album_id, reuse(session), data_root=tmp_path
+        ).run()
 
         assert isinstance(result, RenderResult)
         assert result.rendered == 1
@@ -120,7 +123,9 @@ class TestRenderStage:
         album_id = self._persist(session, album)
         self._make_xmp(tmp_path, "test-album", "a1.jpg")
 
-        RenderStage(FakeOriginals({}), FakeRenderer(), data_root=tmp_path).run(album_id, session)
+        RenderStage(
+            FakeOriginals({}), FakeRenderer(), album_id, reuse(session), data_root=tmp_path
+        ).run()
 
         photo = session.scalars(select(Photo)).one()
         assert photo.rendered_path == str(tmp_path / "test-album" / "rendered" / "a1.jpg")
@@ -146,7 +151,9 @@ class TestRenderStage:
         album_id = self._persist(session, album)
         renderer = FakeRenderer()
 
-        result = RenderStage(FakeOriginals({}), renderer, data_root=tmp_path).run(album_id, session)
+        result = RenderStage(
+            FakeOriginals({}), renderer, album_id, reuse(session), data_root=tmp_path
+        ).run()
 
         assert result == RenderResult(skipped=1)
         assert renderer.calls == []
@@ -173,9 +180,9 @@ class TestRenderStage:
         self._make_xmp(tmp_path, "test-album", "a1.jpg")
         renderer = FakeRenderer()
 
-        result = RenderStage(FakeOriginals({}), renderer, data_root=tmp_path).run(
-            album_id, session, force=True
-        )
+        result = RenderStage(
+            FakeOriginals({}), renderer, album_id, reuse(session), force=True, data_root=tmp_path
+        ).run()
 
         assert result == RenderResult(rendered=1)
         assert len(renderer.calls) == 1
@@ -196,7 +203,9 @@ class TestRenderStage:
         album_id = self._persist(session, album)
         renderer = FakeRenderer()
 
-        result = RenderStage(FakeOriginals({}), renderer, data_root=tmp_path).run(album_id, session)
+        result = RenderStage(
+            FakeOriginals({}), renderer, album_id, reuse(session), data_root=tmp_path
+        ).run()
 
         assert result.not_ready == 1
         assert result.rendered == 0
@@ -221,7 +230,9 @@ class TestRenderStage:
         album_id = self._persist(session, album)
         renderer = FakeRenderer()
 
-        result = RenderStage(FakeOriginals({}), renderer, data_root=tmp_path).run(album_id, session)
+        result = RenderStage(
+            FakeOriginals({}), renderer, album_id, reuse(session), data_root=tmp_path
+        ).run()
 
         assert result == RenderResult()
         assert renderer.calls == []
@@ -248,7 +259,9 @@ class TestRenderStage:
         bad_input = tmp_path / "test-album" / "originals" / "bad.jpg"
         renderer = FakeRenderer(raise_for={bad_input})
 
-        result = RenderStage(FakeOriginals({}), renderer, data_root=tmp_path).run(album_id, session)
+        result = RenderStage(
+            FakeOriginals({}), renderer, album_id, reuse(session), data_root=tmp_path
+        ).run()
 
         assert result.rendered == 1
         assert result.failed == 1
@@ -276,9 +289,9 @@ class TestRenderStage:
         album_id = self._persist(session, album)
         self._make_xmp(tmp_path, "test-album", "a1.jpg")
 
-        result = RenderStage(RaisingOriginals(), FakeRenderer(), data_root=tmp_path).run(
-            album_id, session
-        )
+        result = RenderStage(
+            RaisingOriginals(), FakeRenderer(), album_id, reuse(session), data_root=tmp_path
+        ).run()
 
         assert result == RenderResult(failed=1)
         photo = session.scalars(select(Photo)).one()
@@ -307,9 +320,9 @@ class TestRenderStage:
         album_id = self._persist(session, album)
         self._make_xmp(tmp_path, "test-album", "a1.jpg")
 
-        result = RenderStage(FakeOriginals({}), SilentNoOpRenderer(), data_root=tmp_path).run(
-            album_id, session
-        )
+        result = RenderStage(
+            FakeOriginals({}), SilentNoOpRenderer(), album_id, reuse(session), data_root=tmp_path
+        ).run()
 
         assert result == RenderResult(failed=1)
         photo = session.scalars(select(Photo)).one()
@@ -333,7 +346,7 @@ class TestRenderStage:
         input_path = tmp_path / "test-album" / "originals" / "a1.jpg"
         originals = FakeOriginals({"a1": b"raw-bytes"})
 
-        RenderStage(originals, FakeRenderer(), data_root=tmp_path).run(album_id, session)
+        RenderStage(originals, FakeRenderer(), album_id, reuse(session), data_root=tmp_path).run()
 
         # The staged copy was only scratch space for darktable-cli's input; the
         # rendered JPEG is the artifact worth keeping on disk.
@@ -361,7 +374,7 @@ class TestRenderStage:
         input_path.write_bytes(b"already-staged-bytes")
         originals = FakeOriginals({"a1": b"fresh-bytes-should-not-be-used"})
 
-        RenderStage(originals, FakeRenderer(), data_root=tmp_path).run(album_id, session)
+        RenderStage(originals, FakeRenderer(), album_id, reuse(session), data_root=tmp_path).run()
 
         assert originals.calls == []  # get_original never called
 
@@ -385,9 +398,13 @@ class TestRenderStage:
         input_path = tmp_path / "test-album" / "originals" / "a1.jpg"
         renderer = FakeRenderer(raise_for={input_path})
 
-        RenderStage(FakeOriginals({"a1": b"raw-bytes"}), renderer, data_root=tmp_path).run(
-            album_id, session
-        )
+        RenderStage(
+            FakeOriginals({"a1": b"raw-bytes"}),
+            renderer,
+            album_id,
+            reuse(session),
+            data_root=tmp_path,
+        ).run()
 
         assert input_path.exists()
 
@@ -414,7 +431,9 @@ class TestRenderStage:
         target_id = self._persist(session, target)
         self._make_xmp(tmp_path, "target", "t1.jpg")
 
-        RenderStage(FakeOriginals({}), FakeRenderer(), data_root=tmp_path).run(target_id, session)
+        RenderStage(
+            FakeOriginals({}), FakeRenderer(), target_id, reuse(session), data_root=tmp_path
+        ).run()
 
         other_photo = session.scalars(select(Photo).where(Photo.album_id == other_id)).one()
         assert other_photo.rendered_path is None
@@ -423,4 +442,6 @@ class TestRenderStage:
 
     def test_raises_for_unknown_album(self, session: Session, tmp_path: Path) -> None:
         with pytest.raises(ValueError):
-            RenderStage(FakeOriginals({}), FakeRenderer(), data_root=tmp_path).run(999, session)
+            RenderStage(
+                FakeOriginals({}), FakeRenderer(), 999, reuse(session), data_root=tmp_path
+            ).run()

@@ -17,6 +17,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from album.db.models import Album, Person, Photo
+from album.db.session import reuse
 from album.flow.stages.sync import SyncStage
 from album.immich.client import ImmichAsset, ImmichFace
 
@@ -93,7 +94,7 @@ class TestSync:
         album_id = self._persist(session, make_album(immich_album_id="immich-abc"))
         client = FakeImmich([self._asset("a1"), self._asset("a2")])
 
-        result = SyncStage(client).run(album_id, session)
+        result = SyncStage(client, album_id, reuse(session)).run()
 
         assert client.calls == ["immich-abc"]
         assert result.created == 2
@@ -109,17 +110,17 @@ class TestSync:
         target = self._persist(session, make_album(slug="target", immich_album_id="immich-target"))
         session.commit()
 
-        SyncStage(FakeImmich([self._asset("a1")])).run(target, session)
+        SyncStage(FakeImmich([self._asset("a1")]), target, reuse(session)).run()
 
         other_photos = session.scalars(select(Photo).where(Photo.album_id == kept)).all()
         assert [p.immich_asset_id for p in other_photos] == ["keep-me"]
 
     def test_is_idempotent(self, session: Session, make_album: Callable[..., Album]) -> None:
         album_id = self._persist(session, make_album(immich_album_id="immich-abc"))
-        stage = SyncStage(FakeImmich([self._asset("a1", model="X-T5")]))
+        source = FakeImmich([self._asset("a1", model="X-T5")])
 
-        first = stage.run(album_id, session)
-        second = stage.run(album_id, session)
+        first = SyncStage(source, album_id, reuse(session)).run()
+        second = SyncStage(source, album_id, reuse(session)).run()
 
         assert (first.created, first.updated) == (1, 0)
         assert (second.created, second.updated) == (0, 1)
@@ -159,7 +160,7 @@ class TestSync:
     ) -> None:
         album_id = self._persist(session, make_album(immich_album_id="immich-abc", **album_kwargs))
 
-        SyncStage(FakeImmich([self._asset("a1", **asset_kwargs)])).run(album_id, session)
+        SyncStage(FakeImmich([self._asset("a1", **asset_kwargs)]), album_id, reuse(session)).run()
 
         photo = session.scalars(select(Photo)).one()
         assert self._utc(photo.timestamp) == datetime(*expected, tzinfo=UTC)
@@ -175,7 +176,7 @@ class TestSync:
         client = FakeImmich([self._asset("a1", dateTimeOriginal=naive)])  # no zone anywhere
 
         with caplog.at_level(logging.WARNING):
-            result = SyncStage(client).run(album_id, session)
+            result = SyncStage(client, album_id, reuse(session)).run()
 
         assert result.ambiguous == ["a1"]
         assert "ambiguous" in caplog.text
@@ -199,7 +200,7 @@ class TestSync:
                 },
             }
         )
-        SyncStage(FakeImmich([asset])).run(album_id, session)
+        SyncStage(FakeImmich([asset]), album_id, reuse(session)).run()
 
         photo = session.scalars(select(Photo)).one()
         assert photo.duplicate_group_id == "dup-7"
@@ -221,7 +222,7 @@ class TestSync:
             },
         )
 
-        SyncStage(client).run(album_id, session)
+        SyncStage(client, album_id, reuse(session)).run()
 
         assert client.face_calls == ["a1"]
         photo = session.scalars(select(Photo)).one()
@@ -238,7 +239,7 @@ class TestSync:
     ) -> None:
         album_id = self._persist(session, make_album(immich_album_id="immich-abc"))
 
-        SyncStage(FakeImmich([self._asset("a1")], faces={"a1": []})).run(album_id, session)
+        SyncStage(FakeImmich([self._asset("a1")], faces={"a1": []}), album_id, reuse(session)).run()
 
         photo = session.scalars(select(Photo)).one()
         # Fetched but faceless — distinct from "not fetched yet" (NULL).
@@ -249,15 +250,17 @@ class TestSync:
         self, session: Session, make_album: Callable[..., Album]
     ) -> None:
         album_id = self._persist(session, make_album(immich_album_id="immich-abc"))
-        stage = SyncStage(
-            FakeImmich([self._asset("a1")], faces={"a1": [_face("f1", "p-alex", "Alex")]})
-        )
-        stage.run(album_id, session)
+        SyncStage(
+            FakeImmich([self._asset("a1")], faces={"a1": [_face("f1", "p-alex", "Alex")]}),
+            album_id,
+            reuse(session),
+        ).run()
         # A rename in Immich propagates on re-sync, without duplicating the row.
-        stage = SyncStage(
-            FakeImmich([self._asset("a1")], faces={"a1": [_face("f1", "p-alex", "Alex M.")]})
-        )
-        stage.run(album_id, session)
+        SyncStage(
+            FakeImmich([self._asset("a1")], faces={"a1": [_face("f1", "p-alex", "Alex M.")]}),
+            album_id,
+            reuse(session),
+        ).run()
 
         people = session.scalars(select(Person)).all()
         assert len(people) == 1
@@ -279,7 +282,7 @@ class TestSync:
             },
         )
 
-        SyncStage(client).run(album_id, session)
+        SyncStage(client, album_id, reuse(session)).run()
 
         photo = session.scalars(select(Photo)).one()
         assert photo.face_count == 3  # all faces counted
@@ -310,7 +313,7 @@ class TestSync:
         )
 
         with caplog.at_level(logging.WARNING):
-            result = SyncStage(client).run(album_id, session)
+            result = SyncStage(client, album_id, reuse(session)).run()
 
         assert result.face_errors == ["a1"]
         assert "faces" in caplog.text

@@ -45,57 +45,74 @@ wrapping a pure function in a class adds ceremony without encapsulating anything
 
 ### 1.2 The stage shape
 
-A stage class separates its **stable dependencies** (injected once, at
-construction) from its **per-run inputs** (passed to the call):
+A stage is constructed for **one run against one album**. Its **stable
+dependencies** (the injected collaborators) come first, then the **per-run
+inputs** — the `album_id`, a `session_factory`, and the `force` knob — which the
+base stores; `run` then takes no arguments:
 
 ```python
-class SelectStage:
+class SelectStage(Stage[SelectResult]):
     """`select` — diversity-aware best-of-scene via MMR."""
 
     def __init__(
         self,
         similarity: SimilaritySearch,
+        album_id: int,
+        session_factory: SessionFactory,
         *,
+        force: bool = False,
         threshold: float = _DEFAULT_SIMILARITY_THRESHOLD,
     ) -> None:
+        super().__init__(album_id, session_factory, force=force)
         self._similarity = similarity
         self._threshold = threshold
 
-    def run(self, album_id: int, session: Session) -> SelectResult:
+    def _process(self) -> SelectResult:
         ...
 
-    def _select_scene(self, candidates: list[Photo], session: Session) -> int:
+    def _select_scene(self, candidates: list[Photo]) -> int:
         ...
 ```
 
-The load-bearing conventions, unchanged from before and now enforced through the
-class shape:
+The load-bearing conventions, enforced through the class shape:
 
-- **`run` takes `album_id` first, then the `Session`.** The `album_id`-first
-  rule (no stage assumes it owns the database) and the session-per-call rule (the
-  `Session` is request-scoped — one shared session per pipeline run, owned by
-  `flow.py`, *not* a construction-time dependency of a stage) both survive intact.
-  Never inject a `Session` into a constructor.
-- **Stable collaborators go in `__init__`** — the Immich client, the similarity
-  search, the renderer, the printer, the vision model, tunable thresholds and
-  data roots. These are the things a caller (or a test) swaps.
-- **Private helpers become private methods** (`_`-prefixed). What was a
-  module-level `_select_scene(...)` taking `similarity, threshold` as arguments
-  becomes `self._select_scene(...)` reading `self._similarity`, `self._threshold`.
-- **Per-run knobs (`force=...`) stay keyword-only arguments on `run`**, not
-  constructor state — they vary per invocation, not per wiring.
+- **A stage takes a `session_factory`, not a live `Session`; `run` takes none.**
+  This is the deliberate change from the earlier session-per-call (then
+  session-in-constructor) shapes. A fan-out stage runs on a worker thread and a
+  `Session` isn't thread-safe, so its session must be *opened on that thread* — the
+  stage holds only a factory and opens the session **inside `run`** (§1.6.1), which
+  is what makes the *same* instance safe to `.submit()` (§1.5). The `Session` is
+  still **request-scoped**: the sequential stages reuse the flow's shared session
+  via a `reuse(db_session)` singleton factory, the fan-out stages open their own
+  pooled session from the real factory. (The `album_id`-first rule survives as
+  `album_id` being the first *run* input, right after the injected deps; the base
+  resolves it to `self._album` at the top of `run`, not in `__init__`, since there
+  is no session yet at construction.)
+- **`run` opens the session, then flushes and commits.** `run()` opens
+  `self._session_factory()`, resolves + guards the album into `self._album`, runs
+  `_process`, then flushes + commits — so no `_process` restates a trailing
+  `session.flush()` and no task wrapper restates the `session.commit()`.
+- **Stable collaborators go in `__init__` first**, before
+  `album_id`/`session_factory` — the Immich client, the similarity search, the
+  renderer, the printer, the vision model, tunable thresholds and data roots. These
+  are what a caller (or a test) swaps.
+- **`_process` and its private helpers read instance state**, not arguments:
+  `self._album`, `self._session`, `self._force`, `self._similarity`. What was a
+  module-level `_select_scene(...)` taking `similarity, threshold` becomes
+  `self._select_scene(...)` reading `self._similarity`, `self._threshold`.
+- **`force` is a keyword-only construction knob**, not a `run` argument — the
+  whole stage instance is per-run now, so `force` is part of that per-run wiring
+  (inert where a stage has no idempotency, §1.6.1).
 - **The result is a `@dataclass`** (`SelectResult`, `SyncResult`, …), returned
   from `run`. Frozen when it's a pure value object with no post-construction
   mutation (`BookPage`, `ToneParams`); plain when the stage accumulates counts
   into it during the run (`QualityResult`).
 
-> Since the Template Method retrofit (§1.6.1) a stage no longer *writes* its own
-> `run`: it subclasses `Stage[…Result]` and implements `_process(album, session,
-> *, force)`. The base's `run` performs the invariant album lookup + guard, then
-> calls `_process`. The conventions above are unchanged — they are now enforced by
-> the base signature rather than restated per stage. The `SelectStage` sketch
-> above predates the base; read it as "what `_process` contains", with `run`
-> inherited.
+> A stage no longer *writes* its own `run` (§1.6.1): it subclasses
+> `Stage[…Result]`, forwards `album_id`/`session_factory`/`force` to
+> `super().__init__`, and implements the argument-free `_process`. The base's `run`
+> opens the session, performs the invariant album lookup + guard, calls `_process`,
+> then flushes + commits.
 
 ### 1.3 Encapsulation
 
@@ -143,40 +160,55 @@ class shape:
   preserved — it now lives in one owned object instead of a cross-module function
   import.
 
-### 1.5 The per-stage `@task` and the `flow/_flow.py` aggregator
+### 1.5 `to_task`/`run_as_task` and the `flow/_flow.py` aggregator
 
-*(Revised 2026-07-16.)* Each stage module now co-locates its own Prefect `@task`
-with the stage it wraps; `flow/_flow.py` no longer defines the tasks, it
-**aggregates** them. The task is a thin module-level wrapper that takes the
-**constructed stage instance** as its first argument — so dependency injection
-stays in the wiring layer, not the task — then `album_id` + the session (or a
-`session_factory`, for a fan-out stage), and just calls `stage.run(...)`:
+*(Revised 2026-07-17.)* There are **no module-level `@task` functions** anymore. A
+stage *is* its own task: the `TaskUnit` base (§1.6.1) turns any unit into a named
+Prefect task from its class-level `task_name` and its no-argument `run`. Because a
+unit holds only a `session_factory` (no live `Session`, §1.2), the *same* instance
+is safe to run inline **or** submit to a worker thread — the session is opened
+inside `run`, on whichever thread runs it:
 
 ```python
-# flow/stages/select.py — co-located with SelectStage
-@task(name="select")
-@autocommit                                  # from flow/_tasks.py
-def select_task(stage: SelectStage, album_id: int, session: Session) -> None:
-    stage.run(album_id, session)
+class TaskUnit[ResultT](ABC):
+    task_name: ClassVar[str]
+    @abstractmethod
+    def run(self) -> ResultT: ...
+    def to_task(self) -> Task[..., ResultT]:
+        return task(name=self.task_name)(self.run)   # Prefect @task named task_name
+    def run_as_task(self) -> ResultT:
+        return self.to_task()()                      # run inline (sequential stages)
 ```
 
-The session/commit **policy** is the one orchestration concern that stays shared:
-`flow/_tasks.py` holds two transaction-boundary wrappers — `autocommit` (runs on
-the flow's shared `Session`, commits) for the four sequential stages, and
-`owns_session` (opens its own pooled `Session` from a `session_factory`, commits)
-for the six fan-out stages that run on real threads. Keeping the commit here, not
-inline in every stage module, stops session-lifecycle policy from scattering.
+The DAG uses the two entry points by position:
 
-The **stage class itself imports no Prefect logic** and stays independently
+- A **sequential** stage (`sync`, `select`, `assemble`, `fulfill`) is built on the
+  shared session — `SyncStage(client, album_id, reuse(db_session)).run_as_task()`
+  runs it inline on the flow thread; `run` reuses the shared session and commits it.
+- A **fan-out** stage (`quality`, `cluster`, `enhance`, `render`, `caption`, and the
+  `resolve-leads` resolver) is built with the real `session_factory` and
+  **submitted** — `QualityStage(...).to_task().submit()` runs it on a worker thread,
+  where `run` opens its own pooled session, commits, and closes it. No builder /
+  `partial` is needed: because the unit carries no session, constructing it on the
+  flow thread and submitting it is safe.
+
+The `flow/_tasks.py` module is **gone** — `run()` opens and commits its own session,
+so there is no shared transaction wrapper left to hold. The one non-`Stage` unit,
+the `LeadFaceResolver`, is a sibling `TaskUnit` (§1.6.1): it too takes its inputs +
+`session_factory` at construction and runs via `.to_task().submit()`, but its `run`
+commits explicitly (it has no `Album`-loading envelope to own the commit).
+
+The **stage class imports no Prefect at module scope** and stays independently
 unit-testable *without* a Prefect runtime — its tests target `run`/`_process`,
-never the `@task` (§2.4). Importing `prefect` at module load is acceptable (it's
-already a dependency); entering a Prefect context is not required for a logic test.
+never `to_task`/`run_as_task` (§2.4), and `run` needs no Prefect context. The
+`TaskUnit` base is the one place `prefect` is imported for the task glue.
 
 Wiring lives in a class-based **`Pipeline`** (`flow/_flow.py`): its constructor
 takes every collaborator as a keyword argument defaulting to the real thing built
-from `config.py`, it constructs each stage from those collaborators and hands the
-built stage to the stage's own `@task`, and it composes the DAG (fan-out groups,
-join fences, session/client lifecycle). The public `@flow` is produced by a
+from `config.py`; it builds each stage (a sequential one with `reuse(db_session)`, a
+fan-out one with the pooled `session_factory`) and runs it via `run_as_task()` /
+`to_task().submit()`, composing the DAG (fan-out groups, join fences, session/client
+lifecycle). The public `@flow` is produced by a
 factory — `pipeline = Pipeline.flow()` — and keeps `pipeline(album_slug=…, **deps)`
 callable exactly as before, so `cli.py` and the wiring tests are unchanged and
 `pipeline` stays unit-testable for wiring/ordering without touching Postgres,
@@ -189,21 +221,56 @@ name better than ad-hoc code. The verdicts below are the standing decisions for
 this codebase; a new pattern is added the same way — evidence first, then the
 name.
 
-#### 1.6.1 Template Method — the `Stage` base (adopted)
+#### 1.6.1 Template Method — the `TaskUnit` / `Stage` bases (adopted)
 
-Every stage's `run` opens with the same invariant envelope: load the album by
-`album_id`, guard its existence, *then* do the stage-specific work. That shared
-skeleton is a **Template Method**, owned by an abstract base so no stage repeats
-it:
+Two small bases, splitting *task surface* from *stage envelope*.
+
+**`TaskUnit`** turns a unit into a named Prefect task (§1.5): it declares the
+class-level `task_name` and abstract no-argument `run`, and supplies `to_task`
+(wrap `run` as a `@task`) and `run_as_task` (run inline). It's the shared base of
+every `Stage` **and** the non-`Stage` `LeadFaceResolver`.
+
+**`Stage`** is the Template Method for a stage. Every stage's `run` opens the same
+invariant envelope — open a session from the factory, load the album by `album_id`,
+guard its existence — *then* does the stage-specific work, and closes with the same
+tail: flush + commit. That shared skeleton is owned by the base so no stage repeats
+it. The load + guard runs at the **top of `run`** (not the constructor — there is no
+session yet at construction, since a fan-out stage must open its session on its
+worker thread, §1.2):
 
 ```python
-class Stage[ResultT](ABC):  # PEP 695 generics — the py3.14 idiom, no TypeVar import
-    """Template Method base for every pipeline stage. `run` owns the invariant
-    envelope (load + guard the album); the variant work is `_process`."""
+class TaskUnit[ResultT](ABC):  # PEP 695 generics — the py3.14 idiom, no TypeVar import
+    task_name: ClassVar[str]
+    @abstractmethod
+    def run(self) -> ResultT: ...
+    def to_task(self) -> Task[..., ResultT]:
+        return task(name=self.task_name)(self.run)
+    def run_as_task(self) -> ResultT:
+        return self.to_task()()
 
-    def run(self, album_id: int, session: Session, *, force: bool = False) -> ResultT:
-        album = self._load_album(album_id, session)
-        return self._process(album, session, force=force)
+
+class Stage[ResultT](TaskUnit[ResultT]):
+    """Template Method base for a stage. `run` opens the session, loads + guards the
+    album, runs the variant `_process`, then flushes + commits."""
+
+    _session: Session          # populated by `run` inside the session context
+    _album: Album
+
+    def __init__(
+        self, album_id: int, session_factory: SessionFactory, *, force: bool = False
+    ) -> None:
+        self._album_id = album_id
+        self._session_factory = session_factory
+        self._force = force
+
+    def run(self) -> ResultT:
+        with self._session_factory() as session:
+            self._session = session
+            self._album = self._load_album(self._album_id, session)
+            result = self._process()
+            session.flush()
+            session.commit()
+            return result
 
     @staticmethod
     def _load_album(album_id: int, session: Session) -> Album:
@@ -213,37 +280,50 @@ class Stage[ResultT](ABC):  # PEP 695 generics — the py3.14 idiom, no TypeVar 
         return album
 
     @abstractmethod
-    def _process(self, album: Album, session: Session, *, force: bool) -> ResultT: ...
+    def _process(self) -> ResultT: ...
 ```
 
 Rules that keep this honest:
 
-- **`run` stays the public surface** — the `album_id`-first, session-per-call, and
-  `force`-is-keyword-only conventions (§1.2) are now enforced *by the base's
-  signature*, not re-typed per stage. Tests still target `run` (§2.4).
-- **`Stage` is `Generic[ResultT]`** so each subclass keeps its own concrete
-  result: `class SyncStage(Stage[SyncResult])`, `_process(...) -> SyncResult`. No
+- **The constructor takes `album_id` + `session_factory` + `force`; `run` takes
+  none.** A subclass forwards them via
+  `super().__init__(album_id, session_factory, force=force)` after binding its own
+  injected collaborators (§1.2). `run` opens the session and stores
+  `self._session`/`self._album`, so `_process` and its helpers read instance state
+  rather than threading `(album, session, force)` through every signature. Tests
+  target `run` (§2.4).
+- **`run` owns the session lifecycle *and* the flush + commit.** Opening the session
+  inside `run` (via the factory's context manager) is what lets the *same* unit be
+  submitted to a worker thread; centralizing flush + commit is what removed each
+  `_process`'s trailing `session.flush()` and each task wrapper's `session.commit()`.
+  (`flush()` before `commit()` is deliberate — it surfaces an integrity error as
+  part of the stage boundary; `commit()` alone would flush too.)
+- **`Stage` is generic over `ResultT`** so each subclass keeps its own concrete
+  result: `class SyncStage(Stage[SyncResult])`, `_process() -> SyncResult`. No
   stage loses its typed return.
-- **Only the genuinely invariant step is hoisted.** The album lookup + None-guard
-  is universal, so it lives in the base. The *idempotency short-circuit logic* is
-  **not** hoisted — it varies structurally (album-level early-return for
-  `assemble`/`fulfill`, per-photo skip for `quality`/`enhance`/`caption`/`render`,
-  none for `sync`/`cluster`/`select`), so each `_process` keeps its own. Hoisting a
-  step that isn't actually shared is how Template Method rots into a god-method.
+- **Only the genuinely invariant steps are hoisted.** The album lookup + None-guard
+  and the flush + commit are universal, so they live in the base. The *idempotency
+  short-circuit logic* is **not** hoisted — it varies structurally (album-level
+  early-return for `assemble`/`fulfill`, per-photo skip for
+  `quality`/`enhance`/`caption`/`render`, none for `sync`/`cluster`/`select`), so
+  each `_process` keeps its own. Hoisting a step that isn't actually shared is how
+  Template Method rots into a god-method.
 - **`force` is universal by *signature*, inert where there's no envelope.** The
-  base's `run`/`_process` carry `*, force: bool` for every stage so the public
-  surface is uniform (one Template Method, one signature). The three stages with no
-  per-run idempotency — `sync`, `cluster`, `select` — accept `force` and ignore it.
-  That's a deliberate trade: a uniform inherited `run` at the cost of an inert knob
-  on three stages, versus per-stage `run` overrides. The *flag* being shared is not
-  the same as the *short-circuit logic* being shared — only the former is.
+  base's constructor carries `*, force: bool` for every stage so the surface is
+  uniform. The three stages with no per-run idempotency — `sync`, `cluster`,
+  `select` — accept `force` and ignore it. The *flag* being shared is not the same
+  as the *short-circuit logic* being shared — only the former is.
 - **A stage that needs an extra invariant guard adds it in `_process`**, not the
   base — e.g. `sync` still raises when `immich_album_id` is unset.
 - **ABC here, Protocol for collaborators — they solve different problems** (§1.6.4).
 
 `lead_faces.LeadFaceResolver` is *not* a `Stage` (it's a resolver invoked by
-`select`, not a DAG stage with a `run(album_id, session)` contract) and stays a
-plain class. "Where appropriate" means the shape must actually match.
+`select`, not a DAG stage with an `Album` envelope) but *is* a sibling `TaskUnit`:
+it takes its inputs + `session_factory` at construction and exposes a no-argument
+`run`, so it runs via `to_task().submit()` like the fan-out stages — no external
+wrapper. Since it has no `Album`-loading envelope, its `run` opens the session and
+commits explicitly. "Where appropriate" means the `Stage` shape (the `Album`
+envelope) must actually match; the `TaskUnit` shape is shared more widely.
 
 #### 1.6.2 Strategy — the `Printer` boundary (already present, keep)
 

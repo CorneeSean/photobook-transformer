@@ -37,23 +37,22 @@ photo-album-pipeline/
 │       │
 │       ├── flow/                 # the pipeline package (everything orchestration-related)
 │       │   ├── __init__.py       # re-exports the public surface (pipeline, Pipeline, get_or_create_album) from _flow
-│       │   ├── _flow.py          # thin aggregator: Pipeline class + Pipeline.flow() @flow(album_slug); imports the per-stage @tasks, composes the DAG + session/client lifecycle
-│       │   ├── _tasks.py         # shared transaction-boundary wrappers (autocommit / owns_session) the per-stage @tasks run under
+│       │   ├── _flow.py          # thin aggregator: Pipeline class + Pipeline.flow() @flow(album_slug); builds each stage + runs it via run_as_task()/to_task().submit(); composes the DAG + session/client lifecycle
 │       │   ├── photo_analyzer.py # PhotoAnalyzer: shared one-vision-call collaborator (enhance + caption)
 │       │   ├── tone.py           # ToneParams value object + AnalysisResult/Photo conversions
 │       │   │
-│       │   └── stages/           # one Prefect-free Stage class per stage (run(album_id, session, …); album_id first) + that stage's own thin @task
-│       │       ├── base.py       # Stage[ResultT](ABC): Template Method run() → _process hook (no Prefect import)
-│       │       ├── sync.py       # SyncStage + sync_task
-│       │       ├── quality.py    # QualityStage + quality_task
-│       │       ├── cluster.py    # segment assignment + scene detection; ClusterStage + cluster_task
-│       │       ├── select.py     # SelectStage + select_task
-│       │       ├── lead_faces.py # LeadFaceResolver (helper invoked by select; not a Stage) + resolve_leads_task
-│       │       ├── enhance.py    # incl. cross-camera reconciliation + XMP write; EnhanceStage + enhance_task
-│       │       ├── render.py     # darktable-cli invocation; RenderStage + render_task
-│       │       ├── caption.py    # CaptionStage + caption_task
-│       │       ├── assemble.py   # AssembleStage + assemble_task
-│       │       └── fulfill.py    # delegates to an injected printers.Printer; FulfillStage + fulfill_task
+│       │   └── stages/           # one Stage class per stage (constructed with album_id + session_factory; no-arg run()); no module-level @task functions
+│       │       ├── base.py       # TaskUnit[ResultT] (task_name + to_task/run_as_task) and Stage[ResultT] Template Method (run() opens session → load+guard album → _process → flush+commit)
+│       │       ├── sync.py       # SyncStage
+│       │       ├── quality.py    # QualityStage
+│       │       ├── cluster.py    # segment assignment + scene detection; ClusterStage
+│       │       ├── select.py     # SelectStage
+│       │       ├── lead_faces.py # LeadFaceResolver (invoked by select; a TaskUnit, not a Stage)
+│       │       ├── enhance.py    # incl. cross-camera reconciliation + XMP write; EnhanceStage
+│       │       ├── render.py     # darktable-cli invocation; RenderStage
+│       │       ├── caption.py    # CaptionStage
+│       │       ├── assemble.py   # AssembleStage
+│       │       └── fulfill.py    # delegates to an injected printers.Printer; FulfillStage
 │       │
 │       ├── db/
 │       │   ├── models.py         # Album, Segment, Photo
@@ -147,55 +146,51 @@ suites with parametrization and scoped fixtures — see
 
 ## Structure rules
 
-- **Every stage's entry point takes `album_id` as its first argument** (a stage
-  class's `run`, or a trivial stage's function). No stage may assume it's the only
-  album in the database.
+- **Every stage is constructed with its `album_id` (and a `session_factory`)** and
+  scopes all its work to that album. No stage may assume it's the only album in the
+  database.
 - **No stage may assume segments exist.** Every stage that reads segments must
   have a tested fallback path for an album with none. This is the main genericity
   guard — enforce it in tests, not just in prose.
 - **Nothing in `src/` may reference trips, itineraries, days, or any
   occasion-specific concept.** If a stage needs to know an album is a trip, the
   abstraction has leaked.
-- **Each `flow/stages/*.py` co-locates its own Prefect `@task` with the stage it
-  wraps; `flow/_flow.py` aggregates them.** *(Changed 2026-07-16 — this reverses
-  the former "stages import no Prefect; `flow/_flow.py` is the only Prefect-aware
-  module" rule.)* A stage module now defines both the Prefect-free stage **class**
-  (`SyncStage`, …) *and* a thin module-level `@task` over it (`sync_task`, …); the
-  task takes the **constructed stage instance** as its first argument, then
-  `album_id` + session/session_factory, and just calls `stage.run(...)` under a
-  shared transaction-boundary wrapper from `flow/_tasks.py`. The **stage class
-  stays Prefect-free logic** and remains independently unit-testable *without* a
-  Prefect runtime — its tests target `run`/`_process`, never the `@task` (this is
-  the testability the old rule protected, and it is preserved; importing `prefect`
-  at module load is fine — it's already a dependency, and no logic test enters a
-  Prefect context). `flow/_flow.py` becomes a thin **aggregator/integrator**: it
-  imports the per-stage tasks, and its `Pipeline` class constructs each stage from
-  the injected collaborators and composes the DAG (fan-out groups, join fences,
-  session/client lifecycle) — business logic and task *definitions* live in the
-  stage modules, not here. *Rationale:* a stage's orchestration wrapper reads best
-  next to the stage it wraps (one file to change when a stage's inputs change), and
-  DI still lives in the wiring layer because the task receives an already-built
-  stage. `flow/stages/base.py` still imports **no** Prefect — the `@task`s live in
-  the concrete stage modules, not the Template Method base — and nothing adds
-  Prefect to `db/`, `immich/`, `lulu/`, `printers/`, `agents/`, `config.py`, or
-  `definition.py`.
+- **A stage *is* its own Prefect task; there are no module-level `@task`
+  functions.** *(Changed 2026-07-17 — supersedes the intermediate "each stage
+  co-locates its own `@task`" rule.)* The `flow.stages.base.TaskUnit` base turns any
+  unit into a named Prefect task from its class-level `task_name` and no-argument
+  `run`: `run_as_task()` runs it inline (sequential stages), `to_task().submit()`
+  submits it to a worker thread (fan-out stages). Because a stage holds only a
+  `session_factory` (no live `Session`), the *same* instance is safe to submit — the
+  session opens inside `run`, on the thread that runs it. The **stage class stays
+  Prefect-free at module scope** and remains independently unit-testable *without* a
+  Prefect runtime — its tests target `run`/`_process`, never `to_task`/`run_as_task`;
+  `run` needs no Prefect context. `flow/_flow.py` is the thin **aggregator**: its
+  `Pipeline` builds each stage from the injected collaborators (a sequential one with
+  `reuse(db_session)`, a fan-out one with the pooled `session_factory`) and runs it
+  via `run_as_task()` / `to_task().submit()`, composing the DAG (fan-out groups, join
+  fences, session/client lifecycle). `flow/_tasks.py` no longer exists (`run` opens +
+  commits its own session, so there is no shared transaction wrapper to hold).
+  `prefect` is imported by `flow/stages/base.py` (the `TaskUnit` task glue) and
+  `flow/_flow.py`; nothing adds Prefect to `db/`, `immich/`, `lulu/`, `printers/`,
+  `agents/`, `config.py`, or `definition.py`.
 - **A stage is a class when it has a collaborator or several helpers; a plain
   function only when genuinely trivial** (the hybrid rule in
   [quality practices](/process/quality-practices.md) — under which all nine current stages
-  are classes). Either way, the public entry point (`Stage.run` / the function)
-  **takes `album_id` first, then the `Session`** — request-scoped state is never a
-  constructor dependency; injected collaborators (clients, similarity, printer,
-  renderer, vision model) and tunables are.
+  are classes). Either way, the unit is **constructed with `album_id` +
+  `session_factory`** (the first per-run inputs, after the injected deps) and `run`
+  takes no arguments — a live `Session` is never a constructor dependency; injected
+  collaborators (clients, similarity, printer, renderer, vision model) and tunables
+  are.
 - **Every stage class subclasses `flow.stages.base.Stage[…Result]`** and implements
-  `_process(album, session, *, force)`; the base's `run` is the Template Method
-  that performs the invariant album lookup + existence guard, then delegates
-  (quality practices §1.6.1). The stage module's own `@task` wraps the inherited
-  `.run` (via a `flow/_tasks.py` transaction-boundary wrapper) — the base itself
-  carries no Prefect import. A non-stage helper class (e.g.
-  `flow.stages.lead_faces.LeadFaceResolver`) does **not** inherit `Stage`, and its
-  co-located `resolve_leads_task` additionally forwards the resolver's extra per-run
-  inputs (the parsed `lead_faces` config + its directory) that the `Pipeline` reads
-  from `album.yml`.
+  `_process()`; the base's `run` is the Template Method that opens the session,
+  performs the invariant album lookup + existence guard, delegates, then flushes +
+  commits (quality practices §1.6.1). A non-stage helper class (e.g.
+  `flow.stages.lead_faces.LeadFaceResolver`) does **not** inherit `Stage` but *is* a
+  sibling `TaskUnit`: it takes its extra per-run inputs (the parsed `lead_faces`
+  config + its directory, which the `Pipeline` reads from `album.yml`) plus a
+  `session_factory` at construction, and its `run` opens the session and commits
+  explicitly (no `Album` envelope).
 - **`agents/*.py` define a Pydantic output model + an `Agent`**, kept out of
   `flow/stages/` so they can be swapped for `TestModel` in tests. The vision work is
   **one combined agent** producing tone deltas *and* caption in a single call.

@@ -1,48 +1,101 @@
-"""The ``Stage`` Template Method base shared by every pipeline stage.
+"""The ``TaskUnit`` / ``Stage`` bases shared by every pipeline stage.
 
-Every stage's ``run`` opens with the same invariant envelope — load the album by
-``album_id`` and guard that it exists — before doing anything stage-specific. That
-skeleton is a **Template Method** (quality-practices.md §1.6.1): this base owns it
-so no stage restates it, and delegates the variant work to the abstract
-``_process`` hook.
+A pipeline unit runs as a **named Prefect task** and is constructed on the flow
+thread but may execute on a worker thread. The two bases split those concerns:
 
-Only the genuinely invariant step is hoisted. The *idempotency* short-circuit is
-deliberately **not** here — it varies structurally across stages (an album-level
-early-return for ``assemble``/``fulfill``, a per-photo skip for
-``quality``/``enhance``/``caption``/``render``, none for
-``sync``/``cluster``/``select``) — so each ``_process`` keeps its own.
+``TaskUnit`` — the task surface. A subclass sets the class-level ``task_name`` and
+implements the no-argument ``run``; ``to_task`` wraps ``run`` as a Prefect ``@task``
+carrying that name, ``run_as_task`` runs it inline (a sequential stage on the shared
+session), and ``to_task().submit(...)`` submits it to a worker thread (a fan-out
+stage). The unit is safe to submit because it holds **no live ``Session``** — only a
+``session_factory`` it opens *inside* ``run``, on whatever thread runs it.
 
-No Prefect import lives *here* (folder-structure.md): the ``@task`` that wraps a
-stage's inherited ``.run`` lives in each concrete stage module (e.g.
-``flow/stages/sync.py``'s ``sync_task``), not in this Template Method base.
-``Stage`` is generic over its result type, so a subclass keeps its own concrete
-``@dataclass`` return — ``class SyncStage(Stage[SyncResult])`` with
-``_process(...) -> SyncResult``.
+``Stage`` — the Template Method for a stage. Its constructor takes the ``album_id``,
+a ``session_factory``, and ``force``; ``run`` opens the session from the factory,
+resolves the album by ``album_id`` (guarding existence) into ``self._album``, runs
+the variant ``_process`` hook, then flushes + commits the session. The load + guard
+and the flush + commit are the invariant envelope every stage shared — hoisting them
+here is what lets each ``_process`` read ``self._album``/``self._session``/
+``self._force`` and drop its own trailing flush, and lets each task drop its commit.
+
+Only the genuinely invariant steps are hoisted. The *idempotency* short-circuit is
+deliberately **not** here — it varies structurally across stages — so each
+``_process`` keeps its own. ``Stage`` is generic over its result type, so a subclass
+keeps its own concrete ``@dataclass`` return — ``class SyncStage(Stage[SyncResult])``
+with ``_process() -> SyncResult``.
 """
 
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
+from typing import ClassVar
 
+from prefect import Task, task
 from sqlalchemy.orm import Session
 
 from album.db.models import Album
+from album.db.session import SessionFactory
 
 
-class Stage[ResultT](ABC):
-    """Template Method base for a pipeline stage.
+class TaskUnit[ResultT](ABC):
+    """A unit of pipeline work that runs as a named Prefect task.
 
-    ``run`` is the invariant algorithm (load + guard the album, then delegate);
-    ``_process`` is the per-stage step subclasses implement. ``album_id`` comes
-    first and the ``Session`` is request-scoped — never a constructor dependency
-    (quality-practices.md §1.2). ``force`` is keyword-only and is threaded through
-    to ``_process``; a stage with no per-run idempotency simply ignores it.
+    Subclasses set ``task_name`` (a class attribute) and implement the no-argument
+    ``run``. Because a unit holds no live ``Session`` — it opens one from a
+    ``session_factory`` *inside* ``run`` — the same instance is safe to hand to
+    ``.submit()`` on a worker thread.
     """
 
-    def run(self, album_id: int, session: Session, *, force: bool = False) -> ResultT:
-        """Load and guard ``album_id``, then run the stage-specific ``_process``."""
-        album = self._load_album(album_id, session)
-        return self._process(album, session, force=force)
+    task_name: ClassVar[str]
+
+    @abstractmethod
+    def run(self) -> ResultT:
+        """Do the unit's work and return its result. Opens its own session."""
+
+    def to_task(self) -> Task[..., ResultT]:
+        """This unit's ``run`` as a Prefect ``@task`` named ``task_name``.
+
+        Call it directly (``to_task()()``, via :meth:`run_as_task`) to run inline,
+        or ``to_task().submit(...)`` to submit it to a worker thread.
+        """
+        return task(name=self.task_name)(self.run)
+
+    def run_as_task(self) -> ResultT:
+        """Run inline as a Prefect task — a sequential stage on the shared session."""
+        return self.to_task()()
+
+
+class Stage[ResultT](TaskUnit[ResultT]):
+    """Template Method base for a pipeline stage.
+
+    Constructed with the ``album_id``, a ``session_factory``, and ``force``; holds no
+    live ``Session``. ``run`` (from :class:`TaskUnit`) opens the session from the
+    factory, resolves + guards the album into ``self._album``, runs the per-stage
+    ``_process`` (which reads ``self._album``/``self._session``/``self._force``), then
+    flushes + commits. A subclass forwards the three base arguments via
+    ``super().__init__`` after binding its own injected collaborators.
+    """
+
+    # Populated by ``run`` inside the session context; read by ``_process``.
+    _session: Session
+    _album: Album
+
+    def __init__(
+        self, album_id: int, session_factory: SessionFactory, *, force: bool = False
+    ) -> None:
+        self._album_id = album_id
+        self._session_factory = session_factory
+        self._force = force
+
+    def run(self) -> ResultT:
+        """Open the session, resolve + guard the album, run ``_process``, commit."""
+        with self._session_factory() as session:
+            self._session = session
+            self._album = self._load_album(self._album_id, session)
+            result = self._process()
+            session.flush()
+            session.commit()
+            return result
 
     @staticmethod
     def _load_album(album_id: int, session: Session) -> Album:
@@ -57,5 +110,5 @@ class Stage[ResultT](ABC):
         return album
 
     @abstractmethod
-    def _process(self, album: Album, session: Session, *, force: bool) -> ResultT:
-        """Do the stage's actual work against an already-loaded ``album``."""
+    def _process(self) -> ResultT:
+        """Do the stage's actual work against ``self._album`` / ``self._session``."""

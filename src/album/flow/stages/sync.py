@@ -14,9 +14,9 @@ source zone is resolved in priority order:
    timestamp left ``NULL`` — cluster (step 7) handles NULL-timestamp photos
    explicitly rather than dropping them.
 
-:class:`SyncStage` itself stays Prefect-free logic — so it's unit-testable
-without an orchestrator — while this module also exports :func:`sync_task`, the
-thin Prefect ``@task`` that wraps it, co-located with the stage it runs
+:class:`SyncStage` stays Prefect-free logic — so it's unit-testable without an
+orchestrator via ``run`` — and runs as a Prefect task through the ``run_as_task`` /
+``to_task`` glue it inherits from :class:`~album.flow.stages.base.TaskUnit`
 (folder-structure.md rule; quality-practices.md §1.5).
 """
 
@@ -25,17 +25,16 @@ from __future__ import annotations
 import logging
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
-from typing import Protocol
+from typing import ClassVar, Protocol
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 import httpx
-from prefect import task
 from pydantic import ValidationError
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from album.db.models import Album, Person, Photo
-from album.flow._tasks import autocommit
+from album.db.models import Person, Photo
+from album.db.session import SessionFactory
 from album.flow.stages.base import Stage
 from album.immich.client import ImmichAsset, ImmichExif, ImmichFace
 
@@ -87,16 +86,20 @@ class SyncStage(Stage[SyncResult]):
 
     The Immich HTTP layer is the one stable collaborator, injected as an
     :class:`AssetSource` (:class:`~album.immich.client.ImmichClient` satisfies it)
-    so tests pass a fake without a network. ``run`` (inherited from
-    :class:`~album.flow.stages.base.Stage`) takes ``album_id`` first, then the
-    request-scoped ``Session`` (never a construction-time dependency).
+    so tests pass a fake without a network. The ``album_id`` + ``session_factory``
+    are constructor arguments (base :class:`~album.flow.stages.base.Stage`); ``run``
+    (inherited) takes no arguments, opens the session, and flushes + commits.
     """
 
-    def __init__(self, source: AssetSource) -> None:
+    task_name: ClassVar[str] = "sync"
+
+    def __init__(self, source: AssetSource, album_id: int, session_factory: SessionFactory) -> None:
+        super().__init__(album_id, session_factory)
         self._source = source
 
-    def _process(self, album: Album, session: Session, *, force: bool) -> SyncResult:
-        """Sync the Immich album linked to ``album`` into our DB. Idempotent."""
+    def _process(self) -> SyncResult:
+        """Sync the Immich album linked to ``self._album`` into our DB. Idempotent."""
+        album, session = self._album, self._session
         if album.immich_album_id is None:
             raise ValueError(f"album {album.slug!r} has no immich_album_id set")
 
@@ -110,8 +113,6 @@ class SyncStage(Stage[SyncResult]):
         )
         for asset in self._source.get_album_assets(album.immich_album_id):
             self._sync_asset(run, asset, session)
-
-        session.flush()
         return run.result
 
     @staticmethod
@@ -290,10 +291,3 @@ class SyncStage(Stage[SyncResult]):
         if exif.make and not exif.model.startswith(exif.make):
             return f"{exif.make} {exif.model}"
         return exif.model
-
-
-@task(name="sync")
-@autocommit
-def sync_task(stage: SyncStage, album_id: int, session: Session) -> None:
-    """``sync`` as a Prefect ``@task`` on the flow's shared session (``autocommit``)."""
-    stage.run(album_id, session)

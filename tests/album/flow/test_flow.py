@@ -15,17 +15,17 @@ already has its own thorough test suite. What matters, and is covered here:
   re-raises), rather than silently continuing.
 - ``pipeline`` only closes resources it opened itself.
 
-Each stage's ``@task`` (``sync_task`` … ``fulfill_task``) now lives in its own
-stage module and is imported into ``album.flow._flow``; these tests monkeypatch it
-at the ``album.flow._flow`` module level — the stages themselves are not
-re-exercised for real (that's each stage's own test file's job), and patching the
-imported task rather than the stage classes keeps these wiring tests decoupled
-from how any one stage is constructed. Each task's first argument is now the
-constructed stage instance (quality-practices.md §1.5), so a double takes
-``(stage, album_id, session_or_factory, …)``. Doubles for the six grouped stages
-are wrapped with Prefect's own ``task()`` (not plain lambdas) since ``pipeline``
-now calls ``.submit()`` on them; sequential-stage doubles work either way
-since calling a Prefect ``Task`` directly just runs it. This runs fast and
+Each stage is now a :class:`~album.flow.stages.base.TaskUnit`: the wiring builds
+the unit and runs it via ``unit.run_as_task()`` (sequential) or
+``unit.to_task().submit()`` (fan-out) — there are no module-level ``*_task``
+functions to patch anymore. So these tests **patch each stage class's ``run``**
+with a recording no-op: the real ``run_as_task``/``to_task().submit()`` machinery
+(and thus the real Prefect task/future/DAG-order/failure-propagation semantics)
+still executes, but the stage's DB work is stubbed. A stubbed ``run`` never opens
+its ``session_factory``, which is why the routing test can hand the grouped units a
+``fake_factory`` that raises if called. Each unit carries its ``_album_id`` and
+``_session_factory``, which the doubles read to assert album-id correctness and
+session routing — no ``Session`` is touched on a worker thread. This runs fast and
 never touches Postgres, Immich, Claude, darktable-cli, or Lulu. Runs against
 Prefect's ``prefect_test_harness`` (a temporary local SQLite Prefect
 database) and its default ``ThreadPoolTaskRunner``, not a real Prefect
@@ -49,42 +49,59 @@ from __future__ import annotations
 import threading
 from collections.abc import Callable, Iterator
 from pathlib import Path
+from typing import Protocol
 
 import pytest
-from prefect import task
 from prefect.testing.utilities import prefect_test_harness
 from pydantic_ai.models.test import TestModel
 from sqlalchemy.orm import Session
 
 import album.flow._flow as flow_module
 from album.db.models import Album
+from album.db.session import SessionFactory
 from album.flow import get_or_create_album, pipeline
+from album.flow.stages.assemble import AssembleStage
+from album.flow.stages.caption import CaptionStage
+from album.flow.stages.cluster import ClusterStage
+from album.flow.stages.enhance import EnhanceStage
 from album.flow.stages.fulfill import FulfillStage
+from album.flow.stages.lead_faces import LeadFaceResolver
+from album.flow.stages.quality import QualityStage
+from album.flow.stages.render import RenderStage
+from album.flow.stages.select import SelectStage
+from album.flow.stages.sync import SyncStage
 from album.printers.html import HtmlPrinter
 
-# The ten stages, and the flow-module attribute of each one's @task (imported
-# into album.flow._flow from its stage module). Patching these decouples the
-# wiring tests from stage construction. Order here is just enumeration order —
-# build step 25 means only a *partial* order is guaranteed at runtime (see
-# _GROUP_1/_GROUP_2 below).
-_STAGE_NAMES: tuple[str, ...] = (
-    "sync",
-    "resolve_leads",
-    "quality",
-    "cluster",
-    "select",
-    "enhance",
-    "render",
-    "caption",
-    "assemble",
-    "fulfill",
-)
+# Every stage keyed by the name its double records under. Patching each class's
+# ``run`` decouples the wiring tests from stage internals. Order here is just
+# enumeration order — build step 25 means only a *partial* order is guaranteed at
+# runtime (see _GROUP_1/_GROUP_2 below).
+_STAGE_CLASSES: dict[str, type] = {
+    "sync": SyncStage,
+    "resolve_leads": LeadFaceResolver,
+    "quality": QualityStage,
+    "cluster": ClusterStage,
+    "select": SelectStage,
+    "enhance": EnhanceStage,
+    "render": RenderStage,
+    "caption": CaptionStage,
+    "assemble": AssembleStage,
+    "fulfill": FulfillStage,
+}
+_STAGE_NAMES: tuple[str, ...] = tuple(_STAGE_CLASSES)
 
 # Group 1 (after sync, joins at select) and group 2 (after select, joins at
 # assemble) — the six stages `pipeline` runs via `.submit()`/`.result()`
 # rather than a direct call (pipeline-execution.md §"The change").
 _GROUP_1: tuple[str, ...] = ("resolve_leads", "quality", "cluster")
 _GROUP_2: tuple[str, ...] = ("enhance", "render", "caption")
+
+
+class _Unit(Protocol):
+    """The slice of a built stage the doubles read (its per-run bindings)."""
+
+    _album_id: int
+    _session_factory: SessionFactory
 
 
 @pytest.fixture(scope="module", autouse=True)
@@ -95,20 +112,19 @@ def _prefect_test_db() -> Iterator[None]:
         yield
 
 
-def _task_attr(stage_name: str) -> str:
-    return f"{stage_name}_task"
+def _patch_runs(
+    monkeypatch: pytest.MonkeyPatch, make_run: Callable[[str], Callable[..., object]]
+) -> None:
+    """Replace every stage class's ``run`` with ``make_run(name)``."""
+    for name, cls in _STAGE_CLASSES.items():
+        monkeypatch.setattr(cls, "run", make_run(name), raising=False)
 
 
-def _patch_stage_tasks_noop(monkeypatch: pytest.MonkeyPatch, *, exclude: str = "") -> None:
-    """No-op double for every stage's @task except ``exclude``. Every double is
-    Prefect-``task()``-wrapped (not a plain lambda) so ``.submit()`` — which
-    ``pipeline`` calls on the six grouped stages — still resolves."""
-    for stage_name in _STAGE_NAMES:
-        if stage_name == exclude:
-            continue
-        monkeypatch.setattr(
-            flow_module, _task_attr(stage_name), task(name=stage_name)(lambda *a, **k: None)
-        )
+def _noop_run(_name: str) -> Callable[..., object]:
+    def _run(_self: object) -> None:
+        return None
+
+    return _run
 
 
 class _FakeImmichClient:
@@ -174,17 +190,18 @@ class TestPipelineWiring:
         assert album.id is not None
         return album.id
 
-    def _record(
-        self, name: str, album_id: int, calls: list[str], lock: threading.Lock
-    ) -> Callable[..., None]:
-        # Each task's first arg is now the constructed stage instance
-        # (quality-practices.md §1.5); album_id is second.
-        def _fn(_stage: object, received_album_id: int, *_args: object, **_kwargs: object) -> None:
-            assert received_album_id == album_id
-            with lock:
-                calls.append(name)
-
-        return _fn
+    def _deps(self) -> dict[str, object]:
+        """The injectable collaborators as harmless doubles (never exercised — the
+        stages' ``run`` is stubbed), plus a PydanticAI ``TestModel``."""
+        return {
+            "immich_client": _FakeImmichClient(),
+            "similarity": object(),
+            "aesthetic": object(),
+            "embedder": object(),
+            "renderer": object(),
+            "printer": object(),
+            "model": TestModel(),
+        }
 
     def test_runs_every_stage_once_respecting_the_dag_partial_order(
         self,
@@ -201,24 +218,17 @@ class TestPipelineWiring:
         calls: list[str] = []
         lock = threading.Lock()
 
-        for stage_name in _STAGE_NAMES:
-            monkeypatch.setattr(
-                flow_module,
-                _task_attr(stage_name),
-                task(name=stage_name)(self._record(stage_name, album_id, calls, lock)),
-            )
+        def _make_run(name: str) -> Callable[..., object]:
+            def _run(self: _Unit) -> None:
+                assert self._album_id == album_id  # pyright: ignore[reportPrivateUsage]
+                with lock:
+                    calls.append(name)
 
-        pipeline(
-            album_slug="honeymoon-2026",
-            session=session,
-            immich_client=_FakeImmichClient(),  # pyright: ignore[reportArgumentType]
-            similarity=object(),  # pyright: ignore[reportArgumentType]
-            aesthetic=object(),  # pyright: ignore[reportArgumentType]
-            embedder=object(),  # pyright: ignore[reportArgumentType]
-            renderer=object(),  # pyright: ignore[reportArgumentType]
-            printer=object(),  # pyright: ignore[reportArgumentType]
-            model=TestModel(),
-        )
+            return _run
+
+        _patch_runs(monkeypatch, _make_run)
+
+        pipeline(album_slug="honeymoon-2026", session=session, **self._deps())  # pyright: ignore[reportArgumentType]
 
         assert sorted(calls) == sorted(_STAGE_NAMES)  # every stage ran exactly once
         idx = {name: calls.index(name) for name in calls}
@@ -233,60 +243,44 @@ class TestPipelineWiring:
         assert idx["caption"] > idx["enhance"]  # caption is also chained behind enhance
         assert idx["assemble"] < idx["fulfill"]
 
-    def test_grouped_tasks_get_the_session_factory_sequential_tasks_get_the_shared_session(
+    def test_grouped_units_own_a_session_factory_sequential_reuse_the_shared_session(
         self,
         session: Session,
         monkeypatch: pytest.MonkeyPatch,
         make_album: Callable[..., Album],
     ) -> None:
-        """`pipeline`'s six grouped tasks take a `session_factory`, never the
-        flow's shared session — the whole point of build step 25 (a shared
+        """The six grouped units are handed the injected ``session_factory`` (they
+        open their own pooled session per worker thread); the four sequential units
+        reuse the flow's shared session — the whole point of build step 25 (a shared
         SQLAlchemy Session isn't thread-safe)."""
         self._persist(session, make_album(slug="honeymoon-2026", immich_album_id="immich-1"))
 
-        received: dict[str, object] = {}
+        received: dict[str, SessionFactory] = {}
         lock = threading.Lock()
 
-        def _capture(name: str) -> Callable[..., None]:
-            # (stage, album_id, session_or_factory, …): the session/factory a task
-            # runs on is now the *third* positional (the stage instance is first).
-            def _fn(
-                _stage: object,
-                _album_id: int,
-                session_or_factory: object = None,
-                *_args: object,
-                **_kwargs: object,
-            ) -> None:
+        def _make_run(name: str) -> Callable[..., object]:
+            def _run(self: _Unit) -> None:
                 with lock:
-                    received[name] = session_or_factory
+                    received[name] = self._session_factory  # pyright: ignore[reportPrivateUsage]
 
-            return _fn
+            return _run
 
-        for stage_name in _STAGE_NAMES:
-            monkeypatch.setattr(
-                flow_module, _task_attr(stage_name), task(name=stage_name)(_capture(stage_name))
-            )
+        _patch_runs(monkeypatch, _make_run)
 
-        def fake_factory() -> Session:  # never actually called — the double doesn't open it
-            raise AssertionError("the double shouldn't call the factory")
+        def fake_factory() -> Session:  # never called — a stubbed run() never opens it
+            raise AssertionError("a grouped unit must not open the shared session's factory")
 
-        pipeline(
-            album_slug="honeymoon-2026",
-            session=session,
-            session_factory=fake_factory,
-            immich_client=_FakeImmichClient(),  # pyright: ignore[reportArgumentType]
-            similarity=object(),  # pyright: ignore[reportArgumentType]
-            aesthetic=object(),  # pyright: ignore[reportArgumentType]
-            embedder=object(),  # pyright: ignore[reportArgumentType]
-            renderer=object(),  # pyright: ignore[reportArgumentType]
-            printer=object(),  # pyright: ignore[reportArgumentType]
-            model=TestModel(),
-        )
+        deps = self._deps()
+        deps["session_factory"] = fake_factory
+        pipeline(album_slug="honeymoon-2026", session=session, **deps)  # pyright: ignore[reportArgumentType]
 
         for name in (*_GROUP_1, *_GROUP_2):
             assert received[name] is fake_factory
+        # The sequential units reuse the shared session: their factory yields it
+        # (a ``reuse(db_session)`` singleton) rather than opening a new one.
         for name in ("sync", "select", "assemble", "fulfill"):
-            assert received[name] is session
+            with received[name]() as reused:
+                assert reused is session
 
     def test_group_1_failure_aborts_before_select(
         self,
@@ -294,44 +288,26 @@ class TestPipelineWiring:
         monkeypatch: pytest.MonkeyPatch,
         make_album: Callable[..., Album],
     ) -> None:
-        """A group-1 task raising propagates out of `pipeline` (the `.result()`
+        """A group-1 unit raising propagates out of `pipeline` (the `.result()`
         join re-raises it) and nothing downstream of the join runs."""
-        album_id = self._persist(
-            session, make_album(slug="honeymoon-2026", immich_album_id="immich-1")
-        )
+        self._persist(session, make_album(slug="honeymoon-2026", immich_album_id="immich-1"))
 
         calls: list[str] = []
         lock = threading.Lock()
 
-        def _raising_quality(*_args: object, **_kwargs: object) -> None:
-            with lock:
-                calls.append("quality")
-            raise RuntimeError("boom: quality failed")
+        def _make_run(name: str) -> Callable[..., object]:
+            def _run(_self: object) -> None:
+                with lock:
+                    calls.append(name)
+                if name == "quality":
+                    raise RuntimeError("boom: quality failed")
 
-        for stage_name in _STAGE_NAMES:
-            if stage_name == "quality":
-                monkeypatch.setattr(
-                    flow_module, _task_attr(stage_name), task(name=stage_name)(_raising_quality)
-                )
-            else:
-                monkeypatch.setattr(
-                    flow_module,
-                    _task_attr(stage_name),
-                    task(name=stage_name)(self._record(stage_name, album_id, calls, lock)),
-                )
+            return _run
+
+        _patch_runs(monkeypatch, _make_run)
 
         with pytest.raises(RuntimeError, match="boom: quality failed"):
-            pipeline(
-                album_slug="honeymoon-2026",
-                session=session,
-                immich_client=_FakeImmichClient(),  # pyright: ignore[reportArgumentType]
-                similarity=object(),  # pyright: ignore[reportArgumentType]
-                aesthetic=object(),  # pyright: ignore[reportArgumentType]
-                embedder=object(),  # pyright: ignore[reportArgumentType]
-                renderer=object(),  # pyright: ignore[reportArgumentType]
-                printer=object(),  # pyright: ignore[reportArgumentType]
-                model=TestModel(),
-            )
+            pipeline(album_slug="honeymoon-2026", session=session, **self._deps())  # pyright: ignore[reportArgumentType]
 
         assert "quality" in calls
         # resolve_leads is .result()-ed (in _run_group_1's submission order)
@@ -352,40 +328,24 @@ class TestPipelineWiring:
         caption's own joins, precisely so a real `enhance` failure raises its
         own exception rather than the `UpstreamTaskError` `render`'s/
         `caption`'s `wait_for`-blocked `.result()` would otherwise raise."""
-        album_id = self._persist(
-            session, make_album(slug="honeymoon-2026", immich_album_id="immich-1")
-        )
+        self._persist(session, make_album(slug="honeymoon-2026", immich_album_id="immich-1"))
 
         calls: list[str] = []
         lock = threading.Lock()
 
-        def _raising_enhance(*_args: object, **_kwargs: object) -> None:
-            raise RuntimeError("boom: enhance failed")
+        def _make_run(name: str) -> Callable[..., object]:
+            def _run(_self: object) -> None:
+                if name == "enhance":
+                    raise RuntimeError("boom: enhance failed")
+                with lock:
+                    calls.append(name)
 
-        for stage_name in _STAGE_NAMES:
-            if stage_name == "enhance":
-                monkeypatch.setattr(
-                    flow_module, _task_attr(stage_name), task(name=stage_name)(_raising_enhance)
-                )
-            else:
-                monkeypatch.setattr(
-                    flow_module,
-                    _task_attr(stage_name),
-                    task(name=stage_name)(self._record(stage_name, album_id, calls, lock)),
-                )
+            return _run
+
+        _patch_runs(monkeypatch, _make_run)
 
         with pytest.raises(RuntimeError, match="boom: enhance failed"):
-            pipeline(
-                album_slug="honeymoon-2026",
-                session=session,
-                immich_client=_FakeImmichClient(),  # pyright: ignore[reportArgumentType]
-                similarity=object(),  # pyright: ignore[reportArgumentType]
-                aesthetic=object(),  # pyright: ignore[reportArgumentType]
-                embedder=object(),  # pyright: ignore[reportArgumentType]
-                renderer=object(),  # pyright: ignore[reportArgumentType]
-                printer=object(),  # pyright: ignore[reportArgumentType]
-                model=TestModel(),
-            )
+            pipeline(album_slug="honeymoon-2026", session=session, **self._deps())  # pyright: ignore[reportArgumentType]
 
         for name in ("render", "caption", "assemble", "fulfill"):
             assert name not in calls
@@ -397,20 +357,12 @@ class TestPipelineWiring:
         make_album: Callable[..., Album],
     ) -> None:
         self._persist(session, make_album(slug="honeymoon-2026", immich_album_id="immich-1"))
-        _patch_stage_tasks_noop(monkeypatch)
+        _patch_runs(monkeypatch, _noop_run)
         fake_client = _FakeImmichClient()
 
-        pipeline(
-            album_slug="honeymoon-2026",
-            session=session,
-            immich_client=fake_client,  # pyright: ignore[reportArgumentType]
-            similarity=object(),  # pyright: ignore[reportArgumentType]
-            aesthetic=object(),  # pyright: ignore[reportArgumentType]
-            embedder=object(),  # pyright: ignore[reportArgumentType]
-            renderer=object(),  # pyright: ignore[reportArgumentType]
-            printer=object(),  # pyright: ignore[reportArgumentType]
-            model=TestModel(),
-        )
+        deps = self._deps()
+        deps["immich_client"] = fake_client
+        pipeline(album_slug="honeymoon-2026", session=session, **deps)  # pyright: ignore[reportArgumentType]
 
         assert fake_client.closed is False
         # A caller-owned session must still be usable — pipeline() must not have closed it.
@@ -423,23 +375,16 @@ class TestPipelineWiring:
         make_album: Callable[..., Album],
     ) -> None:
         self._persist(session, make_album(slug="honeymoon-2026", immich_album_id="immich-1"))
-        _patch_stage_tasks_noop(monkeypatch)
+        _patch_runs(monkeypatch, _noop_run)
 
         built = _FakeImmichClient()
         monkeypatch.setattr(
             flow_module.ImmichClient, "from_settings", classmethod(lambda cls: built)
         )
 
-        pipeline(
-            album_slug="honeymoon-2026",
-            session=session,
-            similarity=object(),  # pyright: ignore[reportArgumentType]
-            aesthetic=object(),  # pyright: ignore[reportArgumentType]
-            embedder=object(),  # pyright: ignore[reportArgumentType]
-            renderer=object(),  # pyright: ignore[reportArgumentType]
-            printer=object(),  # pyright: ignore[reportArgumentType]
-            model=TestModel(),
-        )
+        deps = self._deps()
+        del deps["immich_client"]  # force pipeline() to build (and own) its own client
+        pipeline(album_slug="honeymoon-2026", session=session, **deps)  # pyright: ignore[reportArgumentType]
 
         assert built.closed is True
 
@@ -455,31 +400,27 @@ class TestPipelineWiring:
         self._persist(session, make_album(slug="honeymoon-2026", immich_album_id="immich-1"))
 
         captured: dict[str, object] = {}
-        _patch_stage_tasks_noop(monkeypatch, exclude="fulfill")
+        lock = threading.Lock()
 
-        def _capture_fulfill(
-            stage: FulfillStage, _album_id: int, _session: Session, **_kwargs: object
-        ) -> None:
-            # The printer is now injected into the constructed FulfillStage by the
-            # Pipeline wiring, not passed as a task argument — read it back off the
-            # stage the task received.
-            captured["printer"] = stage._printer  # pyright: ignore[reportPrivateUsage]
+        def _make_run(name: str) -> Callable[..., object]:
+            def _run(self: object) -> None:
+                if name == "fulfill":
+                    # The printer is injected into the constructed FulfillStage by
+                    # the Pipeline wiring — read it back off the unit the task ran.
+                    with lock:
+                        captured["printer"] = self._printer  # pyright: ignore[reportAttributeAccessIssue]
 
-        monkeypatch.setattr(flow_module, "fulfill_task", _capture_fulfill)
+            return _run
+
+        _patch_runs(monkeypatch, _make_run)
         monkeypatch.setattr(
             flow_module.ImmichClient, "from_settings", classmethod(lambda cls: _FakeImmichClient())
         )
 
-        pipeline(
-            album_slug="honeymoon-2026",
-            session=session,
-            similarity=object(),  # pyright: ignore[reportArgumentType]
-            aesthetic=object(),  # pyright: ignore[reportArgumentType]
-            embedder=object(),  # pyright: ignore[reportArgumentType]
-            renderer=object(),  # pyright: ignore[reportArgumentType]
-            model=TestModel(),
-            # printer deliberately not injected, forcing pipeline() to default it.
-        )
+        deps = self._deps()
+        del deps["immich_client"]
+        del deps["printer"]  # deliberately not injected, forcing pipeline() to default it
+        pipeline(album_slug="honeymoon-2026", session=session, **deps)  # pyright: ignore[reportArgumentType]
 
         assert isinstance(captured["printer"], HtmlPrinter)
 

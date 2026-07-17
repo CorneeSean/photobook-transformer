@@ -26,10 +26,11 @@ Idempotent: skips regeneration if ``Album.assembled_pdf_path`` is already set,
 unless ``force=True``. Writes the PDF to
 ``<output_dir>/<slug>/assembled.pdf`` and stores that path on the ``Album``
 row — the integration contract [`fulfill`](/stages/fulfill.md) (built in
-parallel) reads to submit the print order. :class:`AssembleStage` itself is
-Prefect-free logic (folder-structure.md rule) — its ``run`` takes ``album_id``
-first and is unit-testable without an orchestrator — while this module also
-exports :func:`assemble_task`, the co-located Prefect ``@task`` wrapping it
+parallel) reads to submit the print order. :class:`AssembleStage` is a
+:class:`~album.flow.stages.base.Stage` (folder-structure.md rule) — it takes its
+``album_id`` + ``session_factory`` at construction, opens the session inside
+``run``, and is unit-testable without an orchestrator; it runs as a Prefect task via
+the ``run_as_task`` / ``to_task`` glue inherited from ``TaskUnit``
 (quality-practices.md §1.5).
 """
 
@@ -39,16 +40,14 @@ import logging
 from dataclasses import dataclass
 from itertools import groupby
 from pathlib import Path
-from typing import Any
+from typing import Any, ClassVar
 
 from jinja2 import Environment, FileSystemLoader
-from prefect import task
 from sqlalchemy import select
-from sqlalchemy.orm import Session
 from weasyprint import HTML
 
 from album.db.models import Album, Photo, Segment
-from album.flow._tasks import autocommit
+from album.db.session import SessionFactory
 from album.flow.stages.base import Stage
 
 _log = logging.getLogger(__name__)
@@ -101,16 +100,29 @@ class AssembleStage(Stage[AssembleResult]):
 
     No injected external boundary (it drives Jinja2/WeasyPrint directly); it's a
     class because it owns several layout helpers plus the ``output_dir`` /
-    ``templates_dir`` configuration. ``run`` takes ``album_id`` first.
+    ``templates_dir`` configuration, alongside the ``album_id`` + ``session_factory``
+    the base :class:`~album.flow.stages.base.Stage` takes; ``run`` takes no arguments.
     """
 
-    def __init__(self, output_dir: str | Path, *, templates_dir: Path = _TEMPLATES_DIR) -> None:
+    task_name: ClassVar[str] = "assemble"
+
+    def __init__(
+        self,
+        output_dir: str | Path,
+        album_id: int,
+        session_factory: SessionFactory,
+        *,
+        force: bool = False,
+        templates_dir: Path = _TEMPLATES_DIR,
+    ) -> None:
+        super().__init__(album_id, session_factory, force=force)
         self._output_dir = output_dir
         self._templates_dir = templates_dir
 
-    def _process(self, album: Album, session: Session, *, force: bool) -> AssembleResult:
-        """Lay out ``album``'s selected photos and render a print PDF. Idempotent."""
-        if album.assembled_pdf_path is not None and not force:
+    def _process(self) -> AssembleResult:
+        """Lay out ``self._album``'s selected photos and render a print PDF. Idempotent."""
+        album, session = self._album, self._session
+        if album.assembled_pdf_path is not None and not self._force:
             return AssembleResult(output_path=album.assembled_pdf_path, skipped=True)
 
         all_photos = list(session.scalars(select(Photo).where(Photo.album_id == album.id)))
@@ -124,7 +136,6 @@ class AssembleStage(Stage[AssembleResult]):
         self._render_pdf(html_pages, output_path)
 
         album.assembled_pdf_path = str(output_path)
-        session.flush()
 
         return AssembleResult(
             pages=page_number,
@@ -291,10 +302,3 @@ class AssembleStage(Stage[AssembleResult]):
         # `Page` objects (see its docstring) — a third-party stub gap, not a real
         # type error.
         documents[0].copy(all_pages).write_pdf(str(output_path))  # pyright: ignore[reportArgumentType]
-
-
-@task(name="assemble")
-@autocommit
-def assemble_task(stage: AssembleStage, album_id: int, session: Session) -> None:
-    """``assemble`` as a Prefect ``@task`` on the flow's shared session (``autocommit``)."""
-    stage.run(album_id, session)

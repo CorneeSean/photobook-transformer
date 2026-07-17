@@ -1,14 +1,15 @@
 """``flow/_flow.py`` — Prefect orchestration for one album, start to finish.
 
-This module is the pipeline's **aggregator/integrator**: it imports each stage's
-own Prefect ``@task`` (now co-located with the stage it wraps — see
-folder-structure.md and quality-practices.md §1.5) and composes them into the DAG.
-The per-stage ``@task`` definitions and the stage business logic live in
-``flow/stages/*.py``; the session/commit *policy* those tasks run under lives in
-``flow/_tasks.py``; this module only wires them together and owns the
-session/client lifecycle. :func:`pipeline` is the one ``@flow``, produced by
-:meth:`Pipeline.flow`. Run it by importing and calling it directly — Prefect 3 has
-no ``prefect run --param`` (that's Prefect 1 syntax):
+This module is the pipeline's **aggregator/integrator**: it builds each stage and
+runs it as a Prefect task via the stage's own ``run_as_task()`` /
+``to_task().submit()`` (from the ``TaskUnit`` base — see folder-structure.md and
+quality-practices.md §1.5), composing them into the DAG. The stage business logic
+and its task glue live in ``flow/stages/*.py`` (there are no module-level ``@task``
+functions, and no ``flow/_tasks.py`` — each stage's ``run`` opens and commits its own
+session); this module only wires the stages together and owns the session/client
+lifecycle. :func:`pipeline` is the one ``@flow``, produced by :meth:`Pipeline.flow`.
+Run it by importing and calling it directly — Prefect 3 has no
+``prefect run --param`` (that's Prefect 1 syntax):
 
     pipeline(album_slug="honeymoon-2026")
 
@@ -22,12 +23,14 @@ it wrote, joining at ``assemble``. The four remaining stages (``sync``,
 ``select``, ``assemble``, ``fulfill``) are true chains and stay strictly
 sequential.
 
-The four sequential stages run on **one shared ``Session``**, committed
-after each stage by their ``@task``'s :func:`~album.flow._tasks.autocommit`
-wrapper. The six *grouped* stages take a ``session_factory`` instead (via
-:func:`~album.flow._tasks.owns_session`) and open their own pooled connection
-each — a shared ``Session`` isn't thread-safe, and Prefect's default
-``ThreadPoolTaskRunner`` runs ``.submit()``ed tasks on real threads. Two
+The four sequential stages run on **one shared ``Session``**: each is built with a
+``reuse(db_session)`` factory and run inline via ``run_as_task()``, and its ``run``
+flushes + commits that shared session. The six *grouped* stages are built with the
+real ``session_factory`` and **submitted** via ``to_task().submit()`` — each opens
+its own pooled connection inside ``run`` on its worker thread (a shared ``Session``
+isn't thread-safe, and Prefect's default ``ThreadPoolTaskRunner`` runs
+``.submit()``ed tasks on real threads). A stage holds only its factory (no live
+session), so the same instance is safe to submit. Two
 ``submit()``/``result()`` fences bound the two groups; within group 2,
 ``enhance`` is joined *before* ``render``/``caption`` are even submitted, so
 both run strictly after ``enhance`` has committed — ``render`` because it
@@ -46,9 +49,9 @@ disappears into ``render``'s shadow, which is where the real wall-clock win
 lands.
 
 Two invariants make the split safe: the shared session is **committed right
-before each fan-out** (by the preceding sequential task's own
-:func:`~album.flow._tasks.autocommit` commit, so worker threads read committed
-rows), and **``expire_all()``ed right after each join** (so the sequential
+before each fan-out** (by the preceding sequential stage's own ``run`` commit, so
+worker threads read committed rows), and **``expire_all()``ed right after each
+join** (so the sequential
 stage that follows re-reads what the workers just wrote, rather than stale
 identity-map state from before the fan-out). Concurrency peaks at 3 (group
 1); the default ``QueuePool`` (5 + 10 overflow) comfortably covers that, so
@@ -96,20 +99,20 @@ from sqlalchemy import select as sa_select
 from sqlalchemy.orm import Session
 
 from album.db.models import Album
-from album.db.session import SessionFactory, new_session
+from album.db.session import SessionFactory, new_session, reuse
 from album.db.similarity import PgVectorSimilarity, SimilaritySearch
 from album.definition import AlbumDefinition, LeadFacesDefinition, LeadFacesYAML
 from album.flow.photo_analyzer import PhotoAnalyzer
-from album.flow.stages.assemble import AssembleStage, assemble_task
-from album.flow.stages.caption import CaptionStage, caption_task
-from album.flow.stages.cluster import ClusterStage, cluster_task
-from album.flow.stages.enhance import EnhanceStage, enhance_task
-from album.flow.stages.fulfill import FulfillStage, fulfill_task
-from album.flow.stages.lead_faces import LeadFaceResolver, resolve_leads_task
-from album.flow.stages.quality import AestheticScorer, Embedder, QualityStage, quality_task
-from album.flow.stages.render import DarktableRenderer, Renderer, RenderStage, render_task
-from album.flow.stages.select import SelectStage, select_task
-from album.flow.stages.sync import SyncStage, sync_task
+from album.flow.stages.assemble import AssembleStage
+from album.flow.stages.caption import CaptionStage
+from album.flow.stages.cluster import ClusterStage
+from album.flow.stages.enhance import EnhanceStage
+from album.flow.stages.fulfill import FulfillStage
+from album.flow.stages.lead_faces import LeadFaceResolver
+from album.flow.stages.quality import AestheticScorer, Embedder, QualityStage
+from album.flow.stages.render import DarktableRenderer, Renderer, RenderStage
+from album.flow.stages.select import SelectStage
+from album.flow.stages.sync import SyncStage
 from album.immich.client import ImmichClient
 from album.printers.base import Printer
 from album.printers.html import HtmlPrinter
@@ -294,47 +297,51 @@ class Pipeline:
 
     def _execute(self, album_slug: str, db_session: Session, client: ImmichClient) -> None:
         """The DAG body: four sequential stages on ``db_session``, two fan-out
-        groups via ``session_factory`` — see this module's docstring for the shape.
+        groups on their own per-thread sessions — see this module's docstring.
 
-        Each sequential task commits ``db_session`` via its own ``autocommit``
-        wrapper, so the shared session is already committed before each fan-out
-        (the commit-before-fan-out invariant); ``expire_all()`` after each join is
-        the read-after-write half. Both are load-bearing — see the module docstring.
+        The sequential stages run on the shared ``db_session`` via a ``reuse``
+        factory and commit it in ``run`` (each ``run_as_task`` runs inline), so the
+        shared session is already committed before each fan-out (the
+        commit-before-fan-out invariant); ``expire_all()`` after each join is the
+        read-after-write half. Both are load-bearing — see the module docstring.
         """
         album_id = get_or_create_album(db_session, album_slug)
         db_session.commit()  # publish the bootstrapped album row
 
-        sync_task(SyncStage(client), album_id, db_session)  # autocommit publishes sync's writes
+        # The four sequential stages reuse the shared session (reuse() yields it
+        # without closing) and run inline; each flushes + commits it in run().
+        shared = reuse(db_session)
+        SyncStage(client, album_id, shared).run_as_task()
 
         self._run_group_1(album_id, client, album_slug)
         db_session.expire_all()  # re-read what group 1's own-session workers committed
 
-        select_task(SelectStage(self._similarity), album_id, db_session)
+        SelectStage(self._similarity, album_id, shared).run_as_task()
 
         self._run_group_2(album_id, client)
         db_session.expire_all()  # re-read render's/caption's committed writes
 
-        assemble_task(AssembleStage(_ALBUMS_DIR), album_id, db_session)
-        fulfill_task(FulfillStage(self._printer), album_id, db_session)
+        AssembleStage(_ALBUMS_DIR, album_id, shared).run_as_task()
+        FulfillStage(self._printer, album_id, shared).run_as_task()
 
     def _run_group_1(self, album_id: int, client: ImmichClient, album_slug: str) -> None:
         """resolve-leads ‖ quality ‖ cluster — independent after ``sync``; join at
-        ``select``. Each future's own ``session_factory()`` session rolls back
-        independently on failure, so one bad task doesn't poison the others; the
-        ``.result()`` loop still blocks for all three and re-raises the first
-        error before ``select`` runs. ``lead_faces`` config is read from
-        ``album.yml`` here (the wiring layer knows the slug) and passed through."""
+        ``select``. Each submitted unit opens its **own** pooled session (from
+        ``session_factory``) on its worker thread and rolls back independently on
+        failure, so one bad task doesn't poison the others; the ``.result()`` loop
+        still blocks for all three and re-raises the first error before ``select``
+        runs. ``lead_faces`` config is read from ``album.yml`` here (the wiring layer
+        knows the slug) and passed to the resolver. Each unit holds only the factory
+        (no live session), so it is safe to ``.submit()`` to a worker thread."""
         factory = self._session_factory
         album_dir = _ALBUMS_DIR / album_slug
         config = _load_lead_faces(album_dir)
         futures = [
-            resolve_leads_task.submit(
-                LeadFaceResolver(client), album_id, factory, config, album_dir
-            ),
-            quality_task.submit(
-                QualityStage(client, self._aesthetic, embedder=self._embedder), album_id, factory
-            ),
-            cluster_task.submit(ClusterStage(), album_id, factory),
+            LeadFaceResolver(client, album_id, config, album_dir, factory).to_task().submit(),
+            QualityStage(client, self._aesthetic, album_id, factory, embedder=self._embedder)
+            .to_task()
+            .submit(),
+            ClusterStage(album_id, factory).to_task().submit(),
         ]
         for future in futures:
             future.result()
@@ -356,14 +363,18 @@ class Pipeline:
         the original design sketch, which treated the two as fully independent).
         """
         factory = self._session_factory
-        enhance_future = enhance_task.submit(
-            EnhanceStage(PhotoAnalyzer(client, model=self._model), client), album_id, factory
+        enhance_future = (
+            EnhanceStage(PhotoAnalyzer(client, model=self._model), client, album_id, factory)
+            .to_task()
+            .submit()
         )
         enhance_future.result()
 
-        render_future = render_task.submit(RenderStage(client, self._renderer), album_id, factory)
-        caption_future = caption_task.submit(
-            CaptionStage(PhotoAnalyzer(client, model=self._model)), album_id, factory
+        render_future = RenderStage(client, self._renderer, album_id, factory).to_task().submit()
+        caption_future = (
+            CaptionStage(PhotoAnalyzer(client, model=self._model), album_id, factory)
+            .to_task()
+            .submit()
         )
         for future in (render_future, caption_future):
             future.result()

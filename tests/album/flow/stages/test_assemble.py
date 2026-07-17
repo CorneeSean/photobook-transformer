@@ -20,6 +20,7 @@ from sqlalchemy import select as sa_select
 from sqlalchemy.orm import Session
 
 from album.db.models import Album, Photo, Segment
+from album.db.session import reuse
 from album.flow.stages.assemble import (
     BLEED_IN,
     PAGE_HEIGHT_IN,
@@ -71,7 +72,7 @@ class TestAssembleStage:
 
     def test_raises_for_unknown_album(self, session: Session) -> None:
         with pytest.raises(ValueError, match="no album"):
-            AssembleStage("unused").run(999, session)
+            AssembleStage("unused", 999, reuse(session)).run()
 
     def test_segment_less_album_assembles_with_one_implicit_group(
         self,
@@ -93,7 +94,7 @@ class TestAssembleStage:
         ]
         album_id = self._persist(session, album)
 
-        result = AssembleStage(tmp_path).run(album_id, session)
+        result = AssembleStage(tmp_path, album_id, reuse(session)).run()
 
         assert isinstance(result, AssembleResult)
         assert result.photos_placed == 4
@@ -143,7 +144,7 @@ class TestAssembleStage:
         ]
         album_id = self._persist(session, album)
 
-        result = AssembleStage(tmp_path).run(album_id, session)
+        result = AssembleStage(tmp_path, album_id, reuse(session)).run()
 
         # section(day1) + photo page(day1) + section(day2) + photo page(day2) = 4
         assert result.pages == 4
@@ -176,7 +177,7 @@ class TestAssembleStage:
         ]
         album_id = self._persist(session, album)
 
-        result = AssembleStage(tmp_path).run(album_id, session)
+        result = AssembleStage(tmp_path, album_id, reuse(session)).run()
 
         assert result.photos_placed == 2
         placed = {
@@ -196,12 +197,11 @@ class TestAssembleStage:
         album = make_album()
         album.photos = [selected_photo(album, "d1", scene_id=1)]
         album_id = self._persist(session, album)
-        stage = AssembleStage(tmp_path)
 
-        first = stage.run(album_id, session)
+        first = AssembleStage(tmp_path, album_id, reuse(session)).run()
         assert not first.skipped
 
-        second = stage.run(album_id, session)
+        second = AssembleStage(tmp_path, album_id, reuse(session)).run()
         assert second.skipped
         assert second.output_path == first.output_path
 
@@ -215,10 +215,9 @@ class TestAssembleStage:
         album = make_album()
         album.photos = [selected_photo(album, "e1", scene_id=1)]
         album_id = self._persist(session, album)
-        stage = AssembleStage(tmp_path)
 
-        first = stage.run(album_id, session)
-        second = stage.run(album_id, session, force=True)
+        first = AssembleStage(tmp_path, album_id, reuse(session)).run()
+        second = AssembleStage(tmp_path, album_id, reuse(session), force=True).run()
 
         assert not second.skipped
         assert second.output_path == first.output_path
@@ -236,15 +235,14 @@ class TestAssembleStage:
         photo = selected_photo(album, "e2", scene_id=1)
         album.photos = [photo]
         album_id = self._persist(session, album)
-        stage = AssembleStage(tmp_path)
 
-        stage.run(album_id, session)
+        AssembleStage(tmp_path, album_id, reuse(session)).run()
         assert photo.page_number is not None
 
         photo.selected = False
         session.flush()
 
-        stage.run(album_id, session, force=True)
+        AssembleStage(tmp_path, album_id, reuse(session), force=True).run()
 
         assert photo.page_number is None
 
@@ -259,7 +257,7 @@ class TestAssembleStage:
         album.photos = [selected_photo(album, "f1", scene_id=1)]
         album_id = self._persist(session, album)
 
-        result = AssembleStage(tmp_path).run(album_id, session)
+        result = AssembleStage(tmp_path, album_id, reuse(session)).run()
 
         assert result.output_path == str(tmp_path / "wedding-2026" / "assembled.pdf")
         stored = session.get(Album, album_id)
@@ -277,7 +275,7 @@ class TestAssembleStage:
         album.photos = [selected_photo(album, "g1", scene_id=1, selected=False)]
         album_id = self._persist(session, album)
 
-        result = AssembleStage(tmp_path).run(album_id, session)
+        result = AssembleStage(tmp_path, album_id, reuse(session)).run()
 
         assert result.pages == 0
         assert result.photos_placed == 0
@@ -308,7 +306,7 @@ class TestAssembleStage:
         album_id = self._persist(session, album)
 
         with pytest.raises(ValueError, match="rendered_path"):
-            AssembleStage(tmp_path).run(album_id, session)
+            AssembleStage(tmp_path, album_id, reuse(session)).run()
 
     def test_photo_with_relative_rendered_path_resolves_against_cwd(
         self,
@@ -328,7 +326,7 @@ class TestAssembleStage:
         album.photos = [selected_photo(album, "k1", scene_id=1, rendered_path=relative_image)]
         album_id = self._persist(session, album)
 
-        result = AssembleStage(tmp_path).run(album_id, session)
+        result = AssembleStage(tmp_path, album_id, reuse(session)).run()
 
         assert result.pages == 1
         assert result.output_path is not None
@@ -345,7 +343,7 @@ class TestAssembleStage:
         album.photos = [selected_photo(album, "h1", scene_id=1)]
         album_id = self._persist(session, album)
 
-        result = AssembleStage(tmp_path).run(album_id, session)
+        result = AssembleStage(tmp_path, album_id, reuse(session)).run()
         assert result.output_path is not None
         reader = pypdf.PdfReader(result.output_path)
 
@@ -371,7 +369,7 @@ class TestAssembleStage:
         ]
         album_id = self._persist(session, album)
 
-        result = AssembleStage(tmp_path).run(album_id, session)
+        result = AssembleStage(tmp_path, album_id, reuse(session)).run()
         assert result.output_path is not None
         reader = pypdf.PdfReader(result.output_path)
 

@@ -23,6 +23,7 @@ from sqlalchemy import select as sa_select
 from sqlalchemy.orm import Session
 
 from album.db.models import Album, Photo, Segment
+from album.db.session import SessionFactory, reuse
 from album.flow.photo_analyzer import PhotoAnalyzer
 from album.flow.stages.caption import CaptionResult, CaptionStage
 from tests.doubles import FakeThumbnails, analysis_test_model, counting_analysis_model
@@ -46,8 +47,21 @@ class TestCaptionStage:
         assert album.id is not None
         return album.id
 
-    def _stage(self, thumbnails: object, model: object) -> CaptionStage:
-        return CaptionStage(PhotoAnalyzer(thumbnails, model=model))  # pyright: ignore[reportArgumentType]
+    def _stage(
+        self,
+        thumbnails: object,
+        model: object,
+        album_id: int,
+        session_factory: SessionFactory,
+        *,
+        force: bool = False,
+    ) -> CaptionStage:
+        return CaptionStage(
+            PhotoAnalyzer(thumbnails, model=model),  # pyright: ignore[reportArgumentType]
+            album_id,
+            session_factory,
+            force=force,
+        )
 
     def _mark_analyzed(self, photo: Photo, caption: str) -> None:
         """Simulate a prior analysis run: all five shared fields populated."""
@@ -68,7 +82,7 @@ class TestCaptionStage:
         session.flush()
 
         model, calls = counting_analysis_model()
-        result = self._stage(FakeThumbnails(), model).run(album_id, session)
+        result = self._stage(FakeThumbnails(), model, album_id, reuse(session)).run()
 
         assert calls == []  # no API call made
         assert isinstance(result, CaptionResult)
@@ -86,7 +100,9 @@ class TestCaptionStage:
         ]
         album_id = self._persist(session, album)
 
-        result = self._stage(FakeThumbnails(), analysis_test_model()).run(album_id, session)
+        result = self._stage(
+            FakeThumbnails(), analysis_test_model(), album_id, reuse(session)
+        ).run()
 
         assert result.captioned == 1
         assert result.failed == 0
@@ -110,7 +126,9 @@ class TestCaptionStage:
         ]
         album_id = self._persist(session, album)
 
-        result = self._stage(FakeThumbnails(), analysis_test_model()).run(album_id, session)
+        result = self._stage(
+            FakeThumbnails(), analysis_test_model(), album_id, reuse(session)
+        ).run()
 
         assert result.captioned == 1
         photo = session.scalars(sa_select(Photo)).one()
@@ -123,9 +141,9 @@ class TestCaptionStage:
         album.photos = [make_photo(album, immich_asset_id="a1", filename="a1.jpg", selected=True)]
         album_id = self._persist(session, album)
 
-        result = self._stage(FakeThumbnails({"a1": b"img"}), analysis_test_model()).run(
-            album_id, session
-        )
+        result = self._stage(
+            FakeThumbnails({"a1": b"img"}), analysis_test_model(), album_id, reuse(session)
+        ).run()
 
         assert result.captioned == 1
         photo = session.scalars(sa_select(Photo)).one()
@@ -149,7 +167,7 @@ class TestCaptionStage:
         session.flush()
 
         model, calls = counting_analysis_model()
-        result = self._stage(FakeThumbnails({"a1": b"img"}), model).run(album_id, session)
+        result = self._stage(FakeThumbnails({"a1": b"img"}), model, album_id, reuse(session)).run()
 
         assert calls == []
         assert result.skipped == 1
@@ -162,7 +180,9 @@ class TestCaptionStage:
         album.photos = [make_photo(album, immich_asset_id="a1", filename="a1.jpg", selected=False)]
         album_id = self._persist(session, album)
 
-        result = self._stage(FakeThumbnails(), analysis_test_model()).run(album_id, session)
+        result = self._stage(
+            FakeThumbnails(), analysis_test_model(), album_id, reuse(session)
+        ).run()
 
         assert result.captioned == 0
         assert result.skipped == 0
@@ -179,7 +199,9 @@ class TestCaptionStage:
         ]
         album_id = self._persist(session, album)
 
-        result = self._stage(RaisingThumbnails(), analysis_test_model()).run(album_id, session)
+        result = self._stage(
+            RaisingThumbnails(), analysis_test_model(), album_id, reuse(session)
+        ).run()
 
         assert result.captioned == 1
         assert result.failed == 1
@@ -201,7 +223,7 @@ class TestCaptionStage:
         ]
         target_id = self._persist(session, target_album)
 
-        self._stage(FakeThumbnails(), analysis_test_model()).run(target_id, session)
+        self._stage(FakeThumbnails(), analysis_test_model(), target_id, reuse(session)).run()
 
         other_photo = session.scalars(sa_select(Photo).where(Photo.album_id == other_id)).one()
         assert other_photo.caption is None
@@ -210,7 +232,7 @@ class TestCaptionStage:
 
     def test_raises_for_unknown_album(self, session: Session) -> None:
         with pytest.raises(ValueError):
-            self._stage(FakeThumbnails(), analysis_test_model()).run(999, session)
+            self._stage(FakeThumbnails(), analysis_test_model(), 999, reuse(session)).run()
 
     def test_force_reanalyzes_already_captioned_photo(
         self, session: Session, make_album: Callable[..., Album], make_photo: Callable[..., Photo]
@@ -222,9 +244,13 @@ class TestCaptionStage:
         self._mark_analyzed(photo, "Old caption.")
         session.flush()
 
-        result = self._stage(FakeThumbnails({"a1": b"img"}), analysis_test_model()).run(
-            album_id, session, force=True
-        )
+        result = self._stage(
+            FakeThumbnails({"a1": b"img"}),
+            analysis_test_model(),
+            album_id,
+            reuse(session),
+            force=True,
+        ).run()
 
         assert result.captioned == 1
         photo = session.scalars(sa_select(Photo)).one()

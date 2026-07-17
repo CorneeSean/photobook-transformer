@@ -10,21 +10,18 @@ idempotent: a second run is a no-op unless ``force=True``.
 
 Each printer validates its own precondition (a webpage needs the placed photos; a
 Lulu order needs the master PDF), so this stage stays medium-agnostic.
-:class:`FulfillStage` itself stays Prefect-free logic — so it's unit-testable
-without an orchestrator — while this module also exports :func:`fulfill_task`, the
-thin co-located Prefect ``@task`` that wraps it (folder-structure.md rule;
-quality-practices.md §1.5).
+:class:`FulfillStage` stays Prefect-free logic — so it's unit-testable without an
+orchestrator via ``run`` — and runs as a Prefect task through the ``run_as_task`` /
+``to_task`` glue it inherits from :class:`~album.flow.stages.base.TaskUnit`
+(folder-structure.md rule; quality-practices.md §1.5).
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import ClassVar
 
-from prefect import task
-from sqlalchemy.orm import Session
-
-from album.db.models import Album
-from album.flow._tasks import autocommit
+from album.db.session import SessionFactory
 from album.flow.stages.base import Stage
 from album.printers.base import Printer
 
@@ -40,26 +37,31 @@ class FulfillStage(Stage[FulfillResult]):
 
     Owns no delivery policy of its own: it delegates to the injected
     :class:`~album.printers.base.Printer` and records the printer-agnostic
-    reference it returns on ``Album.output_ref``. ``run`` takes ``album_id`` first;
-    a second run is a no-op unless ``force=True``.
+    reference it returns on ``Album.output_ref``. The ``album_id`` + request-scoped
+    ``Session`` are constructor arguments (base
+    :class:`~album.flow.stages.base.Stage`); a second run is a no-op unless
+    ``force=True``.
     """
 
-    def __init__(self, printer: Printer) -> None:
+    task_name: ClassVar[str] = "fulfill"
+
+    def __init__(
+        self,
+        printer: Printer,
+        album_id: int,
+        session_factory: SessionFactory,
+        *,
+        force: bool = False,
+    ) -> None:
+        super().__init__(album_id, session_factory, force=force)
         self._printer = printer
 
-    def _process(self, album: Album, session: Session, *, force: bool) -> FulfillResult:
-        """Deliver ``album``'s assembled book. Idempotent unless ``force=True``."""
-        if album.output_ref is not None and not force:
+    def _process(self) -> FulfillResult:
+        """Deliver ``self._album``'s assembled book. Idempotent unless ``force=True``."""
+        album, session = self._album, self._session
+        if album.output_ref is not None and not self._force:
             return FulfillResult(printed=False, output_ref=album.output_ref)
 
         result = self._printer.print(album, session)
         album.output_ref = result.output_ref
-        session.flush()
         return FulfillResult(printed=True, output_ref=result.output_ref)
-
-
-@task(name="fulfill")
-@autocommit
-def fulfill_task(stage: FulfillStage, album_id: int, session: Session) -> None:
-    """``fulfill`` as a Prefect ``@task`` on the flow's shared session (``autocommit``)."""
-    stage.run(album_id, session)

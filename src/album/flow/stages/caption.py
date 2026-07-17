@@ -18,10 +18,11 @@ Context grounding (segment label/place, ``Album.meta``) is assembled inside
 out-of-segment photo still gets an accurate, if generic, caption rather than
 erroring (AGENTS.md rule 1 — genericity).
 
-:class:`CaptionStage` itself is Prefect-free logic (folder-structure.md rule) —
-its ``run`` takes ``album_id`` first and is unit-testable without an orchestrator —
-while this module also exports :func:`caption_task`, the co-located Prefect
-``@task`` wrapping it (quality-practices.md §1.5). Per-photo failures are isolated
+:class:`CaptionStage` is a :class:`~album.flow.stages.base.Stage` (folder-structure.md
+rule) — it takes its ``album_id`` + ``session_factory`` at construction, opens the
+session inside ``run``, and is unit-testable without an orchestrator; it runs as a
+Prefect task via the ``run_as_task`` / ``to_task`` glue inherited from ``TaskUnit``
+(quality-practices.md §1.5). Per-photo failures are isolated
 (try/except + log + continue), consistent with ``quality.py``/``enhance.py``, so
 one bad photo (unreadable thumbnail, unparseable model response) doesn't sink an
 album's captioning run.
@@ -31,13 +32,13 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
+from typing import ClassVar
 
-from prefect import task
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from album.db.models import Album, Photo
-from album.flow._tasks import owns_session
+from album.db.models import Photo
+from album.db.session import SessionFactory
 from album.flow.photo_analyzer import PhotoAnalyzer
 from album.flow.stages.base import Stage
 
@@ -60,11 +61,21 @@ class CaptionStage(Stage[CaptionResult]):
     photo across the whole pipeline, regardless of stage order).
     """
 
-    def __init__(self, analyzer: PhotoAnalyzer) -> None:
+    task_name: ClassVar[str] = "caption"
+
+    def __init__(
+        self,
+        analyzer: PhotoAnalyzer,
+        album_id: int,
+        session_factory: SessionFactory,
+        *,
+        force: bool = False,
+    ) -> None:
+        super().__init__(album_id, session_factory, force=force)
         self._analyzer = analyzer
 
-    def _process(self, album: Album, session: Session, *, force: bool) -> CaptionResult:
-        """Ensure every ``selected`` photo in ``album`` has a stored caption.
+    def _process(self) -> CaptionResult:
+        """Ensure every ``selected`` photo in ``self._album`` has a stored caption.
 
         Idempotent unless ``force``: a photo whose shared analysis already ran
         (via a prior `enhance` run, or a prior `caption` run) is not re-analyzed —
@@ -73,13 +84,12 @@ class CaptionStage(Stage[CaptionResult]):
         one shared call.
         """
         result = CaptionResult()
-        photos = session.scalars(
-            select(Photo).where(Photo.album_id == album.id, Photo.selected == True)  # noqa: E712
+        photos = self._session.scalars(
+            select(Photo).where(Photo.album_id == self._album.id, Photo.selected == True)  # noqa: E712
         )
         for photo in photos:
-            self._caption_photo(photo, session, force, result)
+            self._caption_photo(photo, self._session, self._force, result)
 
-        session.flush()
         return result
 
     def _caption_photo(
@@ -102,11 +112,4 @@ class CaptionStage(Stage[CaptionResult]):
             result.captioned += 1
 
 
-@task(name="caption")
-@owns_session
-def caption_task(stage: CaptionStage, album_id: int, session: Session) -> None:
-    """``caption`` as a Prefect ``@task`` on its own pooled session (``owns_session``)."""
-    stage.run(album_id, session)
-
-
-__all__ = ["CaptionResult", "CaptionStage", "caption_task"]
+__all__ = ["CaptionResult", "CaptionStage"]

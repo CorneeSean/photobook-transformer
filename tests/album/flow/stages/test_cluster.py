@@ -16,6 +16,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from album.db.models import Album, Photo, Segment
+from album.db.session import reuse
 from album.flow.stages.cluster import ClusterResult, ClusterStage
 
 # Two far-apart coordinates (Lisbon vs Porto, ~250 km) — distinct spatial clusters.
@@ -88,7 +89,7 @@ class TestCluster:
         ]
         album_id = self._persist(session, album)
 
-        result = ClusterStage().run(album_id, session)
+        result = ClusterStage(album_id, reuse(session)).run()
 
         photos = self._by_asset(session)
         assert photos["p1"].segment_id == day1.id
@@ -107,7 +108,7 @@ class TestCluster:
         ]
         album_id = self._persist(session, album)
 
-        result = ClusterStage().run(album_id, session)
+        result = ClusterStage(album_id, reuse(session)).run()
 
         photos = self._by_asset(session)
         assert all(p.segment_id is None for p in photos.values())  # implicit single segment
@@ -125,7 +126,7 @@ class TestCluster:
         ]
         album_id = self._persist(session, album)
 
-        result = ClusterStage().run(album_id, session)
+        result = ClusterStage(album_id, reuse(session)).run()
 
         photos = self._by_asset(session)
         assert photos["p1"].scene_id != photos["p2"].scene_id
@@ -145,7 +146,7 @@ class TestCluster:
         ]
         album_id = self._persist(session, album)
 
-        result = ClusterStage().run(album_id, session)
+        result = ClusterStage(album_id, reuse(session)).run()
 
         photos = self._by_asset(session)
         assert photos["p1"].scene_id == photos["p2"].scene_id
@@ -166,7 +167,7 @@ class TestCluster:
         ]
         album_id = self._persist(session, album)
 
-        result = ClusterStage().run(album_id, session)
+        result = ClusterStage(album_id, reuse(session)).run()
 
         photos = self._by_asset(session)
         assert photos["p1"].scene_id == photos["p2"].scene_id
@@ -185,7 +186,7 @@ class TestCluster:
         ]
         album_id = self._persist(session, album)
 
-        result = ClusterStage().run(album_id, session)
+        result = ClusterStage(album_id, reuse(session)).run()
 
         photos = self._by_asset(session)
         assert photos["p1"].scene_id == photos["p2"].scene_id
@@ -213,7 +214,7 @@ class TestCluster:
         ]
         album_id = self._persist(session, album)
 
-        result = ClusterStage().run(album_id, session)
+        result = ClusterStage(album_id, reuse(session)).run()
 
         photos = self._by_asset(session)
         assert photos["inside"].segment_id == day1.id
@@ -233,7 +234,7 @@ class TestCluster:
         ]
         album_id = self._persist(session, album)
 
-        result = ClusterStage().run(album_id, session)
+        result = ClusterStage(album_id, reuse(session)).run()
 
         photos = self._by_asset(session)
         assert photos["undated"].segment_id is None
@@ -250,11 +251,10 @@ class TestCluster:
             photo(album, "p2", self._dt(14, 0)),
         ]
         album_id = self._persist(session, album)
-        stage = ClusterStage()
 
-        first = stage.run(album_id, session)
+        first = ClusterStage(album_id, reuse(session)).run()
         before = {a: p.scene_id for a, p in self._by_asset(session).items()}
-        second = stage.run(album_id, session)
+        second = ClusterStage(album_id, reuse(session)).run()
         after = {a: p.scene_id for a, p in self._by_asset(session).items()}
 
         assert first == second == ClusterResult(scenes=2)
@@ -270,7 +270,7 @@ class TestCluster:
         target.photos = [photo(target, "t1", self._dt(10, 0))]
         target_id = self._persist(session, target)
 
-        ClusterStage().run(target_id, session)
+        ClusterStage(target_id, reuse(session)).run()
 
         other_photo = session.scalars(select(Photo).where(Photo.album_id == other_id)).one()
         assert other_photo.scene_id is None  # untouched

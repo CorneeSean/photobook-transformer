@@ -285,50 +285,45 @@
 
   <div class="stack">
     <div>
-      <p class="codelabel"><b>1 · Session ownership.</b> A shared SQLAlchemy <code>Session</code> isn't thread-safe, so the six grouped stages take a <b>factory</b> and open their own pooled connection.</p>
-<pre><code>SessionFactory = Callable[[], Session]
+      <p class="codelabel"><b>1 · Session ownership.</b> A shared SQLAlchemy <code>Session</code> isn't thread-safe, so a stage takes a <b>factory</b> (never a live session) and opens the session <b>inside <span class="mono">run</span></b>, on whichever thread runs it — which is what makes the same instance safe to <span class="mono">.submit()</span>.</p>
+<pre><code>SessionFactory = Callable[[], AbstractContextManager[Session]]
 
-<span class="c"># before — receives the flow's one shared session</span>
-def _quality_task(album_id, session, client, aesthetic, embedder):
-    QualityStage(client, aesthetic, embedder=embedder).run(album_id, session)
-    session.commit()
+<span class="c"># sequential — reuses the flow's shared session (a reuse() singleton that yields</span>
+<span class="c"># it without closing) and runs inline; run() commits the shared session</span>
+SyncStage(client, album_id, reuse(db_session)).run_as_task()
 
-<span class="c"># after — its OWN pooled connection, never the shared one</span>
-def _quality_task(album_id, session_factory, client, aesthetic, embedder):
-    with session_factory() as session:
-        QualityStage(client, aesthetic, embedder=embedder).run(album_id, session)
-        session.commit()</code></pre>
+<span class="c"># fan-out — its OWN pooled connection per worker thread; run() opens it, commits,</span>
+<span class="c"># and closes it. No builder needed: the unit holds only the factory.</span>
+QualityStage(client, aesthetic, album_id, session_factory, embedder=e).to_task().submit()</code></pre>
     </div>
 
     <div>
-      <p class="codelabel"><b>2 · The flow body.</b> <code>.submit()</code> schedules on Prefect 3's <code>ThreadPoolTaskRunner</code>; <code>.result()</code> blocks and re-raises. <code>wait_for</code> keeps render chained behind enhance.</p>
-<pre><code>_sync_task(album_id, db_session, client)
-db_session.commit()                 <span class="c"># publish sync's writes before fan-out</span>
+      <p class="codelabel"><b>2 · The flow body.</b> <code>.submit()</code> schedules on Prefect 3's <code>ThreadPoolTaskRunner</code>; <code>.result()</code> blocks and re-raises. Joining enhance's future before render/caption are submitted keeps them strictly after enhance's commit.</p>
+<pre><code>shared = reuse(db_session)          <span class="c"># sequential stages reuse this; run() commits, never closes</span>
+
+SyncStage(client, album_id, shared).run_as_task()   <span class="c"># inline; run() commits the shared session</span>
 
 <span class="c"># ── group 1: independent after sync ──</span>
 g1 = [
-    _resolve_leads_task.submit(album_id, session_factory, client, album_slug),
-    _quality_task.submit(album_id, session_factory, client, aesthetic_m, embedder_m),
-    _cluster_task.submit(album_id, session_factory),
+    LeadFaceResolver(client, album_id, config, album_dir, session_factory).to_task().submit(),
+    QualityStage(client, aesthetic, album_id, session_factory, embedder=e).to_task().submit(),
+    ClusterStage(album_id, session_factory).to_task().submit(),
 ]
 for f in g1:
     f.result()                      <span class="c"># join: blocks + re-raises any stage error</span>
 
 db_session.expire_all()             <span class="c"># drop stale identity-map state</span>
-_select_task(album_id, db_session, similarity)
-db_session.commit()
+SelectStage(similarity, album_id, shared).run_as_task()
 
-<span class="c"># ── group 2: enhance‖caption, render chained behind enhance ──</span>
-enhance_f = _enhance_task.submit(album_id, session_factory, client, model)
-caption_f = _caption_task.submit(album_id, session_factory, client, model)
-render_f  = _render_task.submit(album_id, session_factory, client, renderer,
-                                wait_for=[enhance_f])   <span class="c"># needs enhance's XMP</span>
+<span class="c"># ── group 2: enhance first, then render‖caption ──</span>
+EnhanceStage(analyzer, client, album_id, session_factory).to_task().submit().result()
+render_f  = RenderStage(client, renderer, album_id, session_factory).to_task().submit()
+caption_f = CaptionStage(analyzer, album_id, session_factory).to_task().submit()
 for f in (render_f, caption_f):
     f.result()
 
-_assemble_task(album_id, db_session)
-db_session.commit()
-_fulfill_task(album_id, db_session, printer)</code></pre>
+AssembleStage(albums_dir, album_id, shared).run_as_task()
+FulfillStage(printer, album_id, shared).run_as_task()</code></pre>
     </div>
   </div>
 

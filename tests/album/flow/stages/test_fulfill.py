@@ -15,6 +15,7 @@ import pytest
 from sqlalchemy.orm import Session
 
 from album.db.models import Album
+from album.db.session import reuse
 from album.flow.stages.fulfill import FulfillStage
 from album.printers.base import PrintResult
 
@@ -47,7 +48,7 @@ class TestFulfillStage:
         album_id = self._persist(session, make_album())
         printer = FakePrinter(output_ref="data/albums/honeymoon-2026/book/index.html")
 
-        result = FulfillStage(printer).run(album_id, session)
+        result = FulfillStage(printer, album_id, reuse(session)).run()
 
         assert result.printed is True
         assert result.output_ref == "data/albums/honeymoon-2026/book/index.html"
@@ -62,7 +63,7 @@ class TestFulfillStage:
         album_id = self._persist(session, make_album(output_ref="already-printed"))
         printer = FakePrinter(output_ref="should-not-be-used")
 
-        result = FulfillStage(printer).run(album_id, session)
+        result = FulfillStage(printer, album_id, reuse(session)).run()
 
         assert result.printed is False
         assert result.output_ref == "already-printed"
@@ -77,7 +78,7 @@ class TestFulfillStage:
         album_id = self._persist(session, make_album(output_ref="old-ref"))
         printer = FakePrinter(output_ref="new-ref")
 
-        result = FulfillStage(printer).run(album_id, session, force=True)
+        result = FulfillStage(printer, album_id, reuse(session), force=True).run()
 
         assert result.printed is True
         assert result.output_ref == "new-ref"
@@ -90,6 +91,6 @@ class TestFulfillStage:
         printer = FakePrinter()
 
         with pytest.raises(ValueError, match="no album"):
-            FulfillStage(printer).run(999, session)
+            FulfillStage(printer, 999, reuse(session)).run()
 
         assert printer.calls == []

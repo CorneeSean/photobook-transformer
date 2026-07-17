@@ -25,6 +25,7 @@ from sqlalchemy.orm import Session
 from testcontainers.postgres import PostgresContainer
 
 from album.db.models import Album, Base, Person, Photo
+from album.db.session import reuse
 from album.db.similarity import PgVectorSimilarity
 from album.flow.stages.select import SelectStage
 from alembic import command
@@ -126,8 +127,9 @@ class TestSelectAgainstRealPgvector:
         migrated_session.add(album)
         migrated_session.commit()
 
-        stage = SelectStage(PgVectorSimilarity(), threshold=0.9)
-        result = stage.run(album.id, migrated_session)
+        result = SelectStage(
+            PgVectorSimilarity(), album.id, reuse(migrated_session), threshold=0.9
+        ).run()
 
         photos = self._by_asset(album)
         assert photos["nd-best"].selected is True
@@ -136,7 +138,9 @@ class TestSelectAgainstRealPgvector:
         assert result.selected == 2
 
         # Idempotent over the real query too (resets + recomputes, same result).
-        rerun = stage.run(album.id, migrated_session)
+        rerun = SelectStage(
+            PgVectorSimilarity(), album.id, reuse(migrated_session), threshold=0.9
+        ).run()
         assert rerun == result
         assert {p.immich_asset_id for p in album.photos if p.selected} == {"nd-best", "nd-distinct"}
 
@@ -176,11 +180,11 @@ class TestSelectAgainstRealPgvector:
         ).scalar_one()
         assert stored == ["p-lead"]
 
-        stage = SelectStage(PgVectorSimilarity(), threshold=0.9)
-
         # Negative control (no lead yet): the second photo is a near-dup of the
         # first per the REAL cosine query, so with no lead status it is dropped.
-        control = stage.run(album.id, migrated_session)
+        control = SelectStage(
+            PgVectorSimilarity(), album.id, reuse(migrated_session), threshold=0.9
+        ).run()
         photos = self._by_asset(album)
         assert (photos["ld-nonlead"].selected, photos["ld-lead"].selected) == (True, False)
         assert control.selected == 1
@@ -190,7 +194,9 @@ class TestSelectAgainstRealPgvector:
         album.people.append(Person(immich_person_id="p-lead", is_lead=True))
         migrated_session.commit()
 
-        result = stage.run(album.id, migrated_session)
+        result = SelectStage(
+            PgVectorSimilarity(), album.id, reuse(migrated_session), threshold=0.9
+        ).run()
         photos = self._by_asset(album)
         assert (photos["ld-nonlead"].selected, photos["ld-lead"].selected) == (True, True)
         assert result.selected == 2

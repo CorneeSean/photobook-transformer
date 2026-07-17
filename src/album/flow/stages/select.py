@@ -46,10 +46,11 @@ interface, so this module is unit-testable on in-memory SQLite with similarity
 stubbed (see [build step 8](/build/build-order.md)).
 
 Idempotent: resets ``selected`` for the album up front, so re-running recomputes
-from scratch rather than compounding. :class:`SelectStage` itself is Prefect-free
-logic (folder-structure.md rule) — its ``run`` takes ``album_id`` first and is
-unit-testable without an orchestrator — while this module also exports
-:func:`select_task`, the co-located Prefect ``@task`` wrapping it
+from scratch rather than compounding. :class:`SelectStage` is a
+:class:`~album.flow.stages.base.Stage` (folder-structure.md rule) — it takes its
+``album_id`` + ``session_factory`` at construction, opens the session inside
+``run``, and is unit-testable without an orchestrator; it runs as a Prefect task via
+the ``run_as_task`` / ``to_task`` glue inherited from ``TaskUnit``
 (quality-practices.md §1.5).
 """
 
@@ -57,14 +58,14 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
+from typing import ClassVar
 
-from prefect import task
 from sqlalchemy import select as sa_select
 from sqlalchemy.orm import Session
 
-from album.db.models import Album, Photo
+from album.db.models import Photo
+from album.db.session import SessionFactory
 from album.db.similarity import SimilaritySearch
-from album.flow._tasks import autocommit
 from album.flow.stages.base import Stage
 
 _log = logging.getLogger(__name__)
@@ -90,24 +91,32 @@ class SelectStage(Stage[SelectResult]):
     :class:`~album.db.similarity.SimilaritySearch`, injected here (with the
     near-duplicate ``threshold`` and the people/lead boosts as construction-time
     config) so the stage is unit-testable on in-memory SQLite with similarity
-    stubbed. ``run`` takes the request-scoped ``album_id`` + ``Session``.
+    stubbed. The ``album_id`` + ``session_factory`` are constructor arguments (base
+    :class:`~album.flow.stages.base.Stage`); ``run`` takes none.
     """
+
+    task_name: ClassVar[str] = "select"
 
     def __init__(
         self,
         similarity: SimilaritySearch,
+        album_id: int,
+        session_factory: SessionFactory,
         *,
+        force: bool = False,
         threshold: float = _DEFAULT_SIMILARITY_THRESHOLD,
         lead_boost: float = _DEFAULT_LEAD_BOOST,
         group_boost: float = _DEFAULT_GROUP_BOOST,
     ) -> None:
+        super().__init__(album_id, session_factory, force=force)
         self._similarity = similarity
         self._threshold = threshold
         self._lead_boost = lead_boost
         self._group_boost = group_boost
 
-    def _process(self, album: Album, session: Session, *, force: bool) -> SelectResult:
-        """Pick the best, diverse photos per scene in ``album``. Idempotent."""
+    def _process(self) -> SelectResult:
+        """Pick the best, diverse photos per scene in ``self._album``. Idempotent."""
+        album, session = self._album, self._session
         lead_ids = {person.immich_person_id for person in album.people if person.is_lead}
 
         # order_by(Photo.id): deterministic tie-breaking when effective scores are equal.
@@ -121,7 +130,6 @@ class SelectStage(Stage[SelectResult]):
         for scene_id in sorted(by_scene):
             result.selected += self._select_scene(by_scene[scene_id], session, lead_ids)
 
-        session.flush()
         return result
 
     @staticmethod
@@ -256,10 +264,3 @@ class SelectStage(Stage[SelectResult]):
     @staticmethod
     def _covered(person_id: str, picked: list[Photo]) -> bool:
         return any(person_id in (photo.person_ids or []) for photo in picked)
-
-
-@task(name="select")
-@autocommit
-def select_task(stage: SelectStage, album_id: int, session: Session) -> None:
-    """``select`` as a Prefect ``@task`` on the flow's shared session (``autocommit``)."""
-    stage.run(album_id, session)

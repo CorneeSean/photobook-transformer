@@ -13,26 +13,25 @@ Thumbnails come from Immich (via the :class:`ThumbnailSource` protocol, which
 :class:`~album.immich.client.ImmichClient` satisfies) rather than re-reading
 originals. Idempotent: a photo already fully scored is skipped unless ``force``.
 
-:class:`QualityStage` itself stays Prefect-free logic (folder-structure.md rule),
-so ``run`` — ``album_id`` first — is unit-testable without an orchestrator; this
-module also exports :func:`quality_task`, the co-located Prefect ``@task`` that
-wraps it (quality-practices.md §1.5).
+:class:`QualityStage` stays Prefect-free logic (folder-structure.md rule), taking
+its ``album_id`` + ``session_factory`` at construction and opening the session
+inside ``run``, so it is unit-testable without an orchestrator; it runs as a Prefect
+task via the ``run_as_task`` / ``to_task`` glue inherited from ``TaskUnit``
+(quality-practices.md §1.5).
 """
 
 from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
-from typing import Protocol, runtime_checkable
+from typing import ClassVar, Protocol, runtime_checkable
 
 import cv2
 import numpy as np
-from prefect import task
 from sqlalchemy import select
-from sqlalchemy.orm import Session
 
-from album.db.models import Album, Photo
-from album.flow._tasks import owns_session
+from album.db.models import Photo
+from album.db.session import SessionFactory
 from album.flow.stages.base import Stage
 
 _log = logging.getLogger(__name__)
@@ -87,24 +86,30 @@ class QualityStage(Stage[QualityResult]):
     :class:`ThumbnailSource` (Immich), so the stage is unit-testable with stubs.
     """
 
+    task_name: ClassVar[str] = "quality"
+
     def __init__(
         self,
         thumbnails: ThumbnailSource,
         aesthetic: AestheticScorer,
+        album_id: int,
+        session_factory: SessionFactory,
         *,
+        force: bool = False,
         embedder: Embedder | None = None,
     ) -> None:
+        super().__init__(album_id, session_factory, force=force)
         self._thumbnails = thumbnails
         self._aesthetic = aesthetic
         self._embedder = embedder
 
-    def _process(self, album: Album, session: Session, *, force: bool) -> QualityResult:
-        """Score every photo in ``album``. Idempotent unless ``force``."""
+    def _process(self) -> QualityResult:
+        """Score every photo in ``self._album``. Idempotent unless ``force``."""
         result = QualityResult()
-        for photo in session.scalars(select(Photo).where(Photo.album_id == album.id)):
-            self._score_photo(photo, result, force=force)
+        photos = self._session.scalars(select(Photo).where(Photo.album_id == self._album.id))
+        for photo in photos:
+            self._score_photo(photo, result, force=self._force)
 
-        session.flush()
         return result
 
     def _score_photo(self, photo: Photo, result: QualityResult, *, force: bool) -> None:
@@ -149,10 +154,3 @@ class QualityStage(Stage[QualityResult]):
             _log.warning("failed to score photo %s (%s)", photo.id, photo.filename, exc_info=True)
             return None
         return blur, aesthetic_score, embedding
-
-
-@task(name="quality")
-@owns_session
-def quality_task(stage: QualityStage, album_id: int, session: Session) -> None:
-    """``quality`` as a Prefect ``@task`` on its own pooled session (``owns_session``)."""
-    stage.run(album_id, session)

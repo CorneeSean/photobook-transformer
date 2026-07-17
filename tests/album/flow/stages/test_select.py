@@ -20,6 +20,7 @@ from sqlalchemy import select as sa_select
 from sqlalchemy.orm import Session
 
 from album.db.models import Album, Person, Photo
+from album.db.session import reuse
 from album.flow.stages.select import SelectResult, SelectStage
 
 # Unit-ish vectors chosen so cosine similarity is easy to reason about:
@@ -99,7 +100,7 @@ class TestSelect:
         album.photos = [low, high]
         album_id = self._persist(session, album)
 
-        result = SelectStage(StubSimilarity()).run(album_id, session)
+        result = SelectStage(StubSimilarity(), album_id, reuse(session)).run()
 
         photos = self._by_asset(session)
         assert photos["high"].selected is True
@@ -116,7 +117,7 @@ class TestSelect:
         album.photos = [best, near_dup]
         album_id = self._persist(session, album)
 
-        result = SelectStage(StubSimilarity(), threshold=0.9).run(album_id, session)
+        result = SelectStage(StubSimilarity(), album_id, reuse(session), threshold=0.9).run()
 
         photos = self._by_asset(session)
         assert photos["best"].selected is True
@@ -149,7 +150,7 @@ class TestSelect:
         album.photos = [best, worse]
         album_id = self._persist(session, album)
 
-        result = SelectStage(StubSimilarity()).run(album_id, session)
+        result = SelectStage(StubSimilarity(), album_id, reuse(session)).run()
 
         photos = self._by_asset(session)
         assert photos["best"].selected is True
@@ -167,7 +168,7 @@ class TestSelect:
         ]
         album_id = self._persist(session, album)
 
-        result = SelectStage(StubSimilarity()).run(album_id, session)
+        result = SelectStage(StubSimilarity(), album_id, reuse(session)).run()
 
         assert result == SelectResult(selected=1, scenes=1)
         selected = [p for p in session.scalars(sa_select(Photo)) if p.selected]
@@ -185,7 +186,7 @@ class TestSelect:
         ]
         album_id = self._persist(session, album)
 
-        result = SelectStage(StubSimilarity()).run(album_id, session)
+        result = SelectStage(StubSimilarity(), album_id, reuse(session)).run()
 
         assert result == SelectResult(selected=3, scenes=1)
         assert all(p.selected for p in session.scalars(sa_select(Photo)))
@@ -201,7 +202,7 @@ class TestSelect:
         album.photos = [clustered, unclustered]
         album_id = self._persist(session, album)
 
-        result = SelectStage(StubSimilarity()).run(album_id, session)
+        result = SelectStage(StubSimilarity(), album_id, reuse(session)).run()
 
         photos = self._by_asset(session)
         assert photos["clustered"].selected is True
@@ -221,7 +222,7 @@ class TestSelect:
         album.photos = [s1_best, s1_worst, s2_best]
         album_id = self._persist(session, album)
 
-        result = SelectStage(StubSimilarity()).run(album_id, session)
+        result = SelectStage(StubSimilarity(), album_id, reuse(session)).run()
 
         photos = self._by_asset(session)
         assert photos["s1_best"].selected is True
@@ -242,7 +243,7 @@ class TestSelect:
         album.photos = [first, no_embedding]
         album_id = self._persist(session, album)
 
-        result = SelectStage(StubSimilarity()).run(album_id, session)
+        result = SelectStage(StubSimilarity(), album_id, reuse(session)).run()
 
         photos = self._by_asset(session)
         assert photos["first"].selected is True
@@ -266,7 +267,7 @@ class TestSelect:
         album.photos = [picked_no_embedding, near_dup_of_a, also_a]
         album_id = self._persist(session, album)
 
-        result = SelectStage(StubSimilarity(), threshold=0.9).run(album_id, session)
+        result = SelectStage(StubSimilarity(), album_id, reuse(session), threshold=0.9).run()
 
         photos = self._by_asset(session)
         assert photos["picked_no_embedding"].selected is True  # top score, always picked first
@@ -283,11 +284,10 @@ class TestSelect:
             photo(album, "b", scene_id=1, aesthetic_score=0.8, clip_embedding=_B),
         ]
         album_id = self._persist(session, album)
-        stage = SelectStage(StubSimilarity())
 
-        first = stage.run(album_id, session)
+        first = SelectStage(StubSimilarity(), album_id, reuse(session)).run()
         before = {a: p.selected for a, p in self._by_asset(session).items()}
-        second = stage.run(album_id, session)
+        second = SelectStage(StubSimilarity(), album_id, reuse(session)).run()
         after = {a: p.selected for a, p in self._by_asset(session).items()}
 
         assert first == second == SelectResult(selected=2, scenes=1)
@@ -303,7 +303,7 @@ class TestSelect:
         target.photos = [photo(target, "t1", scene_id=1, aesthetic_score=0.9, clip_embedding=_A)]
         target_id = self._persist(session, target)
 
-        SelectStage(StubSimilarity()).run(target_id, session)
+        SelectStage(StubSimilarity(), target_id, reuse(session)).run()
 
         other_row = session.scalars(sa_select(Photo).where(Photo.album_id == other_id)).one()
         assert other_row.selected is False  # untouched
@@ -312,7 +312,7 @@ class TestSelect:
 
     def test_raises_for_unknown_album(self, session: Session) -> None:
         with pytest.raises(ValueError, match="no album"):
-            SelectStage(StubSimilarity()).run(999, session)
+            SelectStage(StubSimilarity(), 999, reuse(session)).run()
 
 
 class TestPeopleAwareSelect:
@@ -375,7 +375,7 @@ class TestPeopleAwareSelect:
         album_id = self._persist(session, album)
 
         # Explicit boosts so the test doesn't silently depend on the module defaults.
-        result = SelectStage(StubSimilarity(), group_boost=0.01).run(album_id, session)
+        result = SelectStage(StubSimilarity(), album_id, reuse(session), group_boost=0.01).run()
 
         photos = self._by_asset(session)
         assert photos["group"].selected is True
@@ -395,7 +395,7 @@ class TestPeopleAwareSelect:
         album.photos = [solo, group]
         album_id = self._persist(session, album)
 
-        SelectStage(StubSimilarity()).run(album_id, session)
+        SelectStage(StubSimilarity(), album_id, reuse(session)).run()
 
         photos = self._by_asset(session)
         assert photos["solo"].selected is True
@@ -418,7 +418,7 @@ class TestPeopleAwareSelect:
         self._lead(album, "p-lead")
         album_id = self._persist(session, album)
 
-        result = SelectStage(StubSimilarity(), threshold=0.9).run(album_id, session)
+        result = SelectStage(StubSimilarity(), album_id, reuse(session), threshold=0.9).run()
 
         photos = self._by_asset(session)
         assert photos["nonlead"].selected is True
@@ -440,7 +440,7 @@ class TestPeopleAwareSelect:
         self._lead(album, "p-me", "p-wife")
         album_id = self._persist(session, album)
 
-        result = SelectStage(StubSimilarity(), threshold=0.9).run(album_id, session)
+        result = SelectStage(StubSimilarity(), album_id, reuse(session), threshold=0.9).run()
 
         photos = self._by_asset(session)
         assert photos["me"].selected is True
@@ -461,9 +461,9 @@ class TestPeopleAwareSelect:
         album_id = self._persist(session, album)
 
         # lead_boost (0.05) must beat group_boost * 3 people (0.03).
-        result = SelectStage(StubSimilarity(), lead_boost=0.05, group_boost=0.01).run(
-            album_id, session
-        )
+        result = SelectStage(
+            StubSimilarity(), album_id, reuse(session), lead_boost=0.05, group_boost=0.01
+        ).run()
 
         photos = self._by_asset(session)
         assert photos["lead"].selected is True
@@ -491,8 +491,13 @@ class TestPeopleAwareSelect:
         album_id = self._persist(session, album)
 
         result = SelectStage(
-            StubSimilarity(), threshold=0.9, lead_boost=0.05, group_boost=0.01
-        ).run(album_id, session)
+            StubSimilarity(),
+            album_id,
+            reuse(session),
+            threshold=0.9,
+            lead_boost=0.05,
+            group_boost=0.01,
+        ).run()
 
         photos = self._by_asset(session)
         # Among the near-dups, the two-lead frame wins; the one-lead near-dup loses.
@@ -514,7 +519,7 @@ class TestPeopleAwareSelect:
         album.photos = [best, near]
         album_id = self._persist(session, album)  # no leads
 
-        result = SelectStage(StubSimilarity(), threshold=0.9).run(album_id, session)
+        result = SelectStage(StubSimilarity(), album_id, reuse(session), threshold=0.9).run()
 
         photos = self._by_asset(session)
         assert photos["best"].selected is True
@@ -534,7 +539,7 @@ class TestPeopleAwareSelect:
         album.photos = [solo, group]
         album_id = self._persist(session, album)
 
-        SelectStage(StubSimilarity(), group_boost=0.0).run(album_id, session)
+        SelectStage(StubSimilarity(), album_id, reuse(session), group_boost=0.0).run()
 
         photos = self._by_asset(session)
         assert photos["solo"].selected is True  # tie-break gone ⇒ deterministic id order wins
@@ -559,14 +564,14 @@ class TestPeopleAwareSelect:
         self._lead(album, "p-lead")
         album_id = self._persist(session, album)
 
-        default = SelectStage(StubSimilarity(), threshold=0.9).run(album_id, session)
+        default = SelectStage(StubSimilarity(), album_id, reuse(session), threshold=0.9).run()
         photos = self._by_asset(session)
         assert (photos["nonlead"].selected, photos["lead"].selected) == (True, True)
         assert default.selected == 2
 
-        boosted = SelectStage(StubSimilarity(), threshold=0.9, lead_boost=0.5).run(
-            album_id, session
-        )
+        boosted = SelectStage(
+            StubSimilarity(), album_id, reuse(session), threshold=0.9, lead_boost=0.5
+        ).run()
         photos = self._by_asset(session)
         # The lead now outranks; the non-lead is dropped as its near-dup (no coverage).
         assert (photos["lead"].selected, photos["nonlead"].selected) == (True, False)
@@ -586,7 +591,7 @@ class TestPeopleAwareSelect:
         self._lead(album, "p-ghost")  # a lead present in no photo
         album_id = self._persist(session, album)
 
-        result = SelectStage(StubSimilarity(), threshold=0.9).run(album_id, session)
+        result = SelectStage(StubSimilarity(), album_id, reuse(session), threshold=0.9).run()
 
         photos = self._by_asset(session)
         assert photos["a"].selected is True
@@ -614,7 +619,7 @@ class TestPeopleAwareSelect:
         target.photos = [t_best, t_shared]
         target_id = self._persist(session, target)
 
-        result = SelectStage(StubSimilarity(), threshold=0.9).run(target_id, session)
+        result = SelectStage(StubSimilarity(), target_id, reuse(session), threshold=0.9).run()
 
         photos = self._by_asset(session)
         assert photos["t_best"].selected is True

@@ -36,10 +36,11 @@ double an album's disk footprint alongside the real artifact (the rendered
 JPEG). A failed render intentionally leaves its staged original in place, so
 a retry doesn't re-fetch it.
 
-:class:`RenderStage` itself is Prefect-free logic (reference/folder-structure.md
-rule) — its ``run`` takes ``album_id`` first and is unit-testable without an
-orchestrator — while this module also exports :func:`render_task`, the co-located
-Prefect ``@task`` wrapping it (quality-practices.md §1.5).
+:class:`RenderStage` is a :class:`~album.flow.stages.base.Stage`
+(reference/folder-structure.md rule) — it takes its ``album_id`` +
+``session_factory`` at construction, opens the session inside ``run``, and is
+unit-testable without an orchestrator; it runs as a Prefect task via the
+``run_as_task`` / ``to_task`` glue inherited from ``TaskUnit`` (quality-practices.md §1.5).
 """
 
 from __future__ import annotations
@@ -48,14 +49,12 @@ import logging
 import subprocess
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Protocol, runtime_checkable
+from typing import ClassVar, Protocol, runtime_checkable
 
-from prefect import task
 from sqlalchemy import select
-from sqlalchemy.orm import Session
 
-from album.db.models import Album, Photo
-from album.flow._tasks import owns_session
+from album.db.models import Photo
+from album.db.session import SessionFactory
 from album.flow.stages.base import Stage
 
 _log = logging.getLogger(__name__)
@@ -126,27 +125,35 @@ class RenderStage(Stage[RenderResult]):
     Two collaborators, injected: the :class:`OriginalSource` (Immich, for the
     full-resolution originals darktable-cli needs — XMP carries edits, not pixels)
     and the :class:`Renderer` (the real one shells out to ``darktable-cli``).
-    ``data_root`` is construction-time config; ``run`` takes ``album_id`` first.
+    ``data_root`` is construction-time config, alongside the ``album_id`` +
+    ``session_factory`` the base takes; ``run`` takes no arguments.
     """
+
+    task_name: ClassVar[str] = "render"
 
     def __init__(
         self,
         originals: OriginalSource,
         renderer: Renderer,
+        album_id: int,
+        session_factory: SessionFactory,
         *,
+        force: bool = False,
         data_root: Path = _DEFAULT_DATA_ROOT,
     ) -> None:
+        super().__init__(album_id, session_factory, force=force)
         self._originals = originals
         self._renderer = renderer
         self._data_root = data_root
 
-    def _process(self, album: Album, session: Session, *, force: bool) -> RenderResult:
-        """Render every ``selected`` photo in ``album`` that has an XMP
+    def _process(self) -> RenderResult:
+        """Render every ``selected`` photo in ``self._album`` that has an XMP
         sidecar (``xmp_written=True``) into a corrected JPEG. Idempotent unless
         ``force``.
         """
+        album = self._album
         photos = list(
-            session.scalars(
+            self._session.scalars(
                 select(Photo)
                 .where(Photo.album_id == album.id, Photo.selected == True)  # noqa: E712
                 .order_by(Photo.id)
@@ -155,9 +162,8 @@ class RenderStage(Stage[RenderResult]):
 
         result = RenderResult()
         for photo in photos:
-            self._render_or_skip_photo(photo, album.slug, result, force=force)
+            self._render_or_skip_photo(photo, album.slug, result, force=self._force)
 
-        session.flush()
         return result
 
     def _render_or_skip_photo(
@@ -235,18 +241,10 @@ class RenderStage(Stage[RenderResult]):
         return self._data_root / album_slug / "rendered" / filename
 
 
-@task(name="render")
-@owns_session
-def render_task(stage: RenderStage, album_id: int, session: Session) -> None:
-    """``render`` as a Prefect ``@task`` on its own pooled session (``owns_session``)."""
-    stage.run(album_id, session)
-
-
 __all__ = [
     "DarktableRenderer",
     "OriginalSource",
     "RenderResult",
     "RenderStage",
     "Renderer",
-    "render_task",
 ]

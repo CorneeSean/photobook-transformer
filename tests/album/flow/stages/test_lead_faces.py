@@ -16,6 +16,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from album.db.models import Album, Person
+from album.db.session import reuse
 from album.definition import LeadFacesYAML
 from album.flow.stages.lead_faces import LeadFaceResolutionError, LeadFaceResolver
 from album.immich.client import ImmichFace
@@ -70,10 +71,25 @@ class TestLeadFaceResolver:
         assert album.id is not None
         return album.id
 
-    def _resolver(self, provider: FakeLeadProvider, **kw: object) -> LeadFaceResolver:
+    def _resolver(
+        self,
+        provider: FakeLeadProvider,
+        album_id: int,
+        config: LeadFacesYAML | None,
+        reference_dir: Path,
+        session: Session,
+    ) -> LeadFaceResolver:
         # Small timeout + no-op sleep so the poll loop is fast and silent in tests.
+        # The session is reused (not closed) so a test can inspect it after run().
         return LeadFaceResolver(
-            provider, poll_interval_s=2.0, poll_timeout_s=6.0, sleep=lambda _s: None, **kw
+            provider,
+            album_id,
+            config,
+            reference_dir,
+            reuse(session),
+            poll_interval_s=2.0,
+            poll_timeout_s=6.0,
+            sleep=lambda _s: None,
         )
 
     def _leads(self, session: Session, album_id: int) -> dict[str, bool]:
@@ -88,7 +104,7 @@ class TestLeadFaceResolver:
         album_id = self._album(session, make_album)
         provider = FakeLeadProvider()
 
-        result = self._resolver(provider).run(album_id, None, Path("."), session)
+        result = self._resolver(provider, album_id, None, Path("."), session).run()
 
         assert result.lead_person_ids == []
         assert provider.upload_calls == [] and provider.face_calls == []
@@ -103,7 +119,7 @@ class TestLeadFaceResolver:
         session.commit()
         config = LeadFacesYAML(person_ids=["p-alex", "p-sam"])
 
-        result = self._resolver(FakeLeadProvider()).run(album_id, config, Path("."), session)
+        result = self._resolver(FakeLeadProvider(), album_id, config, Path("."), session).run()
 
         assert result.lead_person_ids == ["p-alex", "p-sam"]
         # Existing row flipped to lead; the unseen lead was created as a lead.
@@ -118,7 +134,7 @@ class TestLeadFaceResolver:
         )
         config = LeadFacesYAML(reference_asset_id="asset-42")
 
-        result = self._resolver(provider).run(album_id, config, Path("."), session)
+        result = self._resolver(provider, album_id, config, Path("."), session).run()
 
         assert provider.upload_calls == []
         assert provider.face_calls == ["asset-42"]
@@ -134,7 +150,7 @@ class TestLeadFaceResolver:
         provider = FakeLeadProvider(upload_id="ref-1", faces=[[], [], [_face("f1", "p-alex")]])
         config = LeadFacesYAML(reference_image="leads.jpg")
 
-        result = self._resolver(provider).run(album_id, config, tmp_path, session)
+        result = self._resolver(provider, album_id, config, tmp_path, session).run()
 
         assert provider.upload_calls == [tmp_path / "leads.jpg"]
         # It actually polled through the two empty responses before the faces
@@ -154,7 +170,7 @@ class TestLeadFaceResolver:
         provider = FakeLeadProvider(faces=[[_face("f1", "p-alex")]])
         config = LeadFacesYAML(reference_image="leads.jpg")
 
-        result = self._resolver(provider).run(album_id, config, tmp_path, session)
+        result = self._resolver(provider, album_id, config, tmp_path, session).run()
 
         # Cached — no second upload; faces read against the cached asset id.
         assert provider.upload_calls == []
@@ -169,10 +185,10 @@ class TestLeadFaceResolver:
         (tmp_path / "leads.jpg").write_bytes(b"jpeg")
         provider = FakeLeadProvider(faces=[[_face("f1", "p-alex")]])  # always resolves
         config = LeadFacesYAML(reference_image="leads.jpg")
-        resolver = self._resolver(provider)
+        resolver = self._resolver(provider, album_id, config, tmp_path, session)
 
-        resolver.run(album_id, config, tmp_path, session)
-        resolver.run(album_id, config, tmp_path, session)  # a genuine second run
+        resolver.run()
+        resolver.run()  # a genuine second run
 
         # The reference was uploaded exactly once across both runs (cached in between).
         assert len(provider.upload_calls) == 1
@@ -182,13 +198,15 @@ class TestLeadFaceResolver:
         self, session: Session, make_album: Callable[..., Album]
     ) -> None:
         album_id = self._album(session, make_album)
-        resolver = self._resolver(FakeLeadProvider())
+        provider = FakeLeadProvider()
 
-        resolver.run(album_id, LeadFacesYAML(person_ids=["p-a", "p-b"]), Path("."), session)
+        cfg_ab = LeadFacesYAML(person_ids=["p-a", "p-b"])
+        self._resolver(provider, album_id, cfg_ab, Path("."), session).run()
         assert self._leads(session, album_id) == {"p-a": True, "p-b": True}
 
         # album.yml edited: p-b was a mistake, now only p-a (plus a new p-c).
-        resolver.run(album_id, LeadFacesYAML(person_ids=["p-a", "p-c"]), Path("."), session)
+        cfg_ac = LeadFacesYAML(person_ids=["p-a", "p-c"])
+        self._resolver(provider, album_id, cfg_ac, Path("."), session).run()
 
         # p-b is demoted (no longer named); the lead set exactly matches the new config.
         assert self._leads(session, album_id) == {"p-a": True, "p-b": False, "p-c": True}
@@ -202,7 +220,7 @@ class TestLeadFaceResolver:
         config = LeadFacesYAML(reference_image="leads.jpg")
 
         with pytest.raises(LeadFaceResolutionError, match="no faces detected"):
-            self._resolver(provider).run(album_id, config, tmp_path, session)
+            self._resolver(provider, album_id, config, tmp_path, session).run()
 
     def test_missing_reference_image_raises(
         self, session: Session, make_album: Callable[..., Album], tmp_path: Path
@@ -211,7 +229,7 @@ class TestLeadFaceResolver:
         config = LeadFacesYAML(reference_image="does-not-exist.jpg")
 
         with pytest.raises(LeadFaceResolutionError, match="not found"):
-            self._resolver(FakeLeadProvider()).run(album_id, config, tmp_path, session)
+            self._resolver(FakeLeadProvider(), album_id, config, tmp_path, session).run()
 
     def test_unassigned_reference_face_warns_not_silently_missed(
         self,
@@ -226,7 +244,7 @@ class TestLeadFaceResolver:
         config = LeadFacesYAML(reference_asset_id="asset-42")
 
         with caplog.at_level(logging.WARNING):
-            result = self._resolver(provider).run(album_id, config, Path("."), session)
+            result = self._resolver(provider, album_id, config, Path("."), session).run()
 
         assert result.lead_person_ids == ["p-alex"]  # assigned lead still resolved
         assert result.unassigned_reference_faces == 1

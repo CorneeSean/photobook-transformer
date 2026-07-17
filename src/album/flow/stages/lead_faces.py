@@ -17,13 +17,15 @@ knowledge/reference/immich-api.md and knowledge/build/enrichment.md). The three 
 - ``reference_image`` — a local photo; upload it (Immich runs face detection on
   import, *asynchronously*), wait out that detection, then read its faces.
 
-:class:`LeadFaceResolver` itself stays Prefect-free logic (folder-structure.md
-rule) — so it's unit-testable without an orchestrator — while this module also
-exports :func:`resolve_leads_task`, the co-located Prefect ``@task`` that wraps it.
-Unlike a :class:`~album.flow.stages.base.Stage` task, this one also carries the
-resolver's extra per-run inputs (the parsed ``lead_faces`` config and its
-directory), which the :class:`~album.flow._flow.Pipeline` reads from ``album.yml``
-in the wiring layer and passes through.
+:class:`LeadFaceResolver` stays Prefect-free logic (folder-structure.md rule) — so
+it's unit-testable without an orchestrator via ``run``. It is **not** a
+:class:`~album.flow.stages.base.Stage` (it has no ``Album`` envelope) but *is* a
+sibling :class:`~album.flow.stages.base.TaskUnit`: it takes its extra per-run inputs
+(the parsed ``lead_faces`` config and its directory, which the
+:class:`~album.flow._flow.Pipeline` reads from ``album.yml``) plus a
+``session_factory`` at construction, exposes a no-argument ``run`` that opens the
+session and commits explicitly, and runs via ``to_task().submit()`` like the fan-out
+stages.
 """
 
 from __future__ import annotations
@@ -33,15 +35,15 @@ import time
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Protocol
+from typing import ClassVar, Protocol
 
-from prefect import task
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from album.db.models import Album, Person
+from album.db.session import SessionFactory
 from album.definition import LeadFacesYAML
-from album.flow._tasks import owns_session
+from album.flow.stages.base import TaskUnit
 from album.immich.client import ImmichFace
 
 _log = logging.getLogger(__name__)
@@ -73,46 +75,67 @@ class LeadResult:
     unassigned_reference_faces: int = 0
 
 
-class LeadFaceResolver:
+class LeadFaceResolver(TaskUnit[LeadResult]):
     """Resolve ``lead_faces`` to Immich person IDs and mark ``Person.is_lead``.
 
-    The Immich HTTP layer is injected as a :class:`LeadFaceProvider` (the real
+    Not a :class:`~album.flow.stages.base.Stage` (it's a resolver invoked by
+    ``select``, not a DAG stage with an ``Album`` short-circuit) but a sibling
+    :class:`~album.flow.stages.base.TaskUnit`: it too takes its ``session_factory``
+    (plus its ``album_id`` / parsed ``config`` / ``reference_dir``) at construction
+    and exposes a no-argument ``run``, so it runs via ``to_task().submit(...)`` like
+    the fan-out stages — no external task wrapper. The Immich HTTP layer is injected
+    as a :class:`LeadFaceProvider` (the real
     :class:`~album.immich.client.ImmichClient` satisfies it) so tests pass a fake
     without a network; ``sleep`` is injected so the async-detection wait doesn't
-    actually block tests. ``run`` takes ``album_id`` first (project rule).
+    actually block tests. Unlike a ``Stage``, ``run`` commits explicitly (there is
+    no ``Album``-loading envelope to own the commit).
     """
+
+    task_name: ClassVar[str] = "resolve-leads"
 
     def __init__(
         self,
         provider: LeadFaceProvider,
+        album_id: int,
+        config: LeadFacesYAML | None,
+        reference_dir: Path,
+        session_factory: SessionFactory,
         *,
         poll_interval_s: float = _DEFAULT_POLL_INTERVAL_S,
         poll_timeout_s: float = _DEFAULT_POLL_TIMEOUT_S,
         sleep: Callable[[float], None] = time.sleep,
     ) -> None:
         self._provider = provider
+        self._album_id = album_id
+        self._config = config
+        self._reference_dir = reference_dir
+        self._session_factory = session_factory
         self._poll_interval_s = poll_interval_s
         self._poll_timeout_s = poll_timeout_s
         self._sleep = sleep
 
-    def run(
-        self,
-        album_id: int,
-        config: LeadFacesYAML | None,
-        reference_dir: Path,
-        session: Session,
-    ) -> LeadResult:
-        """Resolve leads for ``album_id``. No ``lead_faces`` configured ⇒ no-op.
+    def run(self) -> LeadResult:
+        """Open a session, resolve leads, commit. No ``lead_faces`` configured ⇒ no-op.
 
-        ``reference_dir`` is the directory ``album.yml`` lives in, used to resolve
-        a relative ``reference_image``. Idempotent: an uploaded reference is cached
-        on ``Album.lead_reference_asset_id`` and reused on re-run.
+        ``reference_dir`` is the directory ``album.yml`` lives in, used to resolve a
+        relative ``reference_image``. Idempotent: an uploaded reference is cached on
+        ``Album.lead_reference_asset_id`` and reused on re-run.
         """
+        with self._session_factory() as session:
+            result = self._resolve(session)
+            session.commit()
+            return result
+
+    def _resolve(self, session: Session) -> LeadResult:
+        config = self._config
         if config is None:
             return LeadResult()
 
+        album_id = self._album_id
         result = LeadResult()
-        person_ids = self._resolve_person_ids(album_id, config, reference_dir, session, result)
+        person_ids = self._resolve_person_ids(
+            album_id, config, self._reference_dir, session, result
+        )
         result.lead_person_ids = person_ids
         self._mark_leads(album_id, person_ids, session)
         if not person_ids:
@@ -253,22 +276,3 @@ class LeadFaceResolver:
                 existing[person_id] = person
             else:
                 person.is_lead = True
-
-
-@task(name="resolve-leads")
-@owns_session
-def resolve_leads_task(
-    resolver: LeadFaceResolver,
-    album_id: int,
-    session: Session,
-    config: LeadFacesYAML | None,
-    reference_dir: Path,
-) -> None:
-    """``resolve-leads`` as a Prefect ``@task`` on its own pooled session.
-
-    Not a :class:`~album.flow.stages.base.Stage`, so it doesn't share the uniform
-    ``stage.run(album_id, session)`` body: it forwards the extra per-run inputs
-    (``config``, ``reference_dir``) the :class:`~album.flow._flow.Pipeline` resolved
-    from ``album.yml`` to :meth:`LeadFaceResolver.run`.
-    """
-    resolver.run(album_id, config, reference_dir, session)
