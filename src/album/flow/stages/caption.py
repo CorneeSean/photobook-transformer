@@ -34,10 +34,10 @@ import logging
 from dataclasses import dataclass
 from typing import ClassVar
 
-from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from album.db.models import Photo
+from album.db.queries import selected_photos
 from album.db.session import SessionFactory
 from album.flow.photo_analyzer import PhotoAnalyzer
 from album.flow.stages.base import Stage
@@ -84,9 +84,7 @@ class CaptionStage(Stage[CaptionResult]):
         one shared call.
         """
         result = CaptionResult()
-        photos = self._session.scalars(
-            select(Photo).where(Photo.album_id == self._album.id, Photo.selected == True)  # noqa: E712
-        )
+        photos = selected_photos(self._album.id, self._session)
         for photo in photos:
             self._caption_photo(photo, self._session, self._force, result)
 

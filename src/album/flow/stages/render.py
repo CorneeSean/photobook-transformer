@@ -51,9 +51,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import ClassVar, Protocol, runtime_checkable
 
-from sqlalchemy import select
-
 from album.db.models import Photo
+from album.db.queries import selected_photos
 from album.db.session import SessionFactory
 from album.flow.stages.base import Stage
 
@@ -152,13 +151,7 @@ class RenderStage(Stage[RenderResult]):
         ``force``.
         """
         album = self._album
-        photos = list(
-            self._session.scalars(
-                select(Photo)
-                .where(Photo.album_id == album.id, Photo.selected == True)  # noqa: E712
-                .order_by(Photo.id)
-            )
-        )
+        photos = selected_photos(album.id, self._session)
 
         result = RenderResult()
         for photo in photos:

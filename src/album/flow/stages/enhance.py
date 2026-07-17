@@ -71,11 +71,11 @@ from typing import ClassVar
 import cv2
 import numpy as np
 from skimage.exposure import match_histograms
-from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from album.agents.analysis import AnalysisResult
 from album.db.models import Photo
+from album.db.queries import selected_photos
 from album.db.session import SessionFactory
 from album.flow.photo_analyzer import PhotoAnalyzer, ThumbnailSource
 from album.flow.stages.base import Stage
@@ -328,13 +328,7 @@ class EnhanceStage(Stage[EnhanceResult]):
         per-camera drift.
         """
         album, session = self._album, self._session
-        photos = list(
-            session.scalars(
-                select(Photo)
-                .where(Photo.album_id == album.id, Photo.selected == True)  # noqa: E712
-                .order_by(Photo.id)
-            )
-        )
+        photos = selected_photos(album.id, session)
 
         by_scene: dict[int, list[Photo]] = {}
         result = EnhanceResult()
