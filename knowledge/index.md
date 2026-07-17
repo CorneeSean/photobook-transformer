@@ -34,6 +34,8 @@ manual work. This bundle is the project's source of truth.
 * [TestContainers integration](/build/testcontainers.md) - Follow-on steps (21+) promoting the highest-value boundaries (pgvector, darktable-cli) to real containerized integration tests; Immich ML deferred optional.
 * [Progress tracker](/build/progress.md) - Living per-step status.
 * [Open questions](/build/open-questions.md) - Unresolved questions to settle early.
+* [AI-pass cost estimate](/build/ai-cost-estimate.md) - What the full Claude vision pass costs per album (answer to open question 5).
+* [Offline analysis proposal](/build/local-analysis.md) - Proposal (needs planning) to replace the Claude vision call with a classical, ML-free approach.
 * [Pipeline stages](/stages/) - One concept per stage, from `ingest` to `fulfill`.
 
 ## Log

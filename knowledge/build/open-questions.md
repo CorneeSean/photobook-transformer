@@ -54,10 +54,16 @@ Resolve early; record answers back into this bundle (and note them in
    constants are now the source for `assemble`'s template dimensions —
    see `src/album/stages/assemble.py`.
 
-5. **What does the full AI pass cost?** Estimate the Claude API spend for
-   ~300–500 selected photos before running it, and confirm it's acceptable. (Note
-   the [single combined vision call](/foundations/architecture.md) halves the number of image
-   uploads versus separate enhance/caption calls.)
+5. ~~**What does the full AI pass cost?** Estimate the Claude API spend for
+   ~300–500 selected photos before running it, and confirm it's acceptable.~~
+   **RESOLVED (2026-07-17): acceptable — ~$1–$4 per album.** One combined
+   `claude-sonnet-5` vision call per *selected* photo (the [single combined
+   vision call](/foundations/architecture.md) halves image uploads vs separate
+   enhance/caption); at the small Immich thumbnail the code sends, that's
+   ≈ $0.66–$1.65 for 300–500 photos, ≈ $4 worst case with a larger image. Full
+   math, token breakdown, and levers in
+   [AI-pass cost estimate](/build/ai-cost-estimate.md). Metered re-check deferred
+   to the first live run (no `ANTHROPIC_API_KEY` here).
 
 6. ~~**Can we offload the local ML (`open_clip` + LAION aesthetic head) to
    Immich — reuse its embeddings, or read them from its DB — and drop the
@@ -83,14 +89,18 @@ Resolve early; record answers back into this bundle (and note them in
    is unaffected: it's additive and API-only. See the full research write-up in
    [`log.md`](/log.md) 2026-07-14.
 
-7. **Follow-up (noted during the A-level refactor, 2026-07-16):** the
-   "selected photos for this album, ordered by id" query
-   (`select(Photo).where(Photo.album_id == album.id, Photo.selected).order_by(Photo.id)`)
-   is repeated near-identically in [`caption`](/stages/caption.md),
-   [`enhance`](/stages/enhance.md), and [`render`](/stages/render.md). Centralizing
-   the album-lookup guard in `Stage` (quality-practices.md §1.6.1) made this the
-   next-most-obvious shared read. Deliberately **not** hoisted in that change (it's
-   pre-existing and the three variants must be confirmed byte-identical first, and a
-   query used by 3 of 9 stages doesn't belong on the all-stages base) — a small
-   `selected_photos(album_id, session)` free function in `stages/` is the likely
-   shape. Settle when one of those three stages next needs editing.
+7. ~~**Follow-up (noted during the A-level refactor, 2026-07-16):** the
+   "selected photos for this album, ordered by id" query is repeated
+   near-identically in `caption`, `enhance`, and `render`.~~ **RESOLVED
+   (2026-07-17): hoisted to `db/queries.py::selected_photos(album_id, session)`**
+   (option A — a query-functions module, not a Repository framework; the
+   tradeoff survey lives in the git history of this discussion). The three stages
+   now call it; this also fixed the drift the note warned about — `caption`
+   lacked the `.order_by(Photo.id)` the other two had, so it now iterates
+   deterministically too (order-independent processing, so no behavior change,
+   just determinism). Covered by `tests/album/db/test_queries.py`;
+   `uv run poe check` green (293 passed). Further data-access consolidation (a
+   generic repository base, or `advanced-alchemy`) was considered and
+   **deliberately not taken** — SQLAlchemy's Session already is a Unit of
+   Work/Identity Map, so a repository layer would be redundant for a 4-model
+   pipeline and would fight the step-25 per-task session ownership.

@@ -2,6 +2,50 @@
 
 ## 2026-07-17
 
+* **Open question 7 resolved — shared `selected_photos` query hoisted**
+  (new `src/album/db/queries.py` + `tests/album/db/test_queries.py`;
+  [open-questions.md](/build/open-questions.md) Q7 marked resolved). The
+  "selected photos for this album, ordered by id" read, previously copied in
+  `caption`/`enhance`/`render`, is now a single
+  `selected_photos(album_id, session)` free function (option A — a
+  query-functions module, chosen over a Repository framework: SQLAlchemy's
+  Session already provides Unit of Work / Identity Map, so a repository layer
+  would be redundant for a 4-model pipeline and would fight the step-25 per-task
+  session model). The function takes the caller's session and never owns one, so
+  it composes with the fan-out session ownership. Fixed the latent drift the Q7
+  note warned about — `caption` was missing the `.order_by(Photo.id)` the other
+  two stages had (order-independent processing, so determinism only, no behavior
+  change). `uv run poe check` green (293 passed, 3 skipped).
+
+* **Proposal recorded — offline analysis (classical replacement for the Claude
+  vision call)** (new [local-analysis.md](/build/local-analysis.md); added as
+  outstanding step 29 in [progress.md](/build/progress.md), `todo (needs
+  planning)`; linked from [index.md](/index.md)). Captured a design proposal to
+  drop the pipeline's last external-API dependency by splitting the one Claude
+  call into two classical jobs: tone deltas via computer vision (auto-exposure /
+  AWB / histogram) and the grounded caption via metadata templating from
+  who/where/when already in the DB (reusing the existing grounding helpers),
+  keeping Claude / a local VLM injectable as an optional "rich caption" mode
+  (mirrors the printer abstraction). Not cost-driven (~$1–$4/album) — offline /
+  no-key / deterministic. **Marked as needing a proper brainstorming + planning
+  pass before implementation;** open questions (template grammar, seam,
+  tone→XMP mapping, validation) listed in the proposal. Independent of step 23.
+
+* **Open question 5 resolved — AI-pass cost estimate** (new
+  [ai-cost-estimate.md](/build/ai-cost-estimate.md); [open-questions.md](/build/open-questions.md)
+  Q5 marked resolved; linked from [index.md](/index.md)). Estimated the full
+  Claude vision pass from the pinned agent code (`agents/analysis.py`,
+  `agents/_model.py` → `claude-sonnet-5`; one combined, idempotent call per
+  *selected* photo via `PhotoAnalyzer.ensure`) and current published pricing:
+  ≈ **$1–$4 per album** of 300–500 photos (small Immich thumbnail ≈ 60 image
+  tokens/call; ~$0.66–$1.65 at the intro $2/$10 rate, ~$4 worst case with a
+  larger image at standard $3/$15). Verdict: **acceptable — no cost control
+  needed before the first run.** Prompt caching not worth it (system prompt below
+  Sonnet's 2,048-token cache floor; image differs per call); Batch API would
+  halve it but the absolute cost is trivial. Metered re-check deferred to the
+  first live run (no `ANTHROPIC_API_KEY` in this environment — same deferral as
+  steps 9/10/12).
+
 * **TestContainers step 24 done — offline Immich ML integration via a pre-baked
   model image** (commit `ad86550`, branch `step-24-immich-ml-integration`;
   [testcontainers.md](/build/testcontainers.md) step 24). User-directed, out of

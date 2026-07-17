@@ -34,6 +34,7 @@ is optional/deferred — nothing is blocked on missing code (see
 | # | Step | Playbook | Status | Branch | Notes |
 |---|------|----------|--------|--------|-------|
 | 23 | DB-backed flow smoke test (optional) | testcontainers | todo | — | whole flow on real Postgres, Immich/Claude/Lulu as doubles — largely subsumed by step 25's `test_flow_integration.py` (real `pipeline()` on a pgvector container, every external boundary doubled); revisit only if a gap remains |
+| 29 | Offline analysis — classical replacement for the Claude vision call | local-analysis | todo (needs planning) | — | **Proposal, not yet planned** — see [local-analysis.md](/build/local-analysis.md). Drop the pipeline's last external-API dependency: tone deltas via classical CV, grounded caption via metadata templating (who/where/when already in the DB), keeping Claude/a local VLM injectable as an optional "rich caption" mode (mirrors the printer abstraction). Not cost-driven (~$1–$4/album, [ai-cost-estimate.md](/build/ai-cost-estimate.md)) — offline/no-key/deterministic. Requires a proper brainstorming + planning pass first (open questions listed in the proposal). Independent of step 23. |
 
 ## Completed (DONE)
 
