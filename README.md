@@ -37,11 +37,13 @@ It walks the folder (recursing subdirectories), uploads each photo to Immich,
 creates the album, waits out Immich's background jobs, writes
 `data/albums/<slug>/album.yml`, and runs the pipeline — landing the book at
 `data/albums/<slug>/book/index.html`. Options: `--slug`, `--title`, `--timezone`,
-and `--force` (re-import an already-imported slug). It's a convenience wrapper
-over the boundary, not a zero-dependency runtime — the local stack still has to
-be up. The manual, step-by-step path below (Points 2–5) is the same thing done
-by hand, and is still how you author `segments`/`lead_faces` by editing
-`album.yml`.
+`--force` (re-run an already-imported slug), and `--source-document schedule.pdf`
+— point it at a trip itinerary, wedding run-sheet, or festival line-up and it
+extracts the album's `segments` (chapters by time/place) from the document,
+grounded on the photos' capture dates. It's a convenience wrapper over the
+boundary, not a zero-dependency runtime — the local stack still has to be up. The
+manual, step-by-step path below (Points 2–5) is the same thing done by hand, and
+is still how you author `segments`/`lead_faces` by editing `album.yml`.
 
 ### Point 0 — Install (once)
 

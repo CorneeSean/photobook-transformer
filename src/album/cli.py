@@ -57,6 +57,11 @@ def _add_generate_parser(subparsers: argparse._SubParsersAction[argparse.Argumen
         "--timezone", metavar="IANA", help="IANA timezone for undated photos (e.g. Europe/Warsaw)"
     )
     parser.add_argument(
+        "--source-document",
+        metavar="PDF",
+        help="A schedule document (PDF) to extract the album's segments from",
+    )
+    parser.add_argument(
         "--force",
         action="store_true",
         help="Re-run the pipeline for an already-imported slug (album.yml left untouched)",
@@ -80,6 +85,7 @@ def _generate(args: argparse.Namespace) -> None:
             slug=args.slug,
             title=args.title,
             timezone=args.timezone,
+            source_document=Path(args.source_document) if args.source_document else None,
             force=args.force,
         )
         pipeline(album_slug=slug)

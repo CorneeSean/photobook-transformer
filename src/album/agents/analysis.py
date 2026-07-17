@@ -21,18 +21,13 @@ the DB side).
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from functools import cache
 from typing import Any
 
 from pydantic import BaseModel, Field
 from pydantic_ai import Agent, BinaryContent
 from pydantic_ai.models import Model
-from pydantic_ai.models.anthropic import AnthropicModel
-from pydantic_ai.providers.anthropic import AnthropicProvider
 
-from album.config import get_settings
-
-_DEFAULT_MODEL_NAME = "claude-sonnet-5"
+from album.agents._model import default_model
 
 _SYSTEM_PROMPT = """\
 You are a photo-book curation assistant. Given one photo, produce two things
@@ -102,18 +97,8 @@ def analyze_photo(
     to real Claude (via ``config.py``'s ``anthropic_api_key``); tests inject
     PydanticAI's ``TestModel``/``FunctionModel`` instead."""
     prompt = [format_context(context), BinaryContent(data=image, media_type=media_type)]
-    result = _agent.run_sync(prompt, model=model or _default_model())
+    result = _agent.run_sync(prompt, model=model or default_model())
     return result.output
-
-
-@cache
-def _default_model() -> Model:
-    # Cached: each AnthropicProvider owns its own httpx client / connection
-    # pool, and a real run calls analyze_photo() once per selected photo
-    # (hundreds per album) — rebuilding it per call would leak an unclosed
-    # client and a fresh TLS handshake every time.
-    provider = AnthropicProvider(api_key=get_settings().anthropic_api_key)
-    return AnthropicModel(_DEFAULT_MODEL_NAME, provider=provider)
 
 
 def format_context(context: PhotoContext) -> str:

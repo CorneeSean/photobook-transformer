@@ -133,6 +133,8 @@ class TestGenerate:
                 "Our Trip",
                 "--timezone",
                 "Europe/Warsaw",
+                "--source-document",
+                "schedule.pdf",
                 "--force",
             ],
         )
@@ -143,6 +145,7 @@ class TestGenerate:
             "slug": "trip-2026",
             "title": "Our Trip",
             "timezone": "Europe/Warsaw",
+            "source_document": Path("schedule.pdf"),
             "force": True,
         }
 

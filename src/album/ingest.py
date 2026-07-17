@@ -21,12 +21,20 @@ import logging
 import re
 import time
 from collections.abc import Callable
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Protocol
 
 import yaml
+from pydantic_ai.models import Model
 
-from album.immich.client import ImmichClient, ImmichJobCounts
+from album.agents.segments import (
+    ExtractedSegments,
+    SegmentExtractionError,
+    extract_segments_from_pdf,
+)
+from album.definition import AlbumDefinition, SegmentYAML
+from album.immich.client import ImmichAsset, ImmichClient, ImmichJobCounts
 
 _log = logging.getLogger(__name__)
 
@@ -62,6 +70,8 @@ class IngestClient(Protocol):
 
     def get_jobs(self) -> dict[str, ImmichJobCounts]: ...
 
+    def get_album_assets(self, immich_album_id: str) -> list[ImmichAsset]: ...
+
 
 class DirectoryIngestor:
     """Walks a photo directory, uploads it to Immich as a new album, waits out
@@ -83,12 +93,16 @@ class DirectoryIngestor:
         poll_interval_s: float = _DEFAULT_POLL_INTERVAL_S,
         poll_timeout_s: float = _DEFAULT_POLL_TIMEOUT_S,
         sleep: Callable[[float], None] = time.sleep,
+        model: Model | None = None,
     ) -> None:
         self._client = client
         self._albums_dir = albums_dir
         self._poll_interval_s = poll_interval_s
         self._poll_timeout_s = poll_timeout_s
         self._sleep = sleep
+        # PydanticAI model for the segments agent; None ⇒ real Claude. Only used
+        # when a source_document is given (Feature B); tests inject a TestModel.
+        self._model = model
 
     def ingest(
         self,
@@ -97,14 +111,17 @@ class DirectoryIngestor:
         slug: str | None = None,
         title: str | None = None,
         timezone: str | None = None,
+        source_document: Path | None = None,
         force: bool = False,
     ) -> str:
         """Ingest ``directory`` and return the album slug to run the pipeline on.
 
         ``slug``/``title`` override the directory-name defaults; ``timezone`` (an
-        IANA name) is written through for undated photos. If the slug was already
-        imported, refuse unless ``force`` — which re-runs the existing album *as
-        is* (see :meth:`_reuse_existing`).
+        IANA name) is written through for undated photos. ``source_document`` (a
+        PDF) fills the album's ``segments`` via the segments agent (Feature B),
+        grounded on the photos' capture range. If the slug was already imported,
+        refuse unless ``force`` — which re-runs the existing album *as is* (see
+        :meth:`_reuse_existing`); ``source_document`` is ignored on that path.
         """
         directory = directory.resolve()  # so "." picks up the real directory name
         slug = slug or _slugify(directory.name)
@@ -114,11 +131,19 @@ class DirectoryIngestor:
 
         image_paths = self._collect_images(directory)
         asset_ids = [self._client.upload_asset(path) for path in image_paths]
-        resolved_title = self._resolve_title(title, directory, slug)
-        immich_album_id = self._client.create_album(resolved_title, asset_ids)
+        # The Immich album is named before the document is read (extraction needs
+        # the created, EXIF-ready album), so it uses the pre-document title; the
+        # book's album.yml title below can still prefer a document-supplied one.
+        immich_album_id = self._client.create_album(
+            self._resolve_title(title, directory, slug), asset_ids
+        )
 
         self._wait_for_readiness()
-        self._materialize(album_yml, slug, resolved_title, immich_album_id, timezone)
+        doc_title, segments = self._extract_segments(immich_album_id, source_document, timezone)
+        final_title = self._resolve_title(title, directory, slug, doc_title=doc_title)
+        self._materialize(album_yml, slug, final_title, immich_album_id, timezone, segments)
+        if segments:
+            self._validate_materialized(album_yml)
         _log.info(
             "ingested %d photos from %s → album %r (immich id %s)",
             len(asset_ids),
@@ -127,6 +152,43 @@ class DirectoryIngestor:
             immich_album_id,
         )
         return slug
+
+    def _extract_segments(
+        self, immich_album_id: str, source_document: Path | None, timezone: str | None
+    ) -> tuple[str | None, list[SegmentYAML] | None]:
+        """Run the segments agent over ``source_document`` (or a no-op if none),
+        grounded on the album's photo capture range. Returns the document's
+        suggested title (if any) and the extracted segments."""
+        if source_document is None:
+            return None, None
+        capture_range = _capture_range(self._client.get_album_assets(immich_album_id))
+        try:
+            extracted: ExtractedSegments = extract_segments_from_pdf(
+                source_document.read_bytes(),
+                capture_range=capture_range,
+                timezone=timezone,
+                model=self._model,
+            )
+        except SegmentExtractionError as exc:
+            raise IngestError(f"{source_document}: {exc}") from exc
+        return extracted.title, extracted.segments
+
+    @staticmethod
+    def _validate_materialized(album_yml: Path) -> None:
+        """Fail fast if the doc-extracted segments produced an ``album.yml`` the
+        loader rejects (naive times with no timezone, overlap, bad ordering) — so
+        the error surfaces here with guidance rather than deep in the pipeline
+        after ingest already reported success. Runs the same loader the pipeline
+        does (``AlbumDefinition``), so it re-uses the one source of truth for
+        segment correctness rather than re-implementing the checks."""
+        try:
+            _ = AlbumDefinition().load(album_yml)
+        except ValueError as exc:
+            raise IngestError(
+                f"the segments extracted from the source document are invalid ({exc}); "
+                f"edit {album_yml} to fix them and re-run with --force, or drop "
+                "--source-document to import without segments"
+            ) from exc
 
     @staticmethod
     def _reuse_existing(album_yml: Path, slug: str, *, force: bool) -> str:
@@ -149,11 +211,13 @@ class DirectoryIngestor:
         return slug
 
     @staticmethod
-    def _resolve_title(title: str | None, directory: Path, slug: str) -> str:
-        """Explicit ``--title`` wins; else a title from the directory name; else
-        the slug. (An EXIF date/place title is deferred — it needs Immich's
-        geocoding surface, still unbuilt; see single-command-ingestion.md.)"""
-        return title or _titleize(directory.name) or slug
+    def _resolve_title(
+        title: str | None, directory: Path, slug: str, *, doc_title: str | None = None
+    ) -> str:
+        """Precedence: explicit ``--title`` > the source document's title >
+        directory name > slug. (An EXIF date/place title is deferred — it needs
+        Immich's geocoding surface, still unbuilt; see single-command-ingestion.md.)"""
+        return title or doc_title or _titleize(directory.name) or slug
 
     def _collect_images(self, directory: Path) -> list[Path]:
         """Every image file under ``directory`` (recursing subdirectories), sorted
@@ -199,16 +263,57 @@ class DirectoryIngestor:
 
     @staticmethod
     def _materialize(
-        album_yml: Path, slug: str, title: str, immich_album_id: str, timezone: str | None
+        album_yml: Path,
+        slug: str,
+        title: str,
+        immich_album_id: str,
+        timezone: str | None,
+        segments: list[SegmentYAML] | None = None,
     ) -> None:
-        """Write a minimal ``album.yml`` (the normal load path reads it next)."""
+        """Write a minimal ``album.yml`` (the normal load path reads it next).
+
+        ``segments`` (from :func:`~album.agents.segments.extract_segments_from_pdf`)
+        are written as ISO timestamps; the loader (``AlbumYAML``) normalizes them
+        to UTC and enforces ordering/non-overlap when it reads the file back."""
         album_yml.parent.mkdir(parents=True, exist_ok=True)
-        data: dict[str, str] = {"slug": slug, "title": title, "immich_album_id": immich_album_id}
+        data: dict[str, object] = {
+            "slug": slug,
+            "title": title,
+            "immich_album_id": immich_album_id,
+        }
         if timezone is not None:
             data["timezone"] = timezone
+        if segments:
+            # mode="json" gives ISO-string timestamps; exclude_none drops an absent
+            # `place` — a plain, YAML-friendly dict the loader reads straight back.
+            data["segments"] = [s.model_dump(mode="json", exclude_none=True) for s in segments]
         _ = album_yml.write_text(
             yaml.safe_dump(data, sort_keys=False, allow_unicode=True), encoding="utf-8"
         )
+
+
+def _capture_range(assets: list[ImmichAsset]) -> tuple[datetime, datetime] | None:
+    """The (earliest, latest) capture instant across an album's assets, or ``None``
+    if none carry a timestamp — the anchor the segments agent uses for relative
+    dates. Naive timestamps are treated as UTC so a mix of aware/naive values
+    (Immich can emit either) stays comparable; this range is only a hint."""
+    times = [_as_aware(time) for asset in assets if (time := _asset_time(asset)) is not None]
+    if not times:
+        return None
+    return min(times), max(times)
+
+
+def _asset_time(asset: ImmichAsset) -> datetime | None:
+    """An asset's capture instant: EXIF ``dateTimeOriginal`` if present, else the
+    local wall-clock ``localDateTime`` fallback."""
+    if asset.exif_info is not None and asset.exif_info.date_time_original is not None:
+        return asset.exif_info.date_time_original
+    return asset.local_date_time
+
+
+def _as_aware(dt: datetime) -> datetime:
+    """A naive datetime coerced to UTC (for the best-effort capture-range hint)."""
+    return dt if dt.tzinfo is not None else dt.replace(tzinfo=UTC)
 
 
 def _is_image(path: Path) -> bool:
@@ -234,6 +339,7 @@ def ingest_directory(
     slug: str | None = None,
     title: str | None = None,
     timezone: str | None = None,
+    source_document: Path | None = None,
     force: bool = False,
 ) -> str:
     """Ingest ``directory`` with the real Immich client and return the slug the
@@ -241,9 +347,15 @@ def ingest_directory(
 
     Builds :class:`~album.immich.client.ImmichClient` from settings (closing it
     afterward); the class-based :class:`DirectoryIngestor` is what tests exercise
-    with a fake client.
+    with a fake client. The segments agent uses real Claude here (no ``model``
+    injected).
     """
     with ImmichClient.from_settings() as client:
         return DirectoryIngestor(client).ingest(
-            directory, slug=slug, title=title, timezone=timezone, force=force
+            directory,
+            slug=slug,
+            title=title,
+            timezone=timezone,
+            source_document=source_document,
+            force=force,
         )

@@ -15,9 +15,11 @@ from pathlib import Path
 
 import pytest
 import yaml
+from pydantic_ai.messages import ModelMessage, ModelResponse, TextPart
+from pydantic_ai.models.function import AgentInfo, FunctionModel
 
 from album.definition import AlbumDefinition
-from album.immich.client import ImmichJobCounts
+from album.immich.client import ImmichAsset, ImmichJobCounts
 from album.ingest import DirectoryIngestor, IngestError
 
 
@@ -31,11 +33,18 @@ class FakeIngestClient:
 
     ``jobs`` is a *sequence* of successive ``get_jobs`` responses (to model
     Immich's async processing, e.g. ``[busy, busy, idle]``); the last entry
-    repeats once exhausted. Default: an empty map → idle immediately.
+    repeats once exhausted. Default: an empty map → idle immediately. ``assets``
+    is what ``get_album_assets`` returns (the segments-agent capture-range anchor).
     """
 
-    def __init__(self, *, jobs: list[dict[str, ImmichJobCounts]] | None = None) -> None:
+    def __init__(
+        self,
+        *,
+        jobs: list[dict[str, ImmichJobCounts]] | None = None,
+        assets: list[ImmichAsset] | None = None,
+    ) -> None:
         self._jobs = list(jobs) if jobs is not None else None
+        self._assets = assets or []
         self.uploaded: list[Path] = []
         self.created: list[tuple[str, list[str]]] = []
         self.jobs_calls = 0
@@ -53,6 +62,9 @@ class FakeIngestClient:
         if self._jobs is None:
             return {}
         return self._jobs.pop(0) if len(self._jobs) > 1 else self._jobs[0]
+
+    def get_album_assets(self, immich_album_id: str) -> list[ImmichAsset]:
+        return self._assets
 
 
 class TestDirectoryIngest:
@@ -278,3 +290,112 @@ class TestReadinessPoll:
         self._run(tmp_path, client)
 
         assert client.jobs_calls == 1  # idle on the first check, no waiting
+
+
+class TestSourceDocument:
+    """`--source-document`: the segments agent fills `album.yml`'s segments block."""
+
+    def _canned_model(self) -> FunctionModel:
+        """A model that returns one fixed segment + title, so the wiring (not the
+        LLM) is what's under test — the agent itself is covered in test_segments."""
+        canned = (
+            '{"title": "Adriatic Days", "segments": [{"label": "Lisbon", "place": "Lisbon", '
+            '"start_at": "2026-05-01T09:00:00+00:00", "end_at": "2026-05-01T18:00:00+00:00"}]}'
+        )
+
+        def handler(
+            messages: list[ModelMessage], info: AgentInfo
+        ) -> ModelResponse:  # pragma: no cover - exercised via FunctionModel
+            return ModelResponse(parts=[TextPart(content=canned)])
+
+        return FunctionModel(handler)
+
+    def _photos_dir(self, tmp_path: Path) -> Path:
+        directory = tmp_path / "raw-dump"
+        directory.mkdir()
+        (directory / "a.jpg").write_bytes(b"\xff\xd8\xff")
+        return directory
+
+    def _pdf(self, tmp_path: Path) -> Path:
+        from weasyprint import HTML
+
+        doc = tmp_path / "schedule.pdf"
+        pdf = HTML(string="<html><body><p>Day 1 — Lisbon. Day 2 — Perast.</p></body></html>")
+        doc.write_bytes(pdf.write_pdf() or b"")
+        return doc
+
+    def _ingestor(self, client: FakeIngestClient, albums_dir: Path) -> DirectoryIngestor:
+        return DirectoryIngestor(
+            client,
+            albums_dir=albums_dir,
+            poll_timeout_s=1.0,
+            sleep=lambda _s: None,
+            model=self._canned_model(),
+        )
+
+    def test_fills_segments_and_uses_doc_title(self, tmp_path: Path) -> None:
+        directory = self._photos_dir(tmp_path)
+        albums_dir = tmp_path / "albums"
+
+        self._ingestor(FakeIngestClient(), albums_dir).ingest(
+            directory, source_document=self._pdf(tmp_path)
+        )
+
+        album_yml = albums_dir / "raw-dump" / "album.yml"
+        written = yaml.safe_load(album_yml.read_text())
+        # Doc title feeds precedence #2 (over the directory name).
+        assert written["title"] == "Adriatic Days"
+        assert written["segments"][0]["label"] == "Lisbon"
+        # What was written is a valid album.yml — segments round-trip through the
+        # loader, which normalizes/validates them (the source of truth).
+        loaded = AlbumDefinition().load(album_yml)
+        assert [s.label for s in loaded.segments] == ["Lisbon"]
+
+    def test_explicit_title_beats_doc_title(self, tmp_path: Path) -> None:
+        directory = self._photos_dir(tmp_path)
+        albums_dir = tmp_path / "albums"
+
+        self._ingestor(FakeIngestClient(), albums_dir).ingest(
+            directory, title="Our Own Title", source_document=self._pdf(tmp_path)
+        )
+
+        written = yaml.safe_load((albums_dir / "raw-dump" / "album.yml").read_text())
+        assert written["title"] == "Our Own Title"
+        assert written["segments"][0]["label"] == "Lisbon"  # segments still filled
+
+    def test_no_source_document_writes_no_segments(self, tmp_path: Path) -> None:
+        directory = self._photos_dir(tmp_path)
+        albums_dir = tmp_path / "albums"
+
+        self._ingestor(FakeIngestClient(), albums_dir).ingest(directory)
+
+        written = yaml.safe_load((albums_dir / "raw-dump" / "album.yml").read_text())
+        assert "segments" not in written
+
+    def test_invalid_extracted_segments_fail_fast_with_guidance(self, tmp_path: Path) -> None:
+        # Naive timestamps + no --timezone: the loader can't resolve them to UTC.
+        # Ingest must surface a clear IngestError here, not after "success".
+        naive = (
+            '{"segments": [{"label": "X", '
+            '"start_at": "2026-05-01T09:00:00", "end_at": "2026-05-01T18:00:00"}]}'
+        )
+
+        def handler(
+            messages: list[ModelMessage], info: AgentInfo
+        ) -> ModelResponse:  # pragma: no cover - exercised via FunctionModel
+            return ModelResponse(parts=[TextPart(content=naive)])
+
+        directory = self._photos_dir(tmp_path)
+        albums_dir = tmp_path / "albums"
+        ingestor = DirectoryIngestor(
+            client=FakeIngestClient(),
+            albums_dir=albums_dir,
+            poll_timeout_s=1.0,
+            sleep=lambda _s: None,
+            model=FunctionModel(handler),
+        )
+
+        with pytest.raises(IngestError, match="invalid"):
+            ingestor.ingest(directory, source_document=self._pdf(tmp_path))
+        # The file is left on disk so the user can fix it and re-run with --force.
+        assert (albums_dir / "raw-dump" / "album.yml").exists()
