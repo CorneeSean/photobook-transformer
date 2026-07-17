@@ -10,6 +10,7 @@ the real query here is covered separately against a Postgres test container
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from typing import Protocol, runtime_checkable
 
 from sqlalchemy import select
@@ -27,7 +28,7 @@ from album.db.models import Photo
 @runtime_checkable
 class SimilaritySearch(Protocol):
     def max_similarity(
-        self, session: Session, embedding: list[float] | None, against: list[int]
+        self, session: Session, embedding: Sequence[float] | None, against: Sequence[int]
     ) -> float:
         """Highest cosine similarity between ``embedding`` and any already-picked
         photo id in ``against``. Returns ``-1.0`` (below any real similarity) if
@@ -43,7 +44,7 @@ class PgVectorSimilarity:
     """Real similarity search: pgvector's cosine-distance operator, index-accelerated."""
 
     def max_similarity(
-        self, session: Session, embedding: list[float] | None, against: list[int]
+        self, session: Session, embedding: Sequence[float] | None, against: Sequence[int]
     ) -> float:
         if embedding is None or not against:
             return -1.0

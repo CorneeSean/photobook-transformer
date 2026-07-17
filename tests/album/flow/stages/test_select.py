@@ -12,7 +12,7 @@ separately in test_similarity.py against a Postgres test container.
 
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 
 import numpy as np
 import pytest
@@ -38,7 +38,7 @@ class StubSimilarity:
     the ORM objects rather than keeping a separate registry."""
 
     def max_similarity(
-        self, session: Session, embedding: list[float] | None, against: list[int]
+        self, session: Session, embedding: Sequence[float] | None, against: Sequence[int]
     ) -> float:
         if embedding is None or not against:
             return -1.0
