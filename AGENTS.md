@@ -88,8 +88,11 @@ Once scaffolded, workflow actions are `poethepoet` tasks run via `uv run poe`:
 | `uv run poe up` / `poe down` | `docker compose up` / `down` (app + Postgres + Immich + Prefect) |
 | `uv run poe migrate` | `alembic upgrade head` |
 | `uv run poe run -- --album <slug>` | run the pipeline flow for one album |
+| `uv run poe generate -- <dir>` | ingest a photo directory and generate the book |
 
-The pipeline is also a console entry point: `uv run album run --album <slug>`.
+The pipeline is also a console entry point: `uv run photobook-generator`
+(`generate <dir>` for the one-command path, or `run --album <slug>` for a
+hand-authored `album.yml`).
 
 ## Non-negotiable rules
 

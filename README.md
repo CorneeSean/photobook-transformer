@@ -22,6 +22,27 @@ and duplicate detection for us). The pipeline then reads one Immich *album* and
 turns it into a book. So the flow is: **your folder → Immich album → pipeline →
 `index.html`.**
 
+### The one-command path
+
+Once you've installed the project (Point 0), started the services (Point 1), and
+put your two API keys in `.env` (the `IMMICH__API_KEY` + `ANTHROPIC_API_KEY` part
+of Point 3 — no album id needed), a single command does the upload, album
+creation, and pipeline run for you:
+
+```sh
+uv run photobook-generator generate ./path/to/photos   # or: ... generate .
+```
+
+It walks the folder (recursing subdirectories), uploads each photo to Immich,
+creates the album, waits out Immich's background jobs, writes
+`data/albums/<slug>/album.yml`, and runs the pipeline — landing the book at
+`data/albums/<slug>/book/index.html`. Options: `--slug`, `--title`, `--timezone`,
+and `--force` (re-import an already-imported slug). It's a convenience wrapper
+over the boundary, not a zero-dependency runtime — the local stack still has to
+be up. The manual, step-by-step path below (Points 2–5) is the same thing done
+by hand, and is still how you author `segments`/`lead_faces` by editing
+`album.yml`.
+
 ### Point 0 — Install (once)
 
 Install the two things the project needs, then set it up:
@@ -95,7 +116,7 @@ documented in [Album definition](./knowledge/reference/album-definition.md).
 ### Point 5 — Run the pipeline
 
 ```sh
-uv run album run --album my-trip
+uv run photobook-generator run --album my-trip
 ```
 
 This runs every stage end-to-end: pull the album from Immich → score and
@@ -151,8 +172,12 @@ with degraded curation quality until that's wired.
 | `uv run poe up` / `uv run poe down` | bring the local stack up / down |
 | `uv run poe migrate` | `alembic upgrade head` |
 | `uv run poe run -- --album <slug>` | run the pipeline flow for one album |
+| `uv run poe generate -- <dir>` | ingest a photo directory and generate the book |
 
-The pipeline is also a console entry point: `uv run album run --album <slug>`.
+The pipeline is also a console entry point: `uv run photobook-generator run
+--album <slug>` (a hand-authored `album.yml`), or `uv run photobook-generator
+generate <dir>` for the one-command path (see
+[The one-command path](#the-one-command-path) above).
 
 ## Contributing
 

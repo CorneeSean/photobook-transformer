@@ -144,6 +144,7 @@ without memorizing raw invocations. At minimum:
 | `uv run poe run -- --album honeymoon-2026` | run the pipeline flow for one album |
 
 The pipeline is also exposed as a console entry point via `[project.scripts]`
-(`album = "album.cli:main"`), so `uv run album run --album honeymoon-2026` works
-directly; `poe run` is the same thing wrapped for symmetry with the other tasks.
+(`photobook-generator = "album.cli:main"`), so `uv run photobook-generator run
+--album honeymoon-2026` works directly; `poe run` is the same thing wrapped for
+symmetry with the other tasks.
 Keep this table and the README's command list in sync when tasks change.

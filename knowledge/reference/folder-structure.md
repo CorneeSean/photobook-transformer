@@ -32,7 +32,7 @@ photo-album-pipeline/
 │   └── album/
 │       ├── __init__.py
 │       ├── config.py             # pydantic-settings, reads .env
-│       ├── cli.py                # `album run --album honeymoon-2026`
+│       ├── cli.py                # `photobook-generator` (generate <dir> | run --album <slug>)
 │       ├── definition.py         # loads/validates album.yml → Album + Segments
 │       │
 │       ├── flow/                 # the pipeline package (everything orchestration-related)

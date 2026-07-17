@@ -61,7 +61,7 @@ order, one at a time.
 | # | Step | Branch | Status | Commit | Notes |
 |---|------|--------|--------|--------|-------|
 | 26 | Immich album creation in the client (`create_album` + `get_jobs`) | step-26-immich-album-create (merged, deleted) | done | 94fba06 | playbook step 1 — `create_album` (`POST /albums`, returns id) + `get_jobs` (`GET /jobs` → `dict[str, ImmichJobCounts]`, the readiness signal for step 27); lean boundary models (jobCounts flattened), respx fixtures. Modelled against the OpenAPI contract, not a live capture (same deferral as steps 4-5) — re-verify on first live ingestion. 2 adversarial reviews (correctness clean; cleanup/reuse applied) + a focused re-review; 241 tests green |
-| 27 | `ingest.py` + `photobook-generator` entry point (Feature A) | — | todo | — | playbook step 2 — dir walk → upload → create album → readiness poll → materialize `album.yml` → `pipeline` |
+| 27 | `ingest.py` + `photobook-generator generate` subcommand (Feature A) | step-27-ingest-cli | in-progress | — | playbook step 2 — dir walk → upload → create album → readiness poll → materialize `album.yml` → `pipeline`; single `photobook-generator` command with `generate`/`run` subcommands |
 | 28 | `agents/segments.py` + `--source-document` (Feature B) | — | todo | — | playbook step 3 — PydanticAI segments-extraction agent + wiring |
 
 ## Notes / blockers

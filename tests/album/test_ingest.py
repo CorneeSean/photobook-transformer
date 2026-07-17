@@ -1,0 +1,280 @@
+"""Tests for :mod:`album.ingest` — a photo directory → an Immich album + a
+materialized ``album.yml``, over a fake Immich client and a temp directory.
+
+The Immich HTTP layer is stubbed by a fake :class:`~album.ingest.IngestClient`;
+``sleep`` is injected as a no-op so the readiness poll never actually waits. What
+the ingestor writes is asserted both structurally and by round-tripping it back
+through the real loader (``AlbumDefinition``), proving the generated file is a
+valid ``album.yml``.
+"""
+
+from __future__ import annotations
+
+import logging
+from pathlib import Path
+
+import pytest
+import yaml
+
+from album.definition import AlbumDefinition
+from album.immich.client import ImmichJobCounts
+from album.ingest import DirectoryIngestor, IngestError
+
+
+def _busy(active: int = 0, waiting: int = 0) -> dict[str, ImmichJobCounts]:
+    """A ``get_jobs`` response with the EXIF queue carrying the given work."""
+    return {"metadataExtraction": ImmichJobCounts(active=active, waiting=waiting)}
+
+
+class FakeIngestClient:
+    """In-memory :class:`~album.ingest.IngestClient` for tests.
+
+    ``jobs`` is a *sequence* of successive ``get_jobs`` responses (to model
+    Immich's async processing, e.g. ``[busy, busy, idle]``); the last entry
+    repeats once exhausted. Default: an empty map → idle immediately.
+    """
+
+    def __init__(self, *, jobs: list[dict[str, ImmichJobCounts]] | None = None) -> None:
+        self._jobs = list(jobs) if jobs is not None else None
+        self.uploaded: list[Path] = []
+        self.created: list[tuple[str, list[str]]] = []
+        self.jobs_calls = 0
+
+    def upload_asset(self, path: Path) -> str:
+        self.uploaded.append(path)
+        return f"asset-{len(self.uploaded)}"
+
+    def create_album(self, name: str, asset_ids: list[str]) -> str:
+        self.created.append((name, list(asset_ids)))
+        return "immich-new-1"
+
+    def get_jobs(self) -> dict[str, ImmichJobCounts]:
+        self.jobs_calls += 1
+        if self._jobs is None:
+            return {}
+        return self._jobs.pop(0) if len(self._jobs) > 1 else self._jobs[0]
+
+
+class TestDirectoryIngest:
+    """`DirectoryIngestor.ingest`: walk → upload → create album → materialize."""
+
+    def _ingestor(
+        self, client: FakeIngestClient, albums_dir: Path, **kw: object
+    ) -> DirectoryIngestor:
+        # No-op sleep + tiny timeout so the readiness poll is fast and silent.
+        return DirectoryIngestor(
+            client,
+            albums_dir=albums_dir,
+            poll_interval_s=1.0,
+            poll_timeout_s=3.0,
+            sleep=lambda _s: None,
+            **kw,  # pyright: ignore[reportArgumentType]
+        )
+
+    def _photos_dir(self, tmp_path: Path, name: str, files: list[str]) -> Path:
+        directory = tmp_path / name
+        directory.mkdir()
+        for filename in files:
+            (directory / filename).write_bytes(b"\xff\xd8\xff-bytes")
+        return directory
+
+    def test_uploads_all_images_creates_album_and_writes_valid_yaml(self, tmp_path: Path) -> None:
+        directory = self._photos_dir(tmp_path, "lisbon-trip", ["a.jpg", "b.png", "c.heic"])
+        client = FakeIngestClient()
+        albums_dir = tmp_path / "albums"
+
+        slug = self._ingestor(client, albums_dir).ingest(directory)
+
+        assert slug == "lisbon-trip"
+        # Every image uploaded (sorted), then the album created from those ids.
+        assert [p.name for p in client.uploaded] == ["a.jpg", "b.png", "c.heic"]
+        assert client.created == [("Lisbon Trip", ["asset-1", "asset-2", "asset-3"])]
+        # A minimal album.yml was materialized and round-trips through the loader.
+        album_yml = albums_dir / "lisbon-trip" / "album.yml"
+        written = yaml.safe_load(album_yml.read_text())
+        assert written == {
+            "slug": "lisbon-trip",
+            "title": "Lisbon Trip",
+            "immich_album_id": "immich-new-1",
+        }
+        loaded = AlbumDefinition().load(album_yml)
+        assert (loaded.slug, loaded.title, loaded.immich_album_id) == (
+            "lisbon-trip",
+            "Lisbon Trip",
+            "immich-new-1",
+        )
+
+    def test_recurses_into_subdirectories(self, tmp_path: Path) -> None:
+        directory = self._photos_dir(tmp_path, "trip", ["top.jpg"])
+        nested = directory / "day-1"
+        nested.mkdir()
+        (nested / "deep.jpg").write_bytes(b"\xff\xd8\xff")
+        client = FakeIngestClient()
+
+        self._ingestor(client, tmp_path / "albums").ingest(directory)
+
+        assert {p.name for p in client.uploaded} == {"top.jpg", "deep.jpg"}
+
+    def test_non_image_files_are_ignored(self, tmp_path: Path) -> None:
+        directory = self._photos_dir(tmp_path, "trip", ["keep.jpg", "notes.txt", "clip.mov"])
+        client = FakeIngestClient()
+
+        self._ingestor(client, tmp_path / "albums").ingest(directory)
+
+        assert [p.name for p in client.uploaded] == ["keep.jpg"]
+
+    def test_empty_directory_raises(self, tmp_path: Path) -> None:
+        directory = self._photos_dir(tmp_path, "empty", [])
+        client = FakeIngestClient()
+
+        with pytest.raises(IngestError, match="no images found"):
+            self._ingestor(client, tmp_path / "albums").ingest(directory)
+        assert client.created == []  # never created an album for nothing
+
+    @pytest.mark.parametrize(
+        ("dir_name", "expected_slug", "expected_title"),
+        [
+            ("lisbon-trip", "lisbon-trip", "Lisbon Trip"),
+            ("Trip 2026", "trip-2026", "Trip 2026"),
+            ("Sam_&_Alex", "sam-alex", "Sam & Alex"),
+        ],
+        ids=["kebab", "spaced", "punctuation"],
+    )
+    def test_slug_and_title_default_from_directory_name(
+        self, tmp_path: Path, dir_name: str, expected_slug: str, expected_title: str
+    ) -> None:
+        directory = self._photos_dir(tmp_path, dir_name, ["a.jpg"])
+        client = FakeIngestClient()
+
+        slug = self._ingestor(client, tmp_path / "albums").ingest(directory)
+
+        assert slug == expected_slug
+        assert client.created[0][0] == expected_title
+
+    def test_explicit_slug_and_title_win(self, tmp_path: Path) -> None:
+        directory = self._photos_dir(tmp_path, "raw-dump", ["a.jpg"])
+        client = FakeIngestClient()
+        albums_dir = tmp_path / "albums"
+
+        slug = self._ingestor(client, albums_dir).ingest(
+            directory, slug="honeymoon-2026", title="Our Honeymoon"
+        )
+
+        assert slug == "honeymoon-2026"
+        assert client.created[0][0] == "Our Honeymoon"
+        written = yaml.safe_load((albums_dir / "honeymoon-2026" / "album.yml").read_text())
+        assert written["slug"] == "honeymoon-2026"
+        assert written["title"] == "Our Honeymoon"
+
+    def test_timezone_written_when_given(self, tmp_path: Path) -> None:
+        directory = self._photos_dir(tmp_path, "trip", ["a.jpg"])
+        albums_dir = tmp_path / "albums"
+
+        self._ingestor(FakeIngestClient(), albums_dir).ingest(directory, timezone="Europe/Warsaw")
+
+        written = yaml.safe_load((albums_dir / "trip" / "album.yml").read_text())
+        assert written["timezone"] == "Europe/Warsaw"
+
+    def test_timezone_omitted_when_absent(self, tmp_path: Path) -> None:
+        directory = self._photos_dir(tmp_path, "trip", ["a.jpg"])
+        albums_dir = tmp_path / "albums"
+
+        self._ingestor(FakeIngestClient(), albums_dir).ingest(directory)
+
+        assert "timezone" not in yaml.safe_load((albums_dir / "trip" / "album.yml").read_text())
+
+
+class TestReRunGuard:
+    """The load-once re-run guard: refuse an existing slug unless ``force``."""
+
+    def _prepare(self, tmp_path: Path) -> tuple[FakeIngestClient, Path, Path]:
+        directory = tmp_path / "trip"
+        directory.mkdir()
+        (directory / "a.jpg").write_bytes(b"\xff\xd8\xff")
+        return FakeIngestClient(), directory, tmp_path / "albums"
+
+    def _ingestor(self, client: FakeIngestClient, albums_dir: Path) -> DirectoryIngestor:
+        return DirectoryIngestor(
+            client, albums_dir=albums_dir, poll_timeout_s=1.0, sleep=lambda _s: None
+        )
+
+    def test_rerun_without_force_raises_before_uploading(self, tmp_path: Path) -> None:
+        client, directory, albums_dir = self._prepare(tmp_path)
+        self._ingestor(client, albums_dir).ingest(directory)  # first import
+        client.uploaded.clear()
+
+        with pytest.raises(IngestError, match="already exists"):
+            self._ingestor(client, albums_dir).ingest(directory)  # second, no force
+        assert client.uploaded == []  # guard fired before any upload
+
+    def test_force_reruns_existing_without_reupload_or_new_album(self, tmp_path: Path) -> None:
+        client, directory, albums_dir = self._prepare(tmp_path)
+        self._ingestor(client, albums_dir).ingest(directory)  # first import
+        created_before = len(client.created)
+        client.uploaded.clear()
+
+        slug = self._ingestor(client, albums_dir).ingest(directory, force=True)
+
+        assert slug == "trip"
+        # --force re-runs the existing album as is: no re-upload, no duplicate
+        # Immich album (the pipeline is load-once, so it reuses the existing row).
+        assert client.uploaded == []
+        assert len(client.created) == created_before
+
+    def test_force_preserves_hand_authored_album_yml(self, tmp_path: Path) -> None:
+        client, directory, albums_dir = self._prepare(tmp_path)
+        self._ingestor(client, albums_dir).ingest(directory)
+        album_yml = albums_dir / "trip" / "album.yml"
+        # The user hand-edits the generated album.yml to add segments/meta.
+        album_yml.write_text(album_yml.read_text() + "meta:\n  note: hand-authored\n")
+
+        self._ingestor(client, albums_dir).ingest(directory, force=True)
+
+        # A forced re-run leaves the file untouched — it does not clobber edits.
+        assert "hand-authored" in album_yml.read_text()
+
+
+class TestReadinessPoll:
+    """The Immich async-processing wait before the pipeline runs."""
+
+    def _run(self, tmp_path: Path, client: FakeIngestClient, **kw: object) -> None:
+        directory = tmp_path / "trip"
+        directory.mkdir()
+        (directory / "a.jpg").write_bytes(b"\xff\xd8\xff")
+        DirectoryIngestor(
+            client,
+            albums_dir=tmp_path / "albums",
+            poll_interval_s=2.0,
+            poll_timeout_s=10.0,
+            sleep=lambda _s: None,
+            **kw,  # pyright: ignore[reportArgumentType]
+        ).ingest(directory)
+
+    def test_polls_through_busy_then_proceeds(self, tmp_path: Path) -> None:
+        # EXIF still extracting for two polls, then idle.
+        client = FakeIngestClient(jobs=[_busy(active=2, waiting=5), _busy(waiting=3), _busy()])
+
+        self._run(tmp_path, client)
+
+        # Polled until the queue reported idle (not resolving on the first busy call).
+        assert client.jobs_calls == 3
+        assert (tmp_path / "albums" / "trip" / "album.yml").exists()
+
+    def test_timeout_warns_and_continues(
+        self, tmp_path: Path, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        client = FakeIngestClient(jobs=[_busy(active=1)])  # never goes idle
+
+        with caplog.at_level(logging.WARNING):
+            self._run(tmp_path, client)
+
+        assert "still processing" in caplog.text
+        # Degrades gracefully: the album.yml is still written so the pipeline runs.
+        assert (tmp_path / "albums" / "trip" / "album.yml").exists()
+
+    def test_unreported_queue_treated_as_idle(self, tmp_path: Path) -> None:
+        client = FakeIngestClient(jobs=[{}])  # Immich reports no queues at all
+
+        self._run(tmp_path, client)
+
+        assert client.jobs_calls == 1  # idle on the first check, no waiting
