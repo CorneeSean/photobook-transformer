@@ -30,7 +30,8 @@ def _fixture(name: str) -> object:
 
 
 class TestImmichClient:
-    """`ImmichClient`: pagination, parsing, auth header, and error propagation."""
+    """`ImmichClient`: pagination, parsing, album creation, job-queue counts,
+    auth header, and error propagation."""
 
     @pytest.fixture
     def client(self) -> ImmichClient:
@@ -136,6 +137,43 @@ class TestImmichClient:
         assert request.method == "POST"
         # Sent as multipart form-data (the file part), not JSON.
         assert request.headers["content-type"].startswith("multipart/form-data")
+
+    @respx.mock
+    def test_create_album_posts_name_and_assets_and_returns_id(self, client: ImmichClient) -> None:
+        route = respx.post(f"{_BASE_URL}/albums").mock(
+            return_value=httpx.Response(
+                201, json={"id": "album-new-1", "albumName": "Trip 2026", "assetCount": 3}
+            )
+        )
+
+        album_id = client.create_album("Trip 2026", ["a1", "a2", "a3"])
+
+        assert album_id == "album-new-1"
+        request = route.calls[0].request
+        assert request.method == "POST"
+        body = json.loads(request.content)
+        # `albumName` names the album; `assetIds` seeds its membership in one call.
+        assert body["albumName"] == "Trip 2026"
+        assert body["assetIds"] == ["a1", "a2", "a3"]
+
+    @respx.mock
+    def test_get_jobs_parses_per_queue_counts(self, client: ImmichClient) -> None:
+        route = respx.get(f"{_BASE_URL}/jobs").mock(
+            return_value=httpx.Response(200, json=_fixture("jobs.json"))
+        )
+
+        jobs = client.get_jobs()
+
+        assert route.calls[0].request.method == "GET"
+        # A busy queue (EXIF still extracting) reports active + waiting work.
+        assert jobs["metadataExtraction"].active == 2
+        assert jobs["metadataExtraction"].waiting == 5
+        # An idle queue reports zero outstanding work — the readiness signal
+        # the ingestion poll waits on.
+        assert jobs["thumbnailGeneration"].active == 0
+        assert jobs["thumbnailGeneration"].waiting == 0
+        # Every queue Immich reports is surfaced.
+        assert "faceDetection" in jobs
 
     @respx.mock
     def test_get_thumbnail_returns_bytes(self, client: ImmichClient) -> None:

@@ -100,6 +100,14 @@ class ImmichFace(BaseModel):
         return data
 
 
+class ImmichJobCounts(BaseModel):
+    """The outstanding-work counts of one Immich job queue — the subset of
+    ``JobCountsDto`` that :meth:`ImmichClient.get_jobs` consumes."""
+
+    active: int = 0
+    waiting: int = 0
+
+
 class ImmichClient:
     """Thin typed wrapper over the Immich REST API.
 
@@ -181,6 +189,40 @@ class ImmichClient:
             )
         response.raise_for_status()
         return response.json()["id"]
+
+    def create_album(self, name: str, asset_ids: list[str]) -> str:
+        """Create an Immich album named ``name`` seeded with ``asset_ids``; return
+        its id, via ``POST /albums``.
+
+        Immich creates the album and adds the given assets in a single call
+        (``AlbumResponseDto.id``). The automated form of the manual
+        [`ingest`](knowledge/stages/ingest.md) step, used by single-command
+        ingestion (knowledge/build/single-command-ingestion.md) — the caller has
+        already uploaded each file via :meth:`upload_asset` and collected the ids.
+        """
+        response = self._client.post(
+            "/albums",
+            json={"albumName": name, "assetIds": asset_ids},
+        )
+        response.raise_for_status()
+        return response.json()["id"]
+
+    def get_jobs(self) -> dict[str, ImmichJobCounts]:
+        """Each job queue's outstanding-work counts keyed by queue name, via
+        ``GET /jobs`` (flattening ``AllJobStatusResponseDto``'s per-queue
+        ``jobCounts`` up to the boundary, dropping the unused ``queueStatus``).
+
+        Single-command ingestion polls this after upload to wait out Immich's
+        async EXIF/face/dedupe processing before running the pipeline — a queue
+        is idle when its counts show no ``active``/``waiting`` work (see
+        knowledge/build/single-command-ingestion.md).
+        """
+        response = self._client.get("/jobs")
+        response.raise_for_status()
+        return {
+            queue: ImmichJobCounts.model_validate(status["jobCounts"])
+            for queue, status in response.json().items()
+        }
 
     def get_faces(self, asset_id: str) -> list[ImmichFace]:
         """Detected faces for an asset, via ``GET /faces?id={asset_id}``.
