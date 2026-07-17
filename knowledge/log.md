@@ -2,6 +2,28 @@
 
 ## 2026-07-17
 
+* **Step 29 — offline classical replacement for the Claude vision call**
+  (commit `ba6c1bf`; [progress.md](/build/progress.md) Completed + Notes,
+  [local-analysis.md](/build/local-analysis.md) flipped to *implemented*). Split the
+  fused per-photo vision call into two injectable collaborators in a new
+  `album.analysis` package — a `ClassicalToneEstimator` (CV tone; tone is now always
+  classical) and a `Captioner` seam (`TemplateCaptioner` offline default +
+  `ClaudeCaptioner` opt-in), composed by `PhotoAnalyzer`. Captioner selectable per run
+  (`CAPTIONER` env / `--captioner` CLI, + `--force` on `run`), so a default run needs
+  no external API and no key — the pipeline's last external dependency. Retired
+  `agents/analysis.py`; moved `ToneParams` → `album.analysis.tone`; single-sourced the
+  image decode / `clamp` / tone bounds. Updated [architecture.md](/foundations/architecture.md),
+  [enhance.md](/stages/enhance.md), [caption.md](/stages/caption.md). Reviewed by the new
+  **4-agent panel** (see next entry); accepted the `--force --captioner claude` ~2× cost
+  on clustered photos (it's what re-captions unclustered ones — progress.md Notes).
+  `uv run poe check` green (323 pass / 3 skip). Live-Claude spot-check deferred.
+
+* **Review panel widened to 4 (user-directed).** [implementation-workflow.md](/process/implementation-workflow.md)
+  §6 now specifies up to 4 broad-scope review sub-agents — 2 adversarial (correctness;
+  the second an independent refuter), 1 style/reuse, 1 architecture & software design —
+  raising the cap from 3, with "scale down for small diffs" guidance. First applied on
+  step 29.
+
 * **Ruff trailing commas + `SimilaritySearch` → `Sequence` (user-directed,
   not a build step).** Widened `db/similarity.py`'s
   `SimilaritySearch`/`PgVectorSimilarity`/`StubSimilarity` inputs to

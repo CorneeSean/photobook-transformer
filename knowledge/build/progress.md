@@ -34,7 +34,6 @@ is optional/deferred — nothing is blocked on missing code (see
 | # | Step | Playbook | Status | Branch | Notes |
 |---|------|----------|--------|--------|-------|
 | 23 | DB-backed flow smoke test (optional) | testcontainers | todo | — | whole flow on real Postgres, Immich/Claude/Lulu as doubles — largely subsumed by step 25's `test_flow_integration.py` (real `pipeline()` on a pgvector container, every external boundary doubled); revisit only if a gap remains |
-| 29 | Offline analysis — classical replacement for the Claude vision call | local-analysis | todo (needs planning) | — | **Proposal, not yet planned** — see [local-analysis.md](/build/local-analysis.md). Drop the pipeline's last external-API dependency: tone deltas via classical CV, grounded caption via metadata templating (who/where/when already in the DB), keeping Claude/a local VLM injectable as an optional "rich caption" mode (mirrors the printer abstraction). Not cost-driven (~$1–$4/album, [ai-cost-estimate.md](/build/ai-cost-estimate.md)) — offline/no-key/deterministic. Requires a proper brainstorming + planning pass first (open questions listed in the proposal). Independent of step 23. |
 
 ## Completed (DONE)
 
@@ -91,8 +90,33 @@ is optional/deferred — nothing is blocked on missing code (see
 | 27 | `ingest.py` + `photobook-generator generate` subcommand (Feature A) | step-27-ingest-cli (merged, deleted) | done | c1c5146 | playbook step 2 — `DirectoryIngestor` (dir walk → upload → `create_album` → `get_jobs` readiness poll → materialize `album.yml`) then the UNCHANGED `pipeline`. CLI consolidated to a single `photobook-generator` command with `generate`/`run` subcommands (user-directed; replaced the `album` script). `--force` re-runs an existing slug as is (no re-upload/orphan/clobber — review caught the earlier re-materialize design as data-loss+orphan footguns). 2 adversarial reviews + a focused re-review; 264 tests. Live ingestion deferred (same no-reachable-Immich boundary as steps 4-5/26) |
 | 28 | `agents/segments.py` + `--source-document` (Feature B) | step-28-segments-agent (merged, deleted) | done | 1e2b0af | playbook step 3 — PydanticAI `extract_segments`/`extract_segments_from_pdf` (pypdf text + scanned-image fallback; reuses `SegmentYAML` + optional title), wired into `generate --source-document`: extracts segments grounded on the photo capture range, writes them to `album.yml`, validated fail-fast (`_validate_materialized`). Occasion-agnostic (genericity PASS in review). Shared `agents/_model.py` extracted. 2 adversarial reviews + a focused re-review; 277 tests. Live-Claude extraction spot-check deferred (no `ANTHROPIC_API_KEY`), same as steps 9/10/12; scanned-PDF path exercised via weasyprint fixtures |
 
+### Offline analysis playbook (see [local-analysis.md](/build/local-analysis.md))
+
+| # | Step | Branch | Status | Commit | Notes |
+|---|------|--------|--------|--------|-------|
+| 29 | Offline analysis — classical replacement for the Claude vision call | step-29-offline-analysis (merged, deleted) | done | ba6c1bf | Dropped the pipeline's **last external-API dependency**: the fused per-photo vision call is split into two injectable collaborators in a new `album.analysis` package — a `ClassicalToneEstimator` (CV: auto-exposure to a target luma, gray-world AWB, histogram-percentile shadows/highlights; tone is now **always classical**) and a `Captioner` seam (`TemplateCaptioner` offline default + `ClaudeCaptioner` opt-in), composed by `PhotoAnalyzer`. Captioner is **selectable per run** (`CAPTIONER` env / `--captioner` CLI, + `--force` on `run` for A/B), so a default `photobook-generator run` needs **no external API and no key**. Retired `agents/analysis.py` (`AnalysisResult`/`analyze_photo`); moved `ToneParams` → `album.analysis.tone`; single-sourced the image decode, `clamp`, and tone bounds. **4-agent review** (2 adversarial correctness, style/reuse, architecture — the new panel, see [implementation-workflow.md](/process/implementation-workflow.md) §6): fixes applied — `--force` threads to `caption` (re-captions the unclustered selected photos `enhance` skips), non-empty caption guard, force-wiring test. Genericity guard holds (honeymoon + wedding). `uv run poe check` green (323 pass / 3 skip, incl. Docker integration). Live-Claude caption spot-check deferred (no `ANTHROPIC_API_KEY`), same as steps 9/10/12/19/28. |
+
 ## Notes / blockers
 
+- **Step 29 done — offline analysis; `--force`+`claude` A/B cost accepted
+  (2026-07-17):** the pipeline is now fully offline by default (classical tone +
+  template caption, no API/key). The captioner is selectable per run for A/B
+  (`--captioner`, `--force`). **Accepted tradeoff** (architecture-review finding,
+  deliberately kept): under `--force`, `enhance` and `caption` each re-run the shared
+  analysis for a *clustered* photo, so `--force --captioner claude` on an already-run
+  album costs ~2× the thumbnail fetches + paid Claude calls on clustered photos.
+  This is what also re-captions the *unclustered* selected photos `enhance` skips
+  (the alternative — exempting `caption` from force — left those with stale captions,
+  a correctness gap). Cheap for the offline `TemplateCaptioner`; for a large online
+  A/B prefer a **fresh slug** over `--force`. Non-force runs are unaffected (one
+  analysis per photo via the DB idempotency gate). **Live-Claude caption spot-check
+  still deferred** (no `ANTHROPIC_API_KEY`), same as steps 9/10/12/19/28. **Next: only
+  the optional step 23 (DB-backed flow smoke test) remains.**
+- **Review panel widened to 4 (2026-07-17, user-directed):** the per-step sub-agent
+  review is now up to **4 broad-scope agents** — 2 adversarial (correctness, the
+  second an independent refuter), 1 style/reuse, 1 architecture & software design —
+  see [implementation-workflow.md](/process/implementation-workflow.md) §6 (cap raised
+  from 3). Scale down for small diffs. First applied on step 29.
 - **Ruff trailing-comma reformat + `SimilaritySearch` → `Sequence` (2026-07-17,
   user-directed, not a build step):** enabled `COM812` and applied a repo-wide
   reformat (52 files) so multi-line collections/calls stay expanded one-per-line
