@@ -134,7 +134,11 @@ class LeadFaceResolver(TaskUnit[LeadResult]):
         album_id = self._album_id
         result = LeadResult()
         person_ids = self._resolve_person_ids(
-            album_id, config, self._reference_dir, session, result
+            album_id,
+            config,
+            self._reference_dir,
+            session,
+            result,
         )
         result.lead_person_ids = person_ids
         self._mark_leads(album_id, person_ids, session)
@@ -186,7 +190,7 @@ class LeadFaceResolver(TaskUnit[LeadResult]):
         path = reference_dir / config.reference_image
         if not path.is_file():
             raise LeadFaceResolutionError(
-                f"lead_faces.reference_image {config.reference_image!r} not found at {path}"
+                f"lead_faces.reference_image {config.reference_image!r} not found at {path}",
             )
         asset_id = self._provider.upload_asset(path)
         album.lead_reference_asset_id = asset_id
@@ -209,7 +213,7 @@ class LeadFaceResolver(TaskUnit[LeadResult]):
         if not faces:
             raise LeadFaceResolutionError(
                 f"no faces detected on reference asset {asset_id!r} after "
-                f"{self._poll_timeout_s:g}s — Immich's face-detection job may not have run"
+                f"{self._poll_timeout_s:g}s — Immich's face-detection job may not have run",
             )
         return faces
 

@@ -31,7 +31,10 @@ class TestModels:
         assert photo.segment is segment
 
     def test_album_without_segments_created_and_related(
-        self, session: Session, make_album: Callable[..., Album], make_photo: Callable[..., Photo]
+        self,
+        session: Session,
+        make_album: Callable[..., Album],
+        make_photo: Callable[..., Photo],
     ) -> None:
         album = make_album(slug="unsorted-dump", title="Unsorted Dump")
         photo = make_photo(album, immich_asset_id="asset-2")
@@ -45,7 +48,9 @@ class TestModels:
         assert photo.segment_id is None
 
     def test_person_unique_per_album_and_defaults(
-        self, session: Session, make_album: Callable[..., Album]
+        self,
+        session: Session,
+        make_album: Callable[..., Album],
     ) -> None:
         album = make_album()
         session.add(album)
@@ -62,7 +67,10 @@ class TestModels:
             session.commit()
 
     def test_photo_face_columns_default_null(
-        self, session: Session, make_album: Callable[..., Album], make_photo: Callable[..., Photo]
+        self,
+        session: Session,
+        make_album: Callable[..., Album],
+        make_photo: Callable[..., Photo],
     ) -> None:
         album = make_album()
         photo = make_photo(album, immich_asset_id="asset-9")
@@ -74,7 +82,10 @@ class TestModels:
         assert photo.person_ids is None
 
     def test_photo_rating_and_place_columns_default_null(
-        self, session: Session, make_album: Callable[..., Album], make_photo: Callable[..., Photo]
+        self,
+        session: Session,
+        make_album: Callable[..., Album],
+        make_photo: Callable[..., Photo],
     ) -> None:
         # step 20: rating + reverse-geocoded place are optional `sync` signals —
         # NULL until fetched, and NULL for an album/photo that simply has none.

@@ -74,7 +74,8 @@ class TestExtractSegments:
         prompts: list[str] = []
 
         def handler(
-            messages: list[ModelMessage], info: AgentInfo
+            messages: list[ModelMessage],
+            info: AgentInfo,
         ) -> ModelResponse:  # pragma: no cover - exercised via FunctionModel
             for message in messages:
                 for part in message.parts:
@@ -105,7 +106,8 @@ class TestExtractSegments:
 
     def test_empty_document_yields_empty_segments(self) -> None:
         def handler(
-            messages: list[ModelMessage], info: AgentInfo
+            messages: list[ModelMessage],
+            info: AgentInfo,
         ) -> ModelResponse:  # pragma: no cover - exercised via FunctionModel
             return ModelResponse(parts=[TextPart(content='{"title": null, "segments": []}')])
 
@@ -120,7 +122,8 @@ class TestExtractSegments:
         parts_seen: list[object] = []
 
         def handler(
-            messages: list[ModelMessage], info: AgentInfo
+            messages: list[ModelMessage],
+            info: AgentInfo,
         ) -> ModelResponse:  # pragma: no cover - exercised via FunctionModel
             for message in messages:
                 for part in message.parts:

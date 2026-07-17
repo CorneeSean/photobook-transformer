@@ -29,7 +29,9 @@ class TestConfig:
         assert get_settings() is get_settings()
 
     def test_missing_database_url_raises(
-        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        tmp_path: Path,
     ) -> None:
         # Run outside the repo (no .env to fall back to) so DATABASE_URL is genuinely absent.
         monkeypatch.chdir(tmp_path)
@@ -54,7 +56,8 @@ class TestNestedGroups:
         get_settings.cache_clear()
 
     def test_immich_group_binds_from_double_underscore_env(
-        self, monkeypatch: pytest.MonkeyPatch
+        self,
+        monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         monkeypatch.setenv("IMMICH__BASE_URL", "http://immich.example/api")
         monkeypatch.setenv("IMMICH__API_KEY", "immich-secret")
@@ -65,7 +68,8 @@ class TestNestedGroups:
         assert immich.api_key == "immich-secret"
 
     def test_lulu_group_binds_from_double_underscore_env(
-        self, monkeypatch: pytest.MonkeyPatch
+        self,
+        monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         monkeypatch.setenv("LULU__CLIENT_KEY", "ck")
         monkeypatch.setenv("LULU__CLIENT_SECRET", "cs")

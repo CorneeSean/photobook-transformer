@@ -56,7 +56,11 @@ def _valid_model() -> object:
     """A TestModel returning a fixed non-zero AI tone delta (so the cross-camera
     baseline math is observable) plus a caption."""
     return analysis_test_model(
-        exposure_ev=0.2, temp_shift_k=100.0, shadows=0.1, highlights=-0.1, caption="A test photo."
+        exposure_ev=0.2,
+        temp_shift_k=100.0,
+        shadows=0.1,
+        highlights=-0.1,
+        caption="A test photo.",
     )
 
 
@@ -147,7 +151,8 @@ class TestXmpSidecar:
 
         # The exposure EV round-trips through the real binary params blob.
         mode, black, ev, pct, target, bias = struct.unpack(
-            "<iffffi", bytes.fromhex(exposure.get(self._dt("params")) or "")
+            "<iffffi",
+            bytes.fromhex(exposure.get(self._dt("params")) or ""),
         )
         assert ev == pytest.approx(0.5)
         assert (mode, black, pct, target, bias) == (0, pytest.approx(0.0), 50.0, -4.0, 0)
@@ -192,7 +197,12 @@ class TestEnhanceStage:
     ) -> EnhanceStage:
         analyzer = PhotoAnalyzer(thumbnails, model=model or _valid_model())  # pyright: ignore[reportArgumentType]
         return EnhanceStage(
-            analyzer, thumbnails, album_id, session_factory, data_root=tmp_path, force=force
+            analyzer,
+            thumbnails,
+            album_id,
+            session_factory,
+            data_root=tmp_path,
+            force=force,
         )
 
     def test_writes_xmp_and_sets_flag_for_selected_photos(
@@ -216,7 +226,10 @@ class TestEnhanceStage:
         album_id = self._persist(session, album)
 
         result = self._stage(
-            FakeThumbnails({"a1": _DARK}), tmp_path, album_id, reuse(session)
+            FakeThumbnails({"a1": _DARK}),
+            tmp_path,
+            album_id,
+            reuse(session),
         ).run()
 
         assert isinstance(result, EnhanceResult)
@@ -302,7 +315,10 @@ class TestEnhanceStage:
         album_id = self._persist(session, album)
 
         self._stage(
-            FakeThumbnails({"ref": _DARK, "other": _BRIGHT}), tmp_path, album_id, reuse(session)
+            FakeThumbnails({"ref": _DARK, "other": _BRIGHT}),
+            tmp_path,
+            album_id,
+            reuse(session),
         ).run()
 
         photos = {p.immich_asset_id: p for p in session.scalars(sa_select(Photo))}
@@ -359,15 +375,23 @@ class TestEnhanceStage:
         other_album = make_album(slug="other")
         other_album.photos = [
             make_photo(
-                other_album, immich_asset_id="o1", filename="o1.jpg", selected=True, scene_id=1
-            )
+                other_album,
+                immich_asset_id="o1",
+                filename="o1.jpg",
+                selected=True,
+                scene_id=1,
+            ),
         ]
         other_id = self._persist(session, other_album)
         target_album = make_album(slug="target")
         target_album.photos = [
             make_photo(
-                target_album, immich_asset_id="t1", filename="t1.jpg", selected=True, scene_id=1
-            )
+                target_album,
+                immich_asset_id="t1",
+                filename="t1.jpg",
+                selected=True,
+                scene_id=1,
+            ),
         ]
         target_id = self._persist(session, target_album)
 
@@ -394,7 +418,11 @@ class TestEnhanceStage:
         album = make_album(slug="test-album")
         album.photos = [
             make_photo(
-                album, immich_asset_id="a1", filename="a1.jpg", selected=True, scene_id=None
+                album,
+                immich_asset_id="a1",
+                filename="a1.jpg",
+                selected=True,
+                scene_id=None,
             ),
         ]
         album_id = self._persist(session, album)
@@ -441,7 +469,7 @@ class TestEnhanceStage:
 
         self._stage(thumbs, tmp_path, album_id, reuse(session)).run()
         other_photo = session.scalars(
-            sa_select(Photo).where(Photo.immich_asset_id == "other")
+            sa_select(Photo).where(Photo.immich_asset_id == "other"),
         ).one()
         first_run_exposure = other_photo.enhance_exposure_ev
 
@@ -449,7 +477,7 @@ class TestEnhanceStage:
         # reconciled result rather than drifting further from it.
         self._stage(thumbs, tmp_path, album_id, reuse(session), force=True).run()
         other_photo = session.scalars(
-            sa_select(Photo).where(Photo.immich_asset_id == "other")
+            sa_select(Photo).where(Photo.immich_asset_id == "other"),
         ).one()
         second_run_exposure = other_photo.enhance_exposure_ev
 
@@ -488,7 +516,10 @@ class TestEnhanceStage:
         album_id = self._persist(session, album)
 
         self._stage(
-            FakeThumbnails({"ref": _DARK, "other": _BRIGHT}), tmp_path, album_id, reuse(session)
+            FakeThumbnails({"ref": _DARK, "other": _BRIGHT}),
+            tmp_path,
+            album_id,
+            reuse(session),
         ).run()
 
         photos = {p.immich_asset_id: p for p in session.scalars(sa_select(Photo))}

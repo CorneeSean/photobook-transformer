@@ -59,7 +59,8 @@ class Album(Base):
 
     photos: Mapped[list[Photo]] = relationship(back_populates="album")
     segments: Mapped[list[Segment]] = relationship(
-        back_populates="album", order_by="Segment.position"
+        back_populates="album",
+        order_by="Segment.position",
     )
     people: Mapped[list[Person]] = relationship(back_populates="album")
 
@@ -137,7 +138,9 @@ class Photo(Base):
 
     # --- populated by `cluster` ---
     segment_id: Mapped[int | None] = mapped_column(
-        ForeignKey("segments.id"), index=True, default=None
+        ForeignKey("segments.id"),
+        index=True,
+        default=None,
     )  # NULL if album has no segments
     scene_id: Mapped[int | None] = mapped_column(default=None)  # sub-segment cluster
 

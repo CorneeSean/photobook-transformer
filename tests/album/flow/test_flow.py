@@ -113,7 +113,8 @@ def _prefect_test_db() -> Iterator[None]:
 
 
 def _patch_runs(
-    monkeypatch: pytest.MonkeyPatch, make_run: Callable[[str], Callable[..., object]]
+    monkeypatch: pytest.MonkeyPatch,
+    make_run: Callable[[str], Callable[..., object]],
 ) -> None:
     """Replace every stage class's ``run`` with ``make_run(name)``."""
     for name, cls in _STAGE_CLASSES.items():
@@ -142,7 +143,7 @@ class TestGetOrCreateAlbum:
         album_dir = tmp_path / slug
         album_dir.mkdir(parents=True)
         (album_dir / "album.yml").write_text(
-            f"slug: {slug}\ntitle: Our Honeymoon\nimmich_album_id: immich-abc-123\n"
+            f"slug: {slug}\ntitle: Our Honeymoon\nimmich_album_id: immich-abc-123\n",
         )
         return tmp_path
 
@@ -163,7 +164,10 @@ class TestGetOrCreateAlbum:
         assert album.immich_album_id == "immich-abc-123"
 
     def test_reuses_existing_without_reading_yaml(
-        self, session: Session, tmp_path: Path, make_album: Callable[..., Album]
+        self,
+        session: Session,
+        tmp_path: Path,
+        make_album: Callable[..., Album],
     ) -> None:
         existing_id = self._persist(session, make_album(slug="honeymoon-2026"))
         # No album.yml on disk at all for this slug — proves the existing row is
@@ -212,7 +216,8 @@ class TestPipelineWiring:
         """Exact sequence is no longer deterministic within a group (build step
         25), so this asserts position/precedence rather than a fixed list."""
         album_id = self._persist(
-            session, make_album(slug="honeymoon-2026", immich_album_id="immich-1")
+            session,
+            make_album(slug="honeymoon-2026", immich_album_id="immich-1"),
         )
 
         calls: list[str] = []
@@ -379,7 +384,9 @@ class TestPipelineWiring:
 
         built = _FakeImmichClient()
         monkeypatch.setattr(
-            flow_module.ImmichClient, "from_settings", classmethod(lambda cls: built)
+            flow_module.ImmichClient,
+            "from_settings",
+            classmethod(lambda cls: built),
         )
 
         deps = self._deps()
@@ -414,7 +421,9 @@ class TestPipelineWiring:
 
         _patch_runs(monkeypatch, _make_run)
         monkeypatch.setattr(
-            flow_module.ImmichClient, "from_settings", classmethod(lambda cls: _FakeImmichClient())
+            flow_module.ImmichClient,
+            "from_settings",
+            classmethod(lambda cls: _FakeImmichClient()),
         )
 
         deps = self._deps()
@@ -430,13 +439,17 @@ class TestPipelineResourceCleanup:
     to construct — both live inside the same outer try/finally."""
 
     def test_does_not_close_injected_session_if_client_construction_fails(
-        self, session: Session, monkeypatch: pytest.MonkeyPatch
+        self,
+        session: Session,
+        monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         def _raise() -> None:
             raise RuntimeError("Immich unreachable")
 
         monkeypatch.setattr(
-            flow_module.ImmichClient, "from_settings", classmethod(lambda cls: _raise())
+            flow_module.ImmichClient,
+            "from_settings",
+            classmethod(lambda cls: _raise()),
         )
 
         closed = False
@@ -455,7 +468,8 @@ class TestPipelineResourceCleanup:
         assert closed is False  # caller-owned session — pipeline() must not close it either way
 
     def test_closes_its_own_session_if_client_construction_fails(
-        self, monkeypatch: pytest.MonkeyPatch
+        self,
+        monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         """The owned (not injected) session is the resource that leaked before
         the fix: client construction happens inside the same try that guards
@@ -477,7 +491,9 @@ class TestPipelineResourceCleanup:
             raise RuntimeError("Immich unreachable")
 
         monkeypatch.setattr(
-            flow_module.ImmichClient, "from_settings", classmethod(lambda cls: _raise())
+            flow_module.ImmichClient,
+            "from_settings",
+            classmethod(lambda cls: _raise()),
         )
 
         with pytest.raises(RuntimeError, match="Immich unreachable"):

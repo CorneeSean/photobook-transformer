@@ -23,12 +23,15 @@ class TestCli:
     """`main`: argument wiring and expected-vs-unexpected error handling."""
 
     def test_run_calls_pipeline_with_the_given_album_slug(
-        self, monkeypatch: pytest.MonkeyPatch
+        self,
+        monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         calls: list[str] = []
         monkeypatch.setattr("album.cli.pipeline", lambda album_slug: calls.append(album_slug))
         monkeypatch.setattr(
-            sys, "argv", ["photobook-generator", "run", "--album", "honeymoon-2026"]
+            sys,
+            "argv",
+            ["photobook-generator", "run", "--album", "honeymoon-2026"],
         )
 
         main()
@@ -51,7 +54,9 @@ class TestCli:
 
         monkeypatch.setattr("album.cli.pipeline", _raise)
         monkeypatch.setattr(
-            sys, "argv", ["photobook-generator", "run", "--album", "honeymoon-2026"]
+            sys,
+            "argv",
+            ["photobook-generator", "run", "--album", "honeymoon-2026"],
         )
 
         with pytest.raises(SystemExit) as exc_info:
@@ -66,14 +71,17 @@ class TestCli:
 
         monkeypatch.setattr("album.cli.pipeline", _raise)
         monkeypatch.setattr(
-            sys, "argv", ["photobook-generator", "run", "--album", "honeymoon-2026"]
+            sys,
+            "argv",
+            ["photobook-generator", "run", "--album", "honeymoon-2026"],
         )
 
         with pytest.raises(RuntimeError, match="something genuinely unexpected"):
             main()
 
     def test_missing_album_argument_is_rejected_by_argparse(
-        self, monkeypatch: pytest.MonkeyPatch
+        self,
+        monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         monkeypatch.setattr(sys, "argv", ["photobook-generator", "run"])
 
@@ -87,7 +95,10 @@ class TestGenerate:
     """`photobook-generator generate <dir>`: dir → ingest → pipeline (one command)."""
 
     def _stub_ingest(
-        self, monkeypatch: pytest.MonkeyPatch, *, returns: str = "lisbon-trip"
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        *,
+        returns: str = "lisbon-trip",
     ) -> list[tuple[tuple[object, ...], dict[str, object]]]:
         calls: list[tuple[tuple[object, ...], dict[str, object]]] = []
 
@@ -99,12 +110,15 @@ class TestGenerate:
         return calls
 
     def test_ingests_then_runs_pipeline_and_prints_book_path(
-        self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        capsys: pytest.CaptureFixture[str],
     ) -> None:
         ingest_calls = self._stub_ingest(monkeypatch, returns="lisbon-trip")
         pipeline_calls: list[str] = []
         monkeypatch.setattr(
-            "album.cli.pipeline", lambda album_slug: pipeline_calls.append(album_slug)
+            "album.cli.pipeline",
+            lambda album_slug: pipeline_calls.append(album_slug),
         )
         monkeypatch.setattr(sys, "argv", ["photobook-generator", "generate", "./photos"])
 
@@ -159,7 +173,10 @@ class TestGenerate:
         ids=["ingest-error", "file-not-found", "value-error"],
     )
     def test_prints_a_clean_message_and_exits_for_expected_errors(
-        self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str], error: Exception
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        capsys: pytest.CaptureFixture[str],
+        error: Exception,
     ) -> None:
         def _raise(*args: object, **kwargs: object) -> str:
             raise error
@@ -185,7 +202,8 @@ class TestGenerate:
             main()
 
     def test_missing_directory_argument_is_rejected_by_argparse(
-        self, monkeypatch: pytest.MonkeyPatch
+        self,
+        monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         monkeypatch.setattr(sys, "argv", ["photobook-generator", "generate"])
 

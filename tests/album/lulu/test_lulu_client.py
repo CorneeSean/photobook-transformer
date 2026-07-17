@@ -40,7 +40,7 @@ class TestLuluClient:
 
     def _mock_token(self) -> respx.Route:
         return respx.post(_TOKEN_URL).mock(
-            return_value=httpx.Response(200, json=_fixture("token.json"))
+            return_value=httpx.Response(200, json=_fixture("token.json")),
         )
 
     def _request(self) -> PrintJobRequest:
@@ -55,10 +55,10 @@ class TestLuluClient:
                     "title": "Our Honeymoon",
                     "external_id": "honeymoon-2026",
                     "interior": {
-                        "source_url": "https://example.com/albums/honeymoon-2026/book.pdf"
+                        "source_url": "https://example.com/albums/honeymoon-2026/book.pdf",
                     },
                     "cover": {"source_url": "https://example.com/albums/honeymoon-2026/book.pdf"},
-                }
+                },
             ],
             shipping_address=ShippingAddress(
                 name="Alex Morgan",
@@ -74,7 +74,7 @@ class TestLuluClient:
     def test_authenticates_before_submitting(self, client: LuluClient) -> None:
         token_route = self._mock_token()
         job_route = respx.post(f"{_BASE_URL}/print-jobs/").mock(
-            return_value=httpx.Response(201, json=_fixture("print_job_created.json"))
+            return_value=httpx.Response(201, json=_fixture("print_job_created.json")),
         )
 
         result = client.submit_print_job(self._request())
@@ -91,7 +91,7 @@ class TestLuluClient:
     def test_submit_print_job_sends_expected_body(self, client: LuluClient) -> None:
         self._mock_token()
         job_route = respx.post(f"{_BASE_URL}/print-jobs/").mock(
-            return_value=httpx.Response(201, json=_fixture("print_job_created.json"))
+            return_value=httpx.Response(201, json=_fixture("print_job_created.json")),
         )
 
         client.submit_print_job(self._request())
@@ -106,7 +106,7 @@ class TestLuluClient:
     def test_reuses_token_across_calls(self, client: LuluClient) -> None:
         token_route = self._mock_token()
         respx.post(f"{_BASE_URL}/print-jobs/").mock(
-            return_value=httpx.Response(201, json=_fixture("print_job_created.json"))
+            return_value=httpx.Response(201, json=_fixture("print_job_created.json")),
         )
 
         client.submit_print_job(self._request())
@@ -119,7 +119,7 @@ class TestLuluClient:
     def test_get_print_job_status(self, client: LuluClient) -> None:
         self._mock_token()
         respx.get(f"{_BASE_URL}/print-jobs/42424/").mock(
-            return_value=httpx.Response(200, json=_fixture("print_job_status_shipped.json"))
+            return_value=httpx.Response(200, json=_fixture("print_job_status_shipped.json")),
         )
 
         status = client.get_print_job(42424)
@@ -131,7 +131,7 @@ class TestLuluClient:
     def test_raises_on_validation_error(self, client: LuluClient) -> None:
         self._mock_token()
         respx.post(f"{_BASE_URL}/print-jobs/").mock(
-            return_value=httpx.Response(400, json=_fixture("error_validation.json"))
+            return_value=httpx.Response(400, json=_fixture("error_validation.json")),
         )
 
         with pytest.raises(httpx.HTTPStatusError):

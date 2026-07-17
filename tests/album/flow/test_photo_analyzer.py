@@ -37,7 +37,8 @@ def capturing_model() -> tuple[FunctionModel, list[str]]:
     prompts: list[str] = []
 
     def handler(
-        messages: list[ModelMessage], info: AgentInfo
+        messages: list[ModelMessage],
+        info: AgentInfo,
     ) -> ModelResponse:  # pragma: no cover - exercised via FunctionModel
         for message in messages:
             for part in message.parts:
@@ -61,7 +62,10 @@ class TestPhotoAnalyzer:
         return album.id
 
     def test_calls_agent_and_persists_all_fields(
-        self, session: Session, make_album: Callable[..., Album], make_photo: Callable[..., Photo]
+        self,
+        session: Session,
+        make_album: Callable[..., Album],
+        make_photo: Callable[..., Photo],
     ) -> None:
         album = make_album()
         album.photos = [make_photo(album, immich_asset_id="a1")]
@@ -69,7 +73,8 @@ class TestPhotoAnalyzer:
         photo = session.scalars(sa_select(Photo)).one()
 
         analyzer = PhotoAnalyzer(
-            FakeThumbnails(), model=analysis_test_model(caption="A test photo.")
+            FakeThumbnails(),
+            model=analysis_test_model(caption="A test photo."),
         )
         result = analyzer.ensure(session, photo)
 
@@ -81,7 +86,10 @@ class TestPhotoAnalyzer:
         assert photo.caption == result.caption
 
     def test_is_not_repeated_for_an_already_populated_photo(
-        self, session: Session, make_album: Callable[..., Album], make_photo: Callable[..., Photo]
+        self,
+        session: Session,
+        make_album: Callable[..., Album],
+        make_photo: Callable[..., Photo],
     ) -> None:
         album = make_album()
         album.photos = [make_photo(album, immich_asset_id="a1")]
@@ -101,7 +109,10 @@ class TestPhotoAnalyzer:
         assert thumbnails.calls == ["a1"]  # thumbnail fetched only once
 
     def test_handles_no_segment_context_without_erroring(
-        self, session: Session, make_album: Callable[..., Album], make_photo: Callable[..., Photo]
+        self,
+        session: Session,
+        make_album: Callable[..., Album],
+        make_photo: Callable[..., Photo],
     ) -> None:
         album = make_album()  # no segments
         album.photos = [make_photo(album, immich_asset_id="a1", segment=None)]
@@ -115,7 +126,10 @@ class TestPhotoAnalyzer:
         assert photo.caption
 
     def test_force_reanalyzes_a_populated_photo(
-        self, session: Session, make_album: Callable[..., Album], make_photo: Callable[..., Photo]
+        self,
+        session: Session,
+        make_album: Callable[..., Album],
+        make_photo: Callable[..., Photo],
     ) -> None:
         album = make_album()
         album.photos = [make_photo(album, immich_asset_id="a1")]
@@ -183,7 +197,7 @@ class TestPeopleGrounding:
                 album,
                 immich_asset_id="a1",
                 person_ids=["p-alex", "p-unnamed", "p-ghost"],
-            )
+            ),
         ]
         self._persist(session, album)
         photo = session.scalars(sa_select(Photo)).one()
@@ -243,7 +257,7 @@ class TestPlaceGrounding:
                 city="Lisbon",
                 state="Lisbon Municipality",
                 country="Portugal",
-            )
+            ),
         ]
         self._persist(session, album)
         photo = session.scalars(sa_select(Photo)).one()
@@ -289,7 +303,7 @@ class TestPlaceGrounding:
                 city="Singapore",
                 state="Singapore",
                 country="Singapore",
-            )
+            ),
         ]
         self._persist(session, album)
         photo = session.scalars(sa_select(Photo)).one()

@@ -103,7 +103,7 @@ class ClusterStage(Stage[ClusterResult]):
         # order_by(Photo.id): without it Postgres may return rows in any order, which
         # would make the out_of_range/undated result lists non-deterministic across runs.
         return list(
-            session.scalars(select(Photo).where(Photo.album_id == album_id).order_by(Photo.id))
+            session.scalars(select(Photo).where(Photo.album_id == album_id).order_by(Photo.id)),
         )
 
     @staticmethod
@@ -128,7 +128,10 @@ class ClusterStage(Stage[ClusterResult]):
         return next_scene - 1
 
     def _assign_segments(
-        self, segments: list[Segment], dated: list[Photo], result: ClusterResult
+        self,
+        segments: list[Segment],
+        dated: list[Photo],
+        result: ClusterResult,
     ) -> list[list[Photo]]:
         """Return the photo groups to run scene detection over, in a deterministic order.
 
@@ -141,7 +144,10 @@ class ClusterStage(Stage[ClusterResult]):
         return [by_segment[seg.id] for seg in segments if by_segment[seg.id]]
 
     def _bucket_by_segment(
-        self, segments: list[Segment], dated: list[Photo], result: ClusterResult
+        self,
+        segments: list[Segment],
+        dated: list[Photo],
+        result: ClusterResult,
     ) -> dict[int, list[Photo]]:
         by_segment: dict[int, list[Photo]] = {seg.id: [] for seg in segments}
         for photo in dated:
@@ -197,10 +203,12 @@ class ClusterStage(Stage[ClusterResult]):
                 [p.gps_lat, p.gps_lon]
                 for p in photos
                 if p.gps_lat is not None and p.gps_lon is not None
-            ]
+            ],
         )
         labels = DBSCAN(
-            eps=self._spatial_eps_m / _EARTH_RADIUS_M, min_samples=1, metric="haversine"
+            eps=self._spatial_eps_m / _EARTH_RADIUS_M,
+            min_samples=1,
+            metric="haversine",
         ).fit(coords)
         return labels.labels_.tolist()
 

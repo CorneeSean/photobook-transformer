@@ -53,7 +53,7 @@ def _seed(session: Session, manifest: dict[str, object]) -> int:
                 place=str(spec["place"]),
                 start_at=datetime.fromisoformat(str(spec["start_at"])),
                 end_at=datetime.fromisoformat(str(spec["end_at"])),
-            )
+            ),
         )
 
     photos = manifest["photos"]
@@ -70,7 +70,7 @@ def _seed(session: Session, manifest: dict[str, object]) -> int:
                 caption=str(spec["caption"]),
                 rendered_path=str(image_path.resolve()),
                 selected=True,  # skip `select` curation (needs deferred quality scores)
-            )
+            ),
         )
 
     session.add(album)
@@ -93,7 +93,7 @@ def main() -> None:
             f"cluster: {cluster_result.segments_assigned} photos into segments, "
             f"{cluster_result.scenes} scenes "
             f"(out-of-range={len(cluster_result.out_of_range)}, "
-            f"undated={len(cluster_result.undated)})"
+            f"undated={len(cluster_result.undated)})",
         )
 
         # assemble writes <output_dir>/<slug>/assembled.pdf and sets page_number;
@@ -102,7 +102,7 @@ def main() -> None:
         session.commit()
         print(
             f"assemble: {assemble_result.photos_placed} photos on "
-            f"{assemble_result.pages} pages → {assemble_result.output_path}"
+            f"{assemble_result.pages} pages → {assemble_result.output_path}",
         )
 
         album = session.get(Album, album_id)

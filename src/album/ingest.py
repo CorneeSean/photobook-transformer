@@ -135,7 +135,8 @@ class DirectoryIngestor:
         # the created, EXIF-ready album), so it uses the pre-document title; the
         # book's album.yml title below can still prefer a document-supplied one.
         immich_album_id = self._client.create_album(
-            self._resolve_title(title, directory, slug), asset_ids
+            self._resolve_title(title, directory, slug),
+            asset_ids,
         )
 
         self._wait_for_readiness()
@@ -154,7 +155,10 @@ class DirectoryIngestor:
         return slug
 
     def _extract_segments(
-        self, immich_album_id: str, source_document: Path | None, timezone: str | None
+        self,
+        immich_album_id: str,
+        source_document: Path | None,
+        timezone: str | None,
     ) -> tuple[str | None, list[SegmentYAML] | None]:
         """Run the segments agent over ``source_document`` (or a no-op if none),
         grounded on the album's photo capture range. Returns the document's
@@ -187,7 +191,7 @@ class DirectoryIngestor:
             raise IngestError(
                 f"the segments extracted from the source document are invalid ({exc}); "
                 f"edit {album_yml} to fix them and re-run with --force, or drop "
-                "--source-document to import without segments"
+                "--source-document to import without segments",
             ) from exc
 
     @staticmethod
@@ -205,14 +209,18 @@ class DirectoryIngestor:
         if not force:
             raise IngestError(
                 f"album {slug!r} already exists at {album_yml}; pass --force to "
-                "re-run it as is, or --slug NAME to import a distinct album"
+                "re-run it as is, or --slug NAME to import a distinct album",
             )
         _log.info("album %r already imported; --force re-runs it (album.yml left untouched)", slug)
         return slug
 
     @staticmethod
     def _resolve_title(
-        title: str | None, directory: Path, slug: str, *, doc_title: str | None = None
+        title: str | None,
+        directory: Path,
+        slug: str,
+        *,
+        doc_title: str | None = None,
     ) -> str:
         """Precedence: explicit ``--title`` > the source document's title >
         directory name > slug. (An EXIF date/place title is deferred — it needs
@@ -288,7 +296,8 @@ class DirectoryIngestor:
             # `place` — a plain, YAML-friendly dict the loader reads straight back.
             data["segments"] = [s.model_dump(mode="json", exclude_none=True) for s in segments]
         _ = album_yml.write_text(
-            yaml.safe_dump(data, sort_keys=False, allow_unicode=True), encoding="utf-8"
+            yaml.safe_dump(data, sort_keys=False, allow_unicode=True),
+            encoding="utf-8",
         )
 
 

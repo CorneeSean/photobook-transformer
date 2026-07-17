@@ -38,7 +38,10 @@ class StubSimilarity:
     the ORM objects rather than keeping a separate registry."""
 
     def max_similarity(
-        self, session: Session, embedding: Sequence[float] | None, against: Sequence[int]
+        self,
+        session: Session,
+        embedding: Sequence[float] | None,
+        against: Sequence[int],
     ) -> float:
         if embedding is None or not against:
             return -1.0
@@ -91,7 +94,10 @@ class TestSelect:
         return _make
 
     def test_highest_aesthetic_score_wins_first(
-        self, session: Session, make_album: Callable[..., Album], photo: Callable[..., Photo]
+        self,
+        session: Session,
+        make_album: Callable[..., Album],
+        photo: Callable[..., Photo],
     ) -> None:
         album = make_album(immich_album_id="immich-abc")
         low = photo(album, "low", scene_id=1, aesthetic_score=0.2, clip_embedding=_A)
@@ -108,7 +114,10 @@ class TestSelect:
         assert result.scenes == 1
 
     def test_near_duplicates_skipped(
-        self, session: Session, make_album: Callable[..., Album], photo: Callable[..., Photo]
+        self,
+        session: Session,
+        make_album: Callable[..., Album],
+        photo: Callable[..., Photo],
     ) -> None:
         album = make_album(immich_album_id="immich-abc")
         best = photo(album, "best", scene_id=1, aesthetic_score=0.9, clip_embedding=_A)
@@ -125,7 +134,10 @@ class TestSelect:
         assert result.selected == 1
 
     def test_immich_flagged_duplicates_skipped(
-        self, session: Session, make_album: Callable[..., Album], photo: Callable[..., Photo]
+        self,
+        session: Session,
+        make_album: Callable[..., Album],
+        photo: Callable[..., Photo],
     ) -> None:
         # Visually dissimilar (would pass the CLIP check) but Immich itself flagged
         # them as duplicates — that signal must skip on its own.
@@ -158,7 +170,10 @@ class TestSelect:
         assert result.selected == 1
 
     def test_all_similar_scene_yields_exactly_one_selection(
-        self, session: Session, make_album: Callable[..., Album], photo: Callable[..., Photo]
+        self,
+        session: Session,
+        make_album: Callable[..., Album],
+        photo: Callable[..., Photo],
     ) -> None:
         album = make_album(immich_album_id="immich-abc")
         # identical embeddings — maximally similar
@@ -176,7 +191,10 @@ class TestSelect:
         assert selected[0].immich_asset_id == "p0"  # the top-scoring one
 
     def test_diverse_scene_yields_multiple_selections(
-        self, session: Session, make_album: Callable[..., Album], photo: Callable[..., Photo]
+        self,
+        session: Session,
+        make_album: Callable[..., Album],
+        photo: Callable[..., Photo],
     ) -> None:
         album = make_album(immich_album_id="immich-abc")
         album.photos = [
@@ -192,12 +210,19 @@ class TestSelect:
         assert all(p.selected for p in session.scalars(sa_select(Photo)))
 
     def test_unclustered_photos_never_selected(
-        self, session: Session, make_album: Callable[..., Album], photo: Callable[..., Photo]
+        self,
+        session: Session,
+        make_album: Callable[..., Album],
+        photo: Callable[..., Photo],
     ) -> None:
         album = make_album(immich_album_id="immich-abc")
         clustered = photo(album, "clustered", scene_id=1, aesthetic_score=0.5, clip_embedding=_A)
         unclustered = photo(
-            album, "unclustered", scene_id=None, aesthetic_score=0.9, clip_embedding=_B
+            album,
+            "unclustered",
+            scene_id=None,
+            aesthetic_score=0.9,
+            clip_embedding=_B,
         )
         album.photos = [clustered, unclustered]
         album_id = self._persist(session, album)
@@ -211,7 +236,10 @@ class TestSelect:
         assert result == SelectResult(selected=1, scenes=1)
 
     def test_multiple_scenes_selected_independently(
-        self, session: Session, make_album: Callable[..., Album], photo: Callable[..., Photo]
+        self,
+        session: Session,
+        make_album: Callable[..., Album],
+        photo: Callable[..., Photo],
     ) -> None:
         album = make_album(immich_album_id="immich-abc")
         s1_best = photo(album, "s1_best", scene_id=1, aesthetic_score=0.9, clip_embedding=_A)
@@ -231,14 +259,21 @@ class TestSelect:
         assert result == SelectResult(selected=2, scenes=2)
 
     def test_photo_without_embedding_is_not_dropped(
-        self, session: Session, make_album: Callable[..., Album], photo: Callable[..., Photo]
+        self,
+        session: Session,
+        make_album: Callable[..., Album],
+        photo: Callable[..., Photo],
     ) -> None:
         # clip_embedding is nullable (data-model.md) — a candidate select can't
         # score similarity for must not crash the stage or get silently excluded.
         album = make_album(immich_album_id="immich-abc")
         first = photo(album, "first", scene_id=1, aesthetic_score=0.9, clip_embedding=_A)
         no_embedding = photo(
-            album, "no_embedding", scene_id=1, aesthetic_score=0.8, clip_embedding=None
+            album,
+            "no_embedding",
+            scene_id=1,
+            aesthetic_score=0.8,
+            clip_embedding=None,
         )
         album.photos = [first, no_embedding]
         album_id = self._persist(session, album)
@@ -251,17 +286,28 @@ class TestSelect:
         assert result.selected == 2
 
     def test_already_picked_without_embedding_does_not_crash(
-        self, session: Session, make_album: Callable[..., Album], photo: Callable[..., Photo]
+        self,
+        session: Session,
+        make_album: Callable[..., Album],
+        photo: Callable[..., Photo],
     ) -> None:
         # An already-picked photo lacking an embedding must not crash later
         # candidates' similarity checks; they compare only against picks that do
         # have one.
         album = make_album(immich_album_id="immich-abc")
         picked_no_embedding = photo(
-            album, "picked_no_embedding", scene_id=1, aesthetic_score=0.9, clip_embedding=None
+            album,
+            "picked_no_embedding",
+            scene_id=1,
+            aesthetic_score=0.9,
+            clip_embedding=None,
         )
         near_dup_of_a = photo(
-            album, "near_dup_of_a", scene_id=1, aesthetic_score=0.7, clip_embedding=_A_NEAR
+            album,
+            "near_dup_of_a",
+            scene_id=1,
+            aesthetic_score=0.7,
+            clip_embedding=_A_NEAR,
         )
         also_a = photo(album, "also_a", scene_id=1, aesthetic_score=0.5, clip_embedding=_A)
         album.photos = [picked_no_embedding, near_dup_of_a, also_a]
@@ -276,7 +322,10 @@ class TestSelect:
         assert result.selected == 2
 
     def test_is_idempotent(
-        self, session: Session, make_album: Callable[..., Album], photo: Callable[..., Photo]
+        self,
+        session: Session,
+        make_album: Callable[..., Album],
+        photo: Callable[..., Photo],
     ) -> None:
         album = make_album(immich_album_id="immich-abc")
         album.photos = [
@@ -294,7 +343,10 @@ class TestSelect:
         assert before == after
 
     def test_scoped_to_album(
-        self, session: Session, make_album: Callable[..., Album], photo: Callable[..., Photo]
+        self,
+        session: Session,
+        make_album: Callable[..., Album],
+        photo: Callable[..., Photo],
     ) -> None:
         other = make_album(slug="other", immich_album_id="immich-other")
         other.photos = [photo(other, "o1", scene_id=1, aesthetic_score=0.9, clip_embedding=_A)]
@@ -364,14 +416,21 @@ class TestPeopleAwareSelect:
             album.people.append(Person(immich_person_id=person_id, is_lead=True))
 
     def test_group_shot_wins_tiebreak_when_scores_close(
-        self, session: Session, make_album: Callable[..., Album], photo: Callable[..., Photo]
+        self,
+        session: Session,
+        make_album: Callable[..., Album],
+        photo: Callable[..., Photo],
     ) -> None:
         # All-similar scene ⇒ exactly one pick; equal aesthetic ⇒ the group shot
         # (more recognized people) edges out the incidental solo.
         album = make_album(immich_album_id="immich-abc")
         solo = photo(album, "solo", aesthetic_score=0.8, clip_embedding=_A, person_ids=["p1"])
         group = photo(
-            album, "group", aesthetic_score=0.8, clip_embedding=_A, person_ids=["p1", "p2"]
+            album,
+            "group",
+            aesthetic_score=0.8,
+            clip_embedding=_A,
+            person_ids=["p1", "p2"],
         )
         album.photos = [solo, group]
         album_id = self._persist(session, album)
@@ -385,14 +444,21 @@ class TestPeopleAwareSelect:
         assert result.selected == 1
 
     def test_clearly_better_solo_beats_group_shot(
-        self, session: Session, make_album: Callable[..., Album], photo: Callable[..., Photo]
+        self,
+        session: Session,
+        make_album: Callable[..., Album],
+        photo: Callable[..., Photo],
     ) -> None:
         # The tie-break is small: a clearly higher-aesthetic solo still wins over a
         # lower group shot (they're near-dups, so only one is picked).
         album = make_album(immich_album_id="immich-abc")
         solo = photo(album, "solo", aesthetic_score=0.9, clip_embedding=_A, person_ids=["p1"])
         group = photo(
-            album, "group", aesthetic_score=0.7, clip_embedding=_A, person_ids=["p2", "p3"]
+            album,
+            "group",
+            aesthetic_score=0.7,
+            clip_embedding=_A,
+            person_ids=["p2", "p3"],
         )
         album.photos = [solo, group]
         album_id = self._persist(session, album)
@@ -404,17 +470,28 @@ class TestPeopleAwareSelect:
         assert photos["group"].selected is False
 
     def test_lead_guaranteed_coverage_even_as_near_dup_of_nonlead(
-        self, session: Session, make_album: Callable[..., Album], photo: Callable[..., Photo]
+        self,
+        session: Session,
+        make_album: Callable[..., Album],
+        photo: Callable[..., Photo],
     ) -> None:
         # The best shot is a non-lead; the lead only appears in a near-duplicate of
         # it. The lead must still be selected — never culled as a near-dup of a
         # non-lead.
         album = make_album(immich_album_id="immich-abc")
         nonlead = photo(
-            album, "nonlead", aesthetic_score=0.9, clip_embedding=_A, person_ids=["p-x"]
+            album,
+            "nonlead",
+            aesthetic_score=0.9,
+            clip_embedding=_A,
+            person_ids=["p-x"],
         )
         lead = photo(
-            album, "lead", aesthetic_score=0.5, clip_embedding=_A_NEAR, person_ids=["p-lead"]
+            album,
+            "lead",
+            aesthetic_score=0.5,
+            clip_embedding=_A_NEAR,
+            person_ids=["p-lead"],
         )
         album.photos = [nonlead, lead]
         self._lead(album, "p-lead")
@@ -428,7 +505,10 @@ class TestPeopleAwareSelect:
         assert result.selected == 2
 
     def test_multiple_leads_each_get_coverage(
-        self, session: Session, make_album: Callable[..., Album], photo: Callable[..., Photo]
+        self,
+        session: Session,
+        make_album: Callable[..., Album],
+        photo: Callable[..., Photo],
     ) -> None:
         # A couple: two leads whose only photos are near-duplicates of each other.
         # Each lead must be covered — the second isn't culled just for resembling
@@ -436,7 +516,11 @@ class TestPeopleAwareSelect:
         album = make_album(immich_album_id="immich-abc")
         me = photo(album, "me", aesthetic_score=0.9, clip_embedding=_A, person_ids=["p-me"])
         wife = photo(
-            album, "wife", aesthetic_score=0.85, clip_embedding=_A_NEAR, person_ids=["p-wife"]
+            album,
+            "wife",
+            aesthetic_score=0.85,
+            clip_embedding=_A_NEAR,
+            person_ids=["p-wife"],
         )
         album.photos = [me, wife]
         self._lead(album, "p-me", "p-wife")
@@ -450,12 +534,19 @@ class TestPeopleAwareSelect:
         assert result.selected == 2
 
     def test_lead_boost_outranks_group_tiebreak(
-        self, session: Session, make_album: Callable[..., Album], photo: Callable[..., Photo]
+        self,
+        session: Session,
+        make_album: Callable[..., Album],
+        photo: Callable[..., Photo],
     ) -> None:
         # All-similar scene: a single-lead photo beats a larger non-lead group shot.
         album = make_album(immich_album_id="immich-abc")
         group = photo(
-            album, "group", aesthetic_score=0.8, clip_embedding=_A, person_ids=["p1", "p2", "p3"]
+            album,
+            "group",
+            aesthetic_score=0.8,
+            clip_embedding=_A,
+            person_ids=["p1", "p2", "p3"],
         )
         lead = photo(album, "lead", aesthetic_score=0.8, clip_embedding=_A, person_ids=["p-lead"])
         album.photos = [group, lead]
@@ -464,7 +555,11 @@ class TestPeopleAwareSelect:
 
         # lead_boost (0.05) must beat group_boost * 3 people (0.03).
         result = SelectStage(
-            StubSimilarity(), album_id, reuse(session), lead_boost=0.05, group_boost=0.01
+            StubSimilarity(),
+            album_id,
+            reuse(session),
+            lead_boost=0.05,
+            group_boost=0.01,
         ).run()
 
         photos = self._by_asset(session)
@@ -473,20 +568,35 @@ class TestPeopleAwareSelect:
         assert result.selected == 1
 
     def test_more_leads_wins_among_similar_but_original_scene_still_selected(
-        self, session: Session, make_album: Callable[..., Album], photo: Callable[..., Photo]
+        self,
+        session: Session,
+        make_album: Callable[..., Album],
+        photo: Callable[..., Photo],
     ) -> None:
         # Among near-duplicates, the frame with MORE leads wins (both of a couple
         # over just one). A distinct/"original" composition with fewer leads and a
         # low score is still selected — MMR keeps it for its diversity.
         album = make_album(immich_album_id="immich-abc")
         two_lead = photo(
-            album, "two_lead", aesthetic_score=0.8, clip_embedding=_A, person_ids=["p-me", "p-wife"]
+            album,
+            "two_lead",
+            aesthetic_score=0.8,
+            clip_embedding=_A,
+            person_ids=["p-me", "p-wife"],
         )
         one_lead = photo(
-            album, "one_lead", aesthetic_score=0.8, clip_embedding=_A, person_ids=["p-me"]
+            album,
+            "one_lead",
+            aesthetic_score=0.8,
+            clip_embedding=_A,
+            person_ids=["p-me"],
         )
         original = photo(
-            album, "original", aesthetic_score=0.3, clip_embedding=_B, person_ids=["p-me"]
+            album,
+            "original",
+            aesthetic_score=0.3,
+            clip_embedding=_B,
+            person_ids=["p-me"],
         )
         album.photos = [two_lead, one_lead, original]
         self._lead(album, "p-me", "p-wife")
@@ -510,7 +620,10 @@ class TestPeopleAwareSelect:
         assert result.selected == 2
 
     def test_non_lead_seen_only_in_near_dup_stays_unselected(
-        self, session: Session, make_album: Callable[..., Album], photo: Callable[..., Photo]
+        self,
+        session: Session,
+        make_album: Callable[..., Album],
+        photo: Callable[..., Photo],
     ) -> None:
         # Strict posture: there is no generic coverage phase, so a non-lead person
         # appearing only in a near-duplicate of a pick is NOT rescued — the book
@@ -529,14 +642,21 @@ class TestPeopleAwareSelect:
         assert result.selected == 1
 
     def test_group_boost_is_configurable(
-        self, session: Session, make_album: Callable[..., Album], photo: Callable[..., Photo]
+        self,
+        session: Session,
+        make_album: Callable[..., Album],
+        photo: Callable[..., Photo],
     ) -> None:
         # With the group tie-break disabled (group_boost=0), the earlier (lower-id)
         # solo wins the tie instead of the group shot — proving the kwarg is wired.
         album = make_album(immich_album_id="immich-abc")
         solo = photo(album, "solo", aesthetic_score=0.8, clip_embedding=_A, person_ids=["p1"])
         group = photo(
-            album, "group", aesthetic_score=0.8, clip_embedding=_A, person_ids=["p1", "p2"]
+            album,
+            "group",
+            aesthetic_score=0.8,
+            clip_embedding=_A,
+            person_ids=["p1", "p2"],
         )
         album.photos = [solo, group]
         album_id = self._persist(session, album)
@@ -548,7 +668,10 @@ class TestPeopleAwareSelect:
         assert photos["group"].selected is False
 
     def test_lead_boost_is_configurable(
-        self, session: Session, make_album: Callable[..., Album], photo: Callable[..., Photo]
+        self,
+        session: Session,
+        make_album: Callable[..., Album],
+        photo: Callable[..., Photo],
     ) -> None:
         # A strong non-lead and a weaker lead as near-duplicates. At the default
         # boost the non-lead ranks first (kept) and the lead is added by coverage;
@@ -557,10 +680,18 @@ class TestPeopleAwareSelect:
         # boost observably changes the selection.
         album = make_album(immich_album_id="immich-abc")
         nonlead = photo(
-            album, "nonlead", aesthetic_score=0.9, clip_embedding=_A, person_ids=["p-x"]
+            album,
+            "nonlead",
+            aesthetic_score=0.9,
+            clip_embedding=_A,
+            person_ids=["p-x"],
         )
         lead = photo(
-            album, "lead", aesthetic_score=0.7, clip_embedding=_A_NEAR, person_ids=["p-lead"]
+            album,
+            "lead",
+            aesthetic_score=0.7,
+            clip_embedding=_A_NEAR,
+            person_ids=["p-lead"],
         )
         album.photos = [nonlead, lead]
         self._lead(album, "p-lead")
@@ -572,7 +703,11 @@ class TestPeopleAwareSelect:
         assert default.selected == 2
 
         boosted = SelectStage(
-            StubSimilarity(), album_id, reuse(session), threshold=0.9, lead_boost=0.5
+            StubSimilarity(),
+            album_id,
+            reuse(session),
+            threshold=0.9,
+            lead_boost=0.5,
         ).run()
         photos = self._by_asset(session)
         # The lead now outranks; the non-lead is dropped as its near-dup (no coverage).
@@ -580,7 +715,10 @@ class TestPeopleAwareSelect:
         assert boosted.selected == 1
 
     def test_face_free_album_unaffected_by_lead_config(
-        self, session: Session, make_album: Callable[..., Album], photo: Callable[..., Photo]
+        self,
+        session: Session,
+        make_album: Callable[..., Album],
+        photo: Callable[..., Photo],
     ) -> None:
         # Genericity guard: photos with no recognized faces select exactly by plain
         # MMR (best kept, dissimilar kept, near-dup dropped) even when the album has
@@ -602,7 +740,10 @@ class TestPeopleAwareSelect:
         assert result.selected == 2
 
     def test_rating_breaks_tie_between_near_duplicates(
-        self, session: Session, make_album: Callable[..., Album], photo: Callable[..., Photo]
+        self,
+        session: Session,
+        make_album: Callable[..., Album],
+        photo: Callable[..., Photo],
     ) -> None:
         # step 20: among near-duplicates with equal aesthetic score, the
         # higher-rated photo (user curation) wins the tie.
@@ -610,10 +751,20 @@ class TestPeopleAwareSelect:
         # `unrated` is added first (lower id), so without the rating boost the
         # deterministic id-order tie would pick it; the boost must flip that.
         unrated = photo(
-            album, "unrated", scene_id=1, aesthetic_score=0.8, clip_embedding=_A, rating=None
+            album,
+            "unrated",
+            scene_id=1,
+            aesthetic_score=0.8,
+            clip_embedding=_A,
+            rating=None,
         )
         rated = photo(
-            album, "rated", scene_id=1, aesthetic_score=0.8, clip_embedding=_A_NEAR, rating=5
+            album,
+            "rated",
+            scene_id=1,
+            aesthetic_score=0.8,
+            clip_embedding=_A_NEAR,
+            rating=5,
         )
         album.photos = [unrated, rated]
         album_id = self._persist(session, album)
@@ -626,16 +777,29 @@ class TestPeopleAwareSelect:
         assert result.selected == 1
 
     def test_negative_rating_is_penalized(
-        self, session: Session, make_album: Callable[..., Album], photo: Callable[..., Photo]
+        self,
+        session: Session,
+        make_album: Callable[..., Album],
+        photo: Callable[..., Photo],
     ) -> None:
         # A rejected photo (rating -1) is pushed *below* an unrated near-duplicate,
         # even though it was added first (lower id would otherwise win the tie).
         album = make_album(immich_album_id="immich-abc")
         rejected = photo(
-            album, "rejected", scene_id=1, aesthetic_score=0.8, clip_embedding=_A, rating=-1
+            album,
+            "rejected",
+            scene_id=1,
+            aesthetic_score=0.8,
+            clip_embedding=_A,
+            rating=-1,
         )
         unrated = photo(
-            album, "unrated", scene_id=1, aesthetic_score=0.8, clip_embedding=_A_NEAR, rating=None
+            album,
+            "unrated",
+            scene_id=1,
+            aesthetic_score=0.8,
+            clip_embedding=_A_NEAR,
+            rating=None,
         )
         album.photos = [rejected, unrated]
         album_id = self._persist(session, album)
@@ -648,7 +812,10 @@ class TestPeopleAwareSelect:
         assert result.selected == 1
 
     def test_rating_is_a_soft_signal_not_an_override(
-        self, session: Session, make_album: Callable[..., Album], photo: Callable[..., Photo]
+        self,
+        session: Session,
+        make_album: Callable[..., Album],
+        photo: Callable[..., Photo],
     ) -> None:
         # Magnitude guard: the boost is small enough that a clearly better *unrated*
         # photo (0.9) still beats a 5-star but much weaker near-duplicate (0.6+0.10);
@@ -656,10 +823,20 @@ class TestPeopleAwareSelect:
         # the feature *exists*; this one bounds how strong it is.)
         album = make_album(immich_album_id="immich-abc")
         great = photo(
-            album, "great", scene_id=1, aesthetic_score=0.9, clip_embedding=_A, rating=None
+            album,
+            "great",
+            scene_id=1,
+            aesthetic_score=0.9,
+            clip_embedding=_A,
+            rating=None,
         )
         weak_5star = photo(
-            album, "weak_5star", scene_id=1, aesthetic_score=0.6, clip_embedding=_A_NEAR, rating=5
+            album,
+            "weak_5star",
+            scene_id=1,
+            aesthetic_score=0.6,
+            clip_embedding=_A_NEAR,
+            rating=5,
         )
         album.photos = [great, weak_5star]
         album_id = self._persist(session, album)
@@ -671,20 +848,32 @@ class TestPeopleAwareSelect:
         assert photos["weak_5star"].selected is False
 
     def test_rating_boost_is_configurable(
-        self, session: Session, make_album: Callable[..., Album], photo: Callable[..., Photo]
+        self,
+        session: Session,
+        make_album: Callable[..., Album],
+        photo: Callable[..., Photo],
     ) -> None:
         # With rating_boost=0 the tie falls back to deterministic id order (the
         # earlier, lower-rated photo), proving the kwarg is wired.
         album = make_album(immich_album_id="immich-abc")
         first = photo(album, "first", scene_id=1, aesthetic_score=0.8, clip_embedding=_A, rating=0)
         rated = photo(
-            album, "rated", scene_id=1, aesthetic_score=0.8, clip_embedding=_A_NEAR, rating=5
+            album,
+            "rated",
+            scene_id=1,
+            aesthetic_score=0.8,
+            clip_embedding=_A_NEAR,
+            rating=5,
         )
         album.photos = [first, rated]
         album_id = self._persist(session, album)
 
         SelectStage(
-            StubSimilarity(), album_id, reuse(session), threshold=0.9, rating_boost=0.0
+            StubSimilarity(),
+            album_id,
+            reuse(session),
+            threshold=0.9,
+            rating_boost=0.0,
         ).run()
 
         photos = self._by_asset(session)
@@ -692,13 +881,16 @@ class TestPeopleAwareSelect:
         assert photos["rated"].selected is False
 
     def test_lead_in_another_album_does_not_leak(
-        self, session: Session, make_album: Callable[..., Album], photo: Callable[..., Photo]
+        self,
+        session: Session,
+        make_album: Callable[..., Album],
+        photo: Callable[..., Photo],
     ) -> None:
         # is_lead is album-scoped: a person who is a lead in another album must not
         # be treated as a lead here (which would rescue their near-dup photo).
         other = make_album(slug="other", immich_album_id="immich-other")
         other.photos = [
-            photo(other, "o1", aesthetic_score=0.9, clip_embedding=_A, person_ids=["p-shared"])
+            photo(other, "o1", aesthetic_score=0.9, clip_embedding=_A, person_ids=["p-shared"]),
         ]
         self._lead(other, "p-shared")
         self._persist(session, other)
@@ -706,7 +898,11 @@ class TestPeopleAwareSelect:
         target = make_album(slug="target", immich_album_id="immich-target")
         t_best = photo(target, "t_best", aesthetic_score=0.9, clip_embedding=_A, person_ids=["p-x"])
         t_shared = photo(
-            target, "t_shared", aesthetic_score=0.5, clip_embedding=_A_NEAR, person_ids=["p-shared"]
+            target,
+            "t_shared",
+            aesthetic_score=0.5,
+            clip_embedding=_A_NEAR,
+            person_ids=["p-shared"],
         )
         target.photos = [t_best, t_shared]
         target_id = self._persist(session, target)

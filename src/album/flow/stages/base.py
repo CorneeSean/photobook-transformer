@@ -81,7 +81,11 @@ class Stage[ResultT](TaskUnit[ResultT]):
     _album: Album
 
     def __init__(
-        self, album_id: int, session_factory: SessionFactory, *, force: bool = False
+        self,
+        album_id: int,
+        session_factory: SessionFactory,
+        *,
+        force: bool = False,
     ) -> None:
         self._album_id = album_id
         self._session_factory = session_factory

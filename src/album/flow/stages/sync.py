@@ -149,7 +149,11 @@ class SyncStage(Stage[SyncResult]):
         )
 
     def _upsert_photo(
-        self, run: _SyncRun, asset: ImmichAsset, timestamp: datetime | None, session: Session
+        self,
+        run: _SyncRun,
+        asset: ImmichAsset,
+        timestamp: datetime | None,
+        session: Session,
     ) -> Photo:
         """Create or update the ``Photo`` row for ``asset``, tallying created/updated."""
         photo = run.existing.get(asset.id)
@@ -185,7 +189,11 @@ class SyncStage(Stage[SyncResult]):
         photo.city, photo.state, photo.country = exif.city, exif.state, exif.country
 
     def _sync_faces(
-        self, run: _SyncRun, asset: ImmichAsset, photo: Photo, session: Session
+        self,
+        run: _SyncRun,
+        asset: ImmichAsset,
+        photo: Photo,
+        session: Session,
     ) -> None:
         """Populate ``photo.face_count``/``person_ids`` and upsert ``Person`` rows.
 
@@ -203,7 +211,7 @@ class SyncStage(Stage[SyncResult]):
         # Assigned faces only, de-duplicated but order-preserving (a person may
         # appear in more than one face on the same photo).
         photo.person_ids = list(
-            dict.fromkeys(face.person_id for face in faces if face.person_id is not None)
+            dict.fromkeys(face.person_id for face in faces if face.person_id is not None),
         )
 
         for face in faces:
@@ -251,7 +259,9 @@ class SyncStage(Stage[SyncResult]):
         )
 
     def _capture_time_utc(
-        self, asset: ImmichAsset, default_zone: ZoneInfo | None
+        self,
+        asset: ImmichAsset,
+        default_zone: ZoneInfo | None,
     ) -> tuple[datetime | None, bool]:
         """Return ``(utc_timestamp, ambiguous)`` for an asset.
 
@@ -272,7 +282,10 @@ class SyncStage(Stage[SyncResult]):
         return (exif.date_time_original if exif else None) or asset.local_date_time
 
     def _localize_naive(
-        self, candidate: datetime, asset: ImmichAsset, default_zone: ZoneInfo | None
+        self,
+        candidate: datetime,
+        asset: ImmichAsset,
+        default_zone: ZoneInfo | None,
     ) -> tuple[datetime | None, bool]:
         """Anchor a naive local ``candidate`` to a zone, falling back exif -> album default."""
         exif = asset.exif_info

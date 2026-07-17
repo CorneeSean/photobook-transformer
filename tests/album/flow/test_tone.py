@@ -40,7 +40,9 @@ class TestFromPhoto:
     """`Photo -> ToneParams`: read the stored knobs, coalescing None to 0.0."""
 
     def test_reads_stored_values(
-        self, make_album: Callable[..., Album], make_photo: Callable[..., Photo]
+        self,
+        make_album: Callable[..., Album],
+        make_photo: Callable[..., Photo],
     ) -> None:
         photo = make_photo(
             make_album(),
@@ -51,7 +53,10 @@ class TestFromPhoto:
         )
 
         assert ToneParams.from_photo(photo) == ToneParams(
-            exposure_ev=0.4, temp_shift_k=-200.0, shadows=0.3, highlights=-0.2
+            exposure_ev=0.4,
+            temp_shift_k=-200.0,
+            shadows=0.3,
+            highlights=-0.2,
         )
 
     @pytest.mark.parametrize(
@@ -89,7 +94,9 @@ class TestWriteTo:
     """`ToneParams -> Photo`: write the four columns, never touch caption."""
 
     def test_writes_columns_and_leaves_caption_untouched(
-        self, make_album: Callable[..., Album], make_photo: Callable[..., Photo]
+        self,
+        make_album: Callable[..., Album],
+        make_photo: Callable[..., Photo],
     ) -> None:
         photo = make_photo(make_album(), caption="pre-existing caption")
         tone = ToneParams(exposure_ev=0.5, temp_shift_k=150.0, shadows=0.2, highlights=-0.3)

@@ -103,7 +103,7 @@ class DarktableRenderer:
         if completed.returncode != 0:
             raise RuntimeError(
                 f"darktable-cli exited {completed.returncode} for {input_path}: "
-                f"{completed.stderr.strip()}"
+                f"{completed.stderr.strip()}",
             )
 
 
@@ -160,7 +160,12 @@ class RenderStage(Stage[RenderResult]):
         return result
 
     def _render_or_skip_photo(
-        self, photo: Photo, album_slug: str, result: RenderResult, *, force: bool
+        self,
+        photo: Photo,
+        album_slug: str,
+        result: RenderResult,
+        *,
+        force: bool,
     ) -> None:
         """Dispatch one selected photo to the not-ready/skip/render outcome,
         updating ``result`` (and ``photo.rendered_path`` on success) in place."""

@@ -45,7 +45,10 @@ class HtmlPrinter:
     """
 
     def __init__(
-        self, output_dir: str | Path = "data/albums", *, templates_dir: Path = _TEMPLATES_DIR
+        self,
+        output_dir: str | Path = "data/albums",
+        *,
+        templates_dir: Path = _TEMPLATES_DIR,
     ) -> None:
         self._output_dir = Path(output_dir)
         self._env = Environment(

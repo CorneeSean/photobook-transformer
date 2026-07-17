@@ -25,8 +25,8 @@ def selected_photos(album_id: int, session: Session) -> Sequence[Photo]:
     iteration — the one read shared by ``caption``/``enhance``/``render``."""
     return list(
         session.scalars(
-            select(Photo).where(Photo.album_id == album_id, Photo.selected).order_by(Photo.id)
-        )
+            select(Photo).where(Photo.album_id == album_id, Photo.selected).order_by(Photo.id),
+        ),
     )
 
 

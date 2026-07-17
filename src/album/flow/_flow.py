@@ -132,13 +132,13 @@ class _UnavailableQualityModel:
     def score(self, image: bytes) -> float:
         raise NotImplementedError(
             "real aesthetic scoring (LAION/open_clip) isn't wired yet — see "
-            "knowledge/build/progress.md's notes for build steps 6 and 14"
+            "knowledge/build/progress.md's notes for build steps 6 and 14",
         )
 
     def embed(self, image: bytes) -> list[float]:
         raise NotImplementedError(
             "real CLIP embedding (open_clip) isn't wired yet — see "
-            "knowledge/build/progress.md's notes for build steps 6 and 14"
+            "knowledge/build/progress.md's notes for build steps 6 and 14",
         )
 
 
@@ -182,7 +182,8 @@ def _load_lead_faces(album_dir: Path) -> LeadFacesYAML | None:
 
 
 def _resolve_quality_deps(
-    aesthetic: AestheticScorer | None, embedder: Embedder | None
+    aesthetic: AestheticScorer | None,
+    embedder: Embedder | None,
 ) -> tuple[AestheticScorer, Embedder]:
     """Fill in whichever of ``aesthetic``/``embedder`` wasn't injected with the
     same shared :class:`_UnavailableQualityModel` placeholder — see this

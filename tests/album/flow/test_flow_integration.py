@@ -118,7 +118,7 @@ def _asset(asset_id: str, filename: str, captured_at: datetime) -> ImmichAsset:
             "id": asset_id,
             "originalFileName": filename,
             "exifInfo": {"dateTimeOriginal": captured_at},
-        }
+        },
     )
 
 

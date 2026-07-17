@@ -56,13 +56,19 @@ class AnalysisResult(BaseModel):
 
     exposure_ev: float = Field(ge=-2.0, le=2.0, description="Exposure correction, in stops.")
     temp_shift_k: float = Field(
-        ge=-2000.0, le=2000.0, description="White-balance shift, in Kelvin."
+        ge=-2000.0,
+        le=2000.0,
+        description="White-balance shift, in Kelvin.",
     )
     shadows: float = Field(
-        ge=-1.0, le=1.0, description="Shadow lift (positive) or crush (negative)."
+        ge=-1.0,
+        le=1.0,
+        description="Shadow lift (positive) or crush (negative).",
     )
     highlights: float = Field(
-        ge=-1.0, le=1.0, description="Highlight recovery (negative) or blow-out (positive)."
+        ge=-1.0,
+        le=1.0,
+        description="Highlight recovery (negative) or blow-out (positive).",
     )
     caption: str = Field(min_length=1, description="A short, natural caption for the photo.")
 

@@ -120,12 +120,12 @@ def _fetch_placed_photos(album: Album, session: Session) -> list[Photo]:
         session.scalars(
             select(Photo)
             .where(Photo.album_id == album.id, Photo.selected, Photo.page_number.is_not(None))
-            .order_by(Photo.page_number)
-        )
+            .order_by(Photo.page_number),
+        ),
     )
     if not placed:
         raise NotAssembledError(
-            f"album {album.slug!r} has no placed photos — run `assemble` before printing"
+            f"album {album.slug!r} has no placed photos — run `assemble` before printing",
         )
     return placed
 
@@ -164,6 +164,6 @@ def _book_photo(photo: Photo) -> BookPhoto:
         # so reaching here means an out-of-band DB edit — fail loudly rather than
         # emit a page with a broken <img>.
         raise NotAssembledError(
-            f"placed photo {photo.id} has no rendered_path — run `render`/`assemble` first"
+            f"placed photo {photo.id} has no rendered_path — run `render`/`assemble` first",
         )
     return BookPhoto(image_path=photo.rendered_path, caption=photo.caption)

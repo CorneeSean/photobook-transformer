@@ -30,7 +30,8 @@ class TestGenericity:
     """The shipped wedding album must bootstrap from YAML alone — no code change."""
 
     def test_the_shipped_wedding_album_bootstraps_with_the_expected_shape(
-        self, session: Session
+        self,
+        session: Session,
     ) -> None:
         album_id = get_or_create_album(session, "smith-wedding")
 

@@ -99,7 +99,9 @@ class TestLeadFaceResolver:
         }
 
     def test_no_lead_faces_is_noop(
-        self, session: Session, make_album: Callable[..., Album]
+        self,
+        session: Session,
+        make_album: Callable[..., Album],
     ) -> None:
         album_id = self._album(session, make_album)
         provider = FakeLeadProvider()
@@ -111,7 +113,9 @@ class TestLeadFaceResolver:
         assert self._leads(session, album_id) == {}
 
     def test_person_ids_form_marks_leads_no_immich_call(
-        self, session: Session, make_album: Callable[..., Album]
+        self,
+        session: Session,
+        make_album: Callable[..., Album],
     ) -> None:
         album_id = self._album(session, make_album)
         # p-alex was already synced (is_lead False); p-sam hasn't been seen yet.
@@ -126,11 +130,13 @@ class TestLeadFaceResolver:
         assert self._leads(session, album_id) == {"p-alex": True, "p-sam": True}
 
     def test_reference_asset_id_reads_faces_without_upload(
-        self, session: Session, make_album: Callable[..., Album]
+        self,
+        session: Session,
+        make_album: Callable[..., Album],
     ) -> None:
         album_id = self._album(session, make_album)
         provider = FakeLeadProvider(
-            faces_by_asset={"asset-42": [_face("f1", "p-alex"), _face("f2", "p-sam")]}
+            faces_by_asset={"asset-42": [_face("f1", "p-alex"), _face("f2", "p-sam")]},
         )
         config = LeadFacesYAML(reference_asset_id="asset-42")
 
@@ -142,7 +148,10 @@ class TestLeadFaceResolver:
         assert self._leads(session, album_id) == {"p-alex": True, "p-sam": True}
 
     def test_reference_image_uploads_then_polls_until_detected(
-        self, session: Session, make_album: Callable[..., Album], tmp_path: Path
+        self,
+        session: Session,
+        make_album: Callable[..., Album],
+        tmp_path: Path,
     ) -> None:
         album_id = self._album(session, make_album)
         (tmp_path / "leads.jpg").write_bytes(b"jpeg")
@@ -163,7 +172,10 @@ class TestLeadFaceResolver:
         assert self._leads(session, album_id) == {"p-alex": True}
 
     def test_reference_image_reuses_cached_asset_id(
-        self, session: Session, make_album: Callable[..., Album], tmp_path: Path
+        self,
+        session: Session,
+        make_album: Callable[..., Album],
+        tmp_path: Path,
     ) -> None:
         album_id = self._album(session, make_album, lead_reference_asset_id="cached-1")
         (tmp_path / "leads.jpg").write_bytes(b"jpeg")
@@ -179,7 +191,10 @@ class TestLeadFaceResolver:
         assert result.lead_person_ids == ["p-alex"]
 
     def test_reference_image_rerun_does_not_reupload(
-        self, session: Session, make_album: Callable[..., Album], tmp_path: Path
+        self,
+        session: Session,
+        make_album: Callable[..., Album],
+        tmp_path: Path,
     ) -> None:
         album_id = self._album(session, make_album)
         (tmp_path / "leads.jpg").write_bytes(b"jpeg")
@@ -195,7 +210,9 @@ class TestLeadFaceResolver:
         assert self._leads(session, album_id) == {"p-alex": True}
 
     def test_stale_leads_are_cleared_when_config_changes(
-        self, session: Session, make_album: Callable[..., Album]
+        self,
+        session: Session,
+        make_album: Callable[..., Album],
     ) -> None:
         album_id = self._album(session, make_album)
         provider = FakeLeadProvider()
@@ -212,7 +229,10 @@ class TestLeadFaceResolver:
         assert self._leads(session, album_id) == {"p-a": True, "p-b": False, "p-c": True}
 
     def test_reference_image_timeout_raises(
-        self, session: Session, make_album: Callable[..., Album], tmp_path: Path
+        self,
+        session: Session,
+        make_album: Callable[..., Album],
+        tmp_path: Path,
     ) -> None:
         album_id = self._album(session, make_album)
         (tmp_path / "leads.jpg").write_bytes(b"jpeg")
@@ -223,7 +243,10 @@ class TestLeadFaceResolver:
             self._resolver(provider, album_id, config, tmp_path, session).run()
 
     def test_missing_reference_image_raises(
-        self, session: Session, make_album: Callable[..., Album], tmp_path: Path
+        self,
+        session: Session,
+        make_album: Callable[..., Album],
+        tmp_path: Path,
     ) -> None:
         album_id = self._album(session, make_album)
         config = LeadFacesYAML(reference_image="does-not-exist.jpg")
@@ -239,7 +262,7 @@ class TestLeadFaceResolver:
     ) -> None:
         album_id = self._album(session, make_album)
         provider = FakeLeadProvider(
-            faces_by_asset={"asset-42": [_face("f1", "p-alex"), _face("f2", None)]}
+            faces_by_asset={"asset-42": [_face("f1", "p-alex"), _face("f2", None)]},
         )
         config = LeadFacesYAML(reference_asset_id="asset-42")
 

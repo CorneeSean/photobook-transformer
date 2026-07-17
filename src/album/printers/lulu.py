@@ -83,12 +83,12 @@ class LuluPrinter:
         pdf_path = album.assembled_pdf_path
         if pdf_path is None:
             raise NotAssembledError(
-                f"album {album.slug!r} has no assembled_pdf_path — run `assemble` before printing"
+                f"album {album.slug!r} has no assembled_pdf_path — run `assemble` before printing",
             )
         if not pdf_path.startswith(("http://", "https://")):
             raise UnreachablePdfError(
                 f"{pdf_path!r} is not an http(s) URL Lulu can fetch — "
-                "see UnreachablePdfError for the known gap"
+                "see UnreachablePdfError for the known gap",
             )
 
         request = PrintJobRequest(
@@ -100,7 +100,7 @@ class LuluPrinter:
                     "pod_package_id": self._pod_package_id,
                     "interior": {"source_url": pdf_path},
                     "cover": {"source_url": pdf_path},
-                }
+                },
             ],
             shipping_address=self._shipping_address,
         )

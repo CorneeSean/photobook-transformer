@@ -98,7 +98,10 @@ class TestCluster:
         assert result.out_of_range == []
 
     def test_no_segments_still_produces_scenes(
-        self, session: Session, make_album: Callable[..., Album], photo: Callable[..., Photo]
+        self,
+        session: Session,
+        make_album: Callable[..., Album],
+        photo: Callable[..., Photo],
     ) -> None:
         album = make_album(immich_album_id="immich-abc")  # no segments
         album.photos = [
@@ -117,7 +120,10 @@ class TestCluster:
         assert result.scenes == 2
 
     def test_no_gps_uses_temporal_fallback(
-        self, session: Session, make_album: Callable[..., Album], photo: Callable[..., Photo]
+        self,
+        session: Session,
+        make_album: Callable[..., Album],
+        photo: Callable[..., Photo],
     ) -> None:
         album = make_album(immich_album_id="immich-abc")
         album.photos = [
@@ -133,7 +139,10 @@ class TestCluster:
         assert result.scenes == 2
 
     def test_with_gps_takes_spatial_path(
-        self, session: Session, make_album: Callable[..., Album], photo: Callable[..., Photo]
+        self,
+        session: Session,
+        make_album: Callable[..., Album],
+        photo: Callable[..., Photo],
     ) -> None:
         # All four within 30 minutes → no temporal split — only the spatial path can
         # separate the two locations into two scenes.
@@ -155,7 +164,10 @@ class TestCluster:
         assert result.scenes == 2
 
     def test_gps_revisit_after_time_gap_still_splits(
-        self, session: Session, make_album: Callable[..., Album], photo: Callable[..., Photo]
+        self,
+        session: Session,
+        make_album: Callable[..., Album],
+        photo: Callable[..., Photo],
     ) -> None:
         # Same place twice, but hours apart: the spatial label is identical, so only
         # the temporal gap can (and must) split them — spatial + temporal cooperate.
@@ -175,7 +187,10 @@ class TestCluster:
         assert result.scenes == 2
 
     def test_mixed_gps_falls_back_to_temporal(
-        self, session: Session, make_album: Callable[..., Album], photo: Callable[..., Photo]
+        self,
+        session: Session,
+        make_album: Callable[..., Album],
+        photo: Callable[..., Photo],
     ) -> None:
         # Not every photo has GPS, so the spatial path is skipped for the group; the
         # two (close in time, different places) stay one scene on the temporal path.
@@ -225,7 +240,10 @@ class TestCluster:
         assert len(session.scalars(select(Photo)).all()) == 2
 
     def test_null_timestamp_handled_explicitly(
-        self, session: Session, make_album: Callable[..., Album], photo: Callable[..., Photo]
+        self,
+        session: Session,
+        make_album: Callable[..., Album],
+        photo: Callable[..., Photo],
     ) -> None:
         album = make_album(immich_album_id="immich-abc")
         album.photos = [
@@ -243,7 +261,10 @@ class TestCluster:
         assert photos["dated"].scene_id is not None  # the dated one still clustered
 
     def test_is_idempotent(
-        self, session: Session, make_album: Callable[..., Album], photo: Callable[..., Photo]
+        self,
+        session: Session,
+        make_album: Callable[..., Album],
+        photo: Callable[..., Photo],
     ) -> None:
         album = make_album(immich_album_id="immich-abc")
         album.photos = [
@@ -261,7 +282,10 @@ class TestCluster:
         assert before == after
 
     def test_scoped_to_album(
-        self, session: Session, make_album: Callable[..., Album], photo: Callable[..., Photo]
+        self,
+        session: Session,
+        make_album: Callable[..., Album],
+        photo: Callable[..., Photo],
     ) -> None:
         other = make_album(slug="other", immich_album_id="immich-other")
         other.photos = [photo(other, "o1", self._dt(10, 0))]

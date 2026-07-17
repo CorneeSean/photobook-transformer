@@ -254,7 +254,8 @@ def write_xmp_sidecar(path: Path, tone: ToneParams) -> None:
     description.set(f"{{{_DARKTABLE_NS}}}history_end", str(len(entries)))
 
     seq = ET.SubElement(
-        ET.SubElement(description, f"{{{_DARKTABLE_NS}}}history"), f"{{{_RDF_NS}}}Seq"
+        ET.SubElement(description, f"{{{_DARKTABLE_NS}}}history"),
+        f"{{{_RDF_NS}}}Seq",
     )
     for num, (operation, params) in enumerate(entries):
         _append_history_entry(seq, num, operation, params)
@@ -377,7 +378,10 @@ class EnhanceStage(Stage[EnhanceResult]):
                 # Failure isolation: one bad photo (unreadable thumbnail, disk
                 # error) must not sink an entire scene/album run.
                 _log.warning(
-                    "failed to enhance photo %s (%s)", photo.id, photo.filename, exc_info=True
+                    "failed to enhance photo %s (%s)",
+                    photo.id,
+                    photo.filename,
+                    exc_info=True,
                 )
                 result.failed += 1
                 continue
@@ -398,7 +402,10 @@ class EnhanceStage(Stage[EnhanceResult]):
         return ToneParams.from_photo(photo)
 
     def _baseline(
-        self, photo: Photo, reference: Photo, reference_image: bytes | None
+        self,
+        photo: Photo,
+        reference: Photo,
+        reference_image: bytes | None,
     ) -> tuple[ToneParams, bytes | None]:
         """The cross-camera baseline offset, plus the (lazily fetched, reused)
         reference thumbnail so a scene fetches it at most once.

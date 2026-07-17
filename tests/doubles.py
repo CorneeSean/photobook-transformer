@@ -18,7 +18,10 @@ class FakeThumbnails:
     """Serves canned thumbnail bytes keyed by asset id, recording every fetch."""
 
     def __init__(
-        self, by_asset: dict[str, bytes] | None = None, *, default: bytes = b"img"
+        self,
+        by_asset: dict[str, bytes] | None = None,
+        *,
+        default: bytes = b"img",
     ) -> None:
         self._by_asset = by_asset or {}
         self._default = default
@@ -89,7 +92,8 @@ def counting_analysis_model() -> tuple[FunctionModel, list[int]]:
     calls: list[int] = []
 
     def handler(
-        messages: list[ModelMessage], info: AgentInfo
+        messages: list[ModelMessage],
+        info: AgentInfo,
     ) -> ModelResponse:  # pragma: no cover - exercised via FunctionModel
         calls.append(1)
         return canned_analysis_response()

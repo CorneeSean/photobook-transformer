@@ -43,7 +43,7 @@ class TestImmichClient:
             side_effect=[
                 httpx.Response(200, json=_fixture("search_metadata_page1.json")),
                 httpx.Response(200, json=_fixture("search_metadata_page2.json")),
-            ]
+            ],
         )
 
         assets = client.get_album_assets("album-123")
@@ -61,7 +61,7 @@ class TestImmichClient:
     @respx.mock
     def test_parses_exif(self, client: ImmichClient) -> None:
         respx.get(f"{_BASE_URL}/assets/a2222222-2222-4222-8222-222222222222").mock(
-            return_value=httpx.Response(200, json=_fixture("asset.json"))
+            return_value=httpx.Response(200, json=_fixture("asset.json")),
         )
 
         asset = client.get_asset("a2222222-2222-4222-8222-222222222222")
@@ -87,7 +87,7 @@ class TestImmichClient:
     @respx.mock
     def test_get_duplicates(self, client: ImmichClient) -> None:
         respx.get(f"{_BASE_URL}/duplicates").mock(
-            return_value=httpx.Response(200, json=_fixture("duplicates.json"))
+            return_value=httpx.Response(200, json=_fixture("duplicates.json")),
         )
 
         groups = client.get_duplicates()
@@ -102,7 +102,7 @@ class TestImmichClient:
     @respx.mock
     def test_get_faces(self, client: ImmichClient) -> None:
         route = respx.get(f"{_BASE_URL}/faces").mock(
-            return_value=httpx.Response(200, json=_fixture("faces.json"))
+            return_value=httpx.Response(200, json=_fixture("faces.json")),
         )
 
         faces = client.get_faces("a2222222-2222-4222-8222-222222222222")
@@ -130,12 +130,14 @@ class TestImmichClient:
 
     @respx.mock
     def test_upload_asset_posts_multipart_and_returns_id(
-        self, client: ImmichClient, tmp_path: Path
+        self,
+        client: ImmichClient,
+        tmp_path: Path,
     ) -> None:
         ref = tmp_path / "leads.jpg"
         ref.write_bytes(b"\xff\xd8\xff-jpeg-bytes")
         route = respx.post(f"{_BASE_URL}/assets").mock(
-            return_value=httpx.Response(201, json={"id": "ref-asset-1", "status": "created"})
+            return_value=httpx.Response(201, json={"id": "ref-asset-1", "status": "created"}),
         )
 
         asset_id = client.upload_asset(ref)
@@ -150,8 +152,9 @@ class TestImmichClient:
     def test_create_album_posts_name_and_assets_and_returns_id(self, client: ImmichClient) -> None:
         route = respx.post(f"{_BASE_URL}/albums").mock(
             return_value=httpx.Response(
-                201, json={"id": "album-new-1", "albumName": "Trip 2026", "assetCount": 3}
-            )
+                201,
+                json={"id": "album-new-1", "albumName": "Trip 2026", "assetCount": 3},
+            ),
         )
 
         album_id = client.create_album("Trip 2026", ["a1", "a2", "a3"])
@@ -167,7 +170,7 @@ class TestImmichClient:
     @respx.mock
     def test_get_jobs_parses_per_queue_counts(self, client: ImmichClient) -> None:
         route = respx.get(f"{_BASE_URL}/jobs").mock(
-            return_value=httpx.Response(200, json=_fixture("jobs.json"))
+            return_value=httpx.Response(200, json=_fixture("jobs.json")),
         )
 
         jobs = client.get_jobs()
@@ -186,7 +189,7 @@ class TestImmichClient:
     @respx.mock
     def test_get_thumbnail_returns_bytes(self, client: ImmichClient) -> None:
         route = respx.get(f"{_BASE_URL}/assets/asset-1/thumbnail").mock(
-            return_value=httpx.Response(200, content=b"\xff\xd8\xff-jpeg-bytes")
+            return_value=httpx.Response(200, content=b"\xff\xd8\xff-jpeg-bytes"),
         )
 
         data = client.get_thumbnail("asset-1")
@@ -197,7 +200,7 @@ class TestImmichClient:
     @respx.mock
     def test_get_original_returns_bytes(self, client: ImmichClient) -> None:
         route = respx.get(f"{_BASE_URL}/assets/asset-1/original").mock(
-            return_value=httpx.Response(200, content=b"\xff\xd8\xff-full-res-jpeg-bytes")
+            return_value=httpx.Response(200, content=b"\xff\xd8\xff-full-res-jpeg-bytes"),
         )
 
         data = client.get_original("asset-1")

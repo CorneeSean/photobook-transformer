@@ -59,7 +59,7 @@ class TestMigratedSchema:
 
     def test_migrations_reach_head(self, migrated_session: Session) -> None:
         version = migrated_session.execute(
-            text("SELECT version_num FROM alembic_version")
+            text("SELECT version_num FROM alembic_version"),
         ).scalar_one()
         assert version == _alembic_head()
 
@@ -67,8 +67,8 @@ class TestMigratedSchema:
         rows = migrated_session.execute(
             text(
                 "SELECT table_name, column_name FROM information_schema.columns "
-                "WHERE table_schema = 'public'"
-            )
+                "WHERE table_schema = 'public'",
+            ),
         ).all()
         columns = {(row[0], row[1]) for row in rows}
         # Step 17 (faces) + 17b (lead reference) additions, on the real schema.
@@ -128,7 +128,10 @@ class TestSelectAgainstRealPgvector:
         migrated_session.commit()
 
         result = SelectStage(
-            PgVectorSimilarity(), album.id, reuse(migrated_session), threshold=0.9
+            PgVectorSimilarity(),
+            album.id,
+            reuse(migrated_session),
+            threshold=0.9,
         ).run()
 
         photos = self._by_asset(album)
@@ -139,7 +142,10 @@ class TestSelectAgainstRealPgvector:
 
         # Idempotent over the real query too (resets + recomputes, same result).
         rerun = SelectStage(
-            PgVectorSimilarity(), album.id, reuse(migrated_session), threshold=0.9
+            PgVectorSimilarity(),
+            album.id,
+            reuse(migrated_session),
+            threshold=0.9,
         ).run()
         assert rerun == result
         assert {p.immich_asset_id for p in album.photos if p.selected} == {"nd-best", "nd-distinct"}
@@ -176,14 +182,17 @@ class TestSelectAgainstRealPgvector:
         # person_ids survives the round-trip through the real Postgres JSON column
         # (not just the ORM cache): read it back with a raw SQL query.
         stored = migrated_session.execute(
-            text("SELECT person_ids FROM photos WHERE immich_asset_id = 'ld-lead'")
+            text("SELECT person_ids FROM photos WHERE immich_asset_id = 'ld-lead'"),
         ).scalar_one()
         assert stored == ["p-lead"]
 
         # Negative control (no lead yet): the second photo is a near-dup of the
         # first per the REAL cosine query, so with no lead status it is dropped.
         control = SelectStage(
-            PgVectorSimilarity(), album.id, reuse(migrated_session), threshold=0.9
+            PgVectorSimilarity(),
+            album.id,
+            reuse(migrated_session),
+            threshold=0.9,
         ).run()
         photos = self._by_asset(album)
         assert (photos["ld-nonlead"].selected, photos["ld-lead"].selected) == (True, False)
@@ -195,7 +204,10 @@ class TestSelectAgainstRealPgvector:
         migrated_session.commit()
 
         result = SelectStage(
-            PgVectorSimilarity(), album.id, reuse(migrated_session), threshold=0.9
+            PgVectorSimilarity(),
+            album.id,
+            reuse(migrated_session),
+            threshold=0.9,
         ).run()
         photos = self._by_asset(album)
         assert (photos["ld-nonlead"].selected, photos["ld-lead"].selected) == (True, True)
@@ -218,7 +230,7 @@ class TestMigrationRoundTrip:
             try:  # dispose the pool on every path, incl. a failing query
                 with engine.connect() as conn:
                     version = conn.execute(
-                        text("SELECT version_num FROM alembic_version")
+                        text("SELECT version_num FROM alembic_version"),
                     ).scalar_one()
             finally:
                 engine.dispose()

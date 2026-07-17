@@ -75,7 +75,7 @@ class TestSync:
                 "id": asset_id,
                 "originalFileName": f"{asset_id}.jpg",
                 "exifInfo": exif or None,
-            }
+            },
         )
 
     def _persist(self, session: Session, album: Album) -> int:
@@ -89,7 +89,9 @@ class TestSync:
         return dt if dt is None or dt.tzinfo else dt.replace(tzinfo=UTC)
 
     def test_creates_photos_scoped_to_album(
-        self, session: Session, make_album: Callable[..., Album]
+        self,
+        session: Session,
+        make_album: Callable[..., Album],
     ) -> None:
         album_id = self._persist(session, make_album(immich_album_id="immich-abc"))
         client = FakeImmich([self._asset("a1"), self._asset("a2")])
@@ -103,7 +105,9 @@ class TestSync:
         assert all(p.album_id == album_id for p in photos)
 
     def test_does_not_touch_other_albums(
-        self, session: Session, make_album: Callable[..., Album]
+        self,
+        session: Session,
+        make_album: Callable[..., Album],
     ) -> None:
         kept = self._persist(session, make_album(slug="other", immich_album_id="immich-other"))
         session.add(Photo(album_id=kept, immich_asset_id="keep-me", filename="keep.jpg"))
@@ -184,7 +188,9 @@ class TestSync:
         assert photo.timestamp is None
 
     def test_maps_gps_camera_and_duplicate_group(
-        self, session: Session, make_album: Callable[..., Album]
+        self,
+        session: Session,
+        make_album: Callable[..., Album],
     ) -> None:
         album_id = self._persist(session, make_album(immich_album_id="immich-abc"))
         asset = ImmichAsset.model_validate(
@@ -198,7 +204,7 @@ class TestSync:
                     "latitude": 42.4,
                     "longitude": 18.7,
                 },
-            }
+            },
         )
         SyncStage(FakeImmich([asset]), album_id, reuse(session)).run()
 
@@ -208,7 +214,9 @@ class TestSync:
         assert (photo.gps_lat, photo.gps_lon) == (42.4, 18.7)
 
     def test_maps_rating_and_geocoded_place(
-        self, session: Session, make_album: Callable[..., Album]
+        self,
+        session: Session,
+        make_album: Callable[..., Album],
     ) -> None:
         # step 20: rating (top-level) + city/state/country (on exifInfo) land in
         # their nullable columns — from data `sync` already fetches, no extra call.
@@ -223,7 +231,7 @@ class TestSync:
                     "state": "Lisbon Municipality",
                     "country": "Portugal",
                 },
-            }
+            },
         )
         SyncStage(FakeImmich([asset]), album_id, reuse(session)).run()
 
@@ -236,7 +244,9 @@ class TestSync:
         )
 
     def test_rating_and_place_absent_stay_null(
-        self, session: Session, make_album: Callable[..., Album]
+        self,
+        session: Session,
+        make_album: Callable[..., Album],
     ) -> None:
         # Genericity: an asset with no rating and no geocoded place leaves every
         # step-20 column NULL, so an album that has none behaves exactly as before.
@@ -249,14 +259,16 @@ class TestSync:
         assert (photo.city, photo.state, photo.country) == (None, None, None)
 
     def test_resync_clears_stale_place_when_exif_gone(
-        self, session: Session, make_album: Callable[..., Album]
+        self,
+        session: Session,
+        make_album: Callable[..., Album],
     ) -> None:
         # If a photo had a geocoded place and a later sync sees no exif at all, the
         # place columns must clear rather than keep stale values (same clear-on-update
         # posture as gps_lat/gps_lon).
         album_id = self._persist(session, make_album(immich_album_id="immich-abc"))
         with_place = ImmichAsset.model_validate(
-            {"id": "a1", "originalFileName": "IMG.jpg", "exifInfo": {"city": "Lisbon"}}
+            {"id": "a1", "originalFileName": "IMG.jpg", "exifInfo": {"city": "Lisbon"}},
         )
         SyncStage(FakeImmich([with_place]), album_id, reuse(session)).run()
         assert session.scalars(select(Photo)).one().city == "Lisbon"
@@ -268,7 +280,9 @@ class TestSync:
         assert (photo.city, photo.state, photo.country) == (None, None, None)
 
     def test_populates_faces_and_upserts_people(
-        self, session: Session, make_album: Callable[..., Album]
+        self,
+        session: Session,
+        make_album: Callable[..., Album],
     ) -> None:
         album_id = self._persist(session, make_album(immich_album_id="immich-abc"))
         client = FakeImmich(
@@ -278,7 +292,7 @@ class TestSync:
                     _face("f1", "p-alex", "Alex"),
                     _face("f2", "p-sam", "Sam"),
                     _face("f3"),  # detected but unassigned (person: null)
-                ]
+                ],
             },
         )
 
@@ -295,7 +309,9 @@ class TestSync:
         assert all(p.album_id == album_id and not p.is_lead for p in people.values())
 
     def test_faceless_asset_lands_empty_not_null(
-        self, session: Session, make_album: Callable[..., Album]
+        self,
+        session: Session,
+        make_album: Callable[..., Album],
     ) -> None:
         album_id = self._persist(session, make_album(immich_album_id="immich-abc"))
 
@@ -307,7 +323,9 @@ class TestSync:
         assert photo.person_ids == []
 
     def test_sync_faces_idempotent(
-        self, session: Session, make_album: Callable[..., Album]
+        self,
+        session: Session,
+        make_album: Callable[..., Album],
     ) -> None:
         album_id = self._persist(session, make_album(immich_album_id="immich-abc"))
         SyncStage(
@@ -327,7 +345,9 @@ class TestSync:
         assert people[0].name == "Alex M."
 
     def test_dedups_person_ids_across_faces(
-        self, session: Session, make_album: Callable[..., Album]
+        self,
+        session: Session,
+        make_album: Callable[..., Album],
     ) -> None:
         album_id = self._persist(session, make_album(immich_album_id="immich-abc"))
         # Two detected faces of the same person on one photo (plus a second person).
@@ -338,7 +358,7 @@ class TestSync:
                     _face("f1", "p-alex", "Alex"),
                     _face("f2", "p-sam", "Sam"),
                     _face("f3", "p-alex", "Alex"),
-                ]
+                ],
             },
         )
 

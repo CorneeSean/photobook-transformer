@@ -38,7 +38,9 @@ class TestStageTemplateMethod:
     """The constructor resolves the album via the invariant guard; ``run`` delegates."""
 
     def test_delegates_resolved_album_to_process(
-        self, session: Session, make_album: Callable[..., Album]
+        self,
+        session: Session,
+        make_album: Callable[..., Album],
     ) -> None:
         album = make_album()
         session.add(album)
@@ -49,7 +51,9 @@ class TestStageTemplateMethod:
         assert captured.album is album
 
     def test_force_is_threaded_through_to_process(
-        self, session: Session, make_album: Callable[..., Album]
+        self,
+        session: Session,
+        make_album: Callable[..., Album],
     ) -> None:
         album = make_album()
         session.add(album)

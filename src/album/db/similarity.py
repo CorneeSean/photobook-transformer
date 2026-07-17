@@ -28,7 +28,10 @@ from album.db.models import Photo
 @runtime_checkable
 class SimilaritySearch(Protocol):
     def max_similarity(
-        self, session: Session, embedding: Sequence[float] | None, against: Sequence[int]
+        self,
+        session: Session,
+        embedding: Sequence[float] | None,
+        against: Sequence[int],
     ) -> float:
         """Highest cosine similarity between ``embedding`` and any already-picked
         photo id in ``against``. Returns ``-1.0`` (below any real similarity) if
@@ -44,13 +47,16 @@ class PgVectorSimilarity:
     """Real similarity search: pgvector's cosine-distance operator, index-accelerated."""
 
     def max_similarity(
-        self, session: Session, embedding: Sequence[float] | None, against: Sequence[int]
+        self,
+        session: Session,
+        embedding: Sequence[float] | None,
+        against: Sequence[int],
     ) -> float:
         if embedding is None or not against:
             return -1.0
         distances = session.scalars(
             select(Photo.clip_embedding.cosine_distance(embedding))
             .where(Photo.id.in_(against))
-            .where(Photo.clip_embedding.is_not(None))
+            .where(Photo.clip_embedding.is_not(None)),
         ).all()
         return 1.0 - min(distances) if distances else -1.0

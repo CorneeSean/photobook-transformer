@@ -138,7 +138,7 @@ class SelectStage(Stage[SelectResult]):
 
         # order_by(Photo.id): deterministic tie-breaking when effective scores are equal.
         photos = list(
-            session.scalars(sa_select(Photo).where(Photo.album_id == album.id).order_by(Photo.id))
+            session.scalars(sa_select(Photo).where(Photo.album_id == album.id).order_by(Photo.id)),
         )
         self._reset_selection(photos)
         by_scene = self._group_by_scene(photos)
@@ -275,7 +275,9 @@ class SelectStage(Stage[SelectResult]):
 
     def _too_similar(self, candidate: Photo, against: list[Photo], session: Session) -> bool:
         max_sim = self._similarity.max_similarity(
-            session, candidate.clip_embedding, [p.id for p in against]
+            session,
+            candidate.clip_embedding,
+            [p.id for p in against],
         )
         return max_sim > self._threshold
 

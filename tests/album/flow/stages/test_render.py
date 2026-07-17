@@ -85,7 +85,11 @@ class TestRenderStage:
         album = make_album(slug="test-album")
         album.photos = [
             make_photo(
-                album, immich_asset_id="a1", filename="a1.jpg", selected=True, xmp_written=True
+                album,
+                immich_asset_id="a1",
+                filename="a1.jpg",
+                selected=True,
+                xmp_written=True,
             ),
         ]
         album_id = self._persist(session, album)
@@ -94,7 +98,11 @@ class TestRenderStage:
         renderer = FakeRenderer()
 
         result = RenderStage(
-            originals, renderer, album_id, reuse(session), data_root=tmp_path
+            originals,
+            renderer,
+            album_id,
+            reuse(session),
+            data_root=tmp_path,
         ).run()
 
         assert isinstance(result, RenderResult)
@@ -117,14 +125,22 @@ class TestRenderStage:
         album = make_album(slug="test-album")
         album.photos = [
             make_photo(
-                album, immich_asset_id="a1", filename="a1.jpg", selected=True, xmp_written=True
+                album,
+                immich_asset_id="a1",
+                filename="a1.jpg",
+                selected=True,
+                xmp_written=True,
             ),
         ]
         album_id = self._persist(session, album)
         self._make_xmp(tmp_path, "test-album", "a1.jpg")
 
         RenderStage(
-            FakeOriginals({}), FakeRenderer(), album_id, reuse(session), data_root=tmp_path
+            FakeOriginals({}),
+            FakeRenderer(),
+            album_id,
+            reuse(session),
+            data_root=tmp_path,
         ).run()
 
         photo = session.scalars(select(Photo)).one()
@@ -152,7 +168,11 @@ class TestRenderStage:
         renderer = FakeRenderer()
 
         result = RenderStage(
-            FakeOriginals({}), renderer, album_id, reuse(session), data_root=tmp_path
+            FakeOriginals({}),
+            renderer,
+            album_id,
+            reuse(session),
+            data_root=tmp_path,
         ).run()
 
         assert result == RenderResult(skipped=1)
@@ -181,7 +201,12 @@ class TestRenderStage:
         renderer = FakeRenderer()
 
         result = RenderStage(
-            FakeOriginals({}), renderer, album_id, reuse(session), force=True, data_root=tmp_path
+            FakeOriginals({}),
+            renderer,
+            album_id,
+            reuse(session),
+            force=True,
+            data_root=tmp_path,
         ).run()
 
         assert result == RenderResult(rendered=1)
@@ -197,14 +222,22 @@ class TestRenderStage:
         album = make_album(slug="test-album")
         album.photos = [
             make_photo(
-                album, immich_asset_id="a1", filename="a1.jpg", selected=True, xmp_written=False
+                album,
+                immich_asset_id="a1",
+                filename="a1.jpg",
+                selected=True,
+                xmp_written=False,
             ),
         ]
         album_id = self._persist(session, album)
         renderer = FakeRenderer()
 
         result = RenderStage(
-            FakeOriginals({}), renderer, album_id, reuse(session), data_root=tmp_path
+            FakeOriginals({}),
+            renderer,
+            album_id,
+            reuse(session),
+            data_root=tmp_path,
         ).run()
 
         assert result.not_ready == 1
@@ -224,14 +257,22 @@ class TestRenderStage:
         album = make_album(slug="test-album")
         album.photos = [
             make_photo(
-                album, immich_asset_id="a1", filename="a1.jpg", selected=False, xmp_written=True
+                album,
+                immich_asset_id="a1",
+                filename="a1.jpg",
+                selected=False,
+                xmp_written=True,
             ),
         ]
         album_id = self._persist(session, album)
         renderer = FakeRenderer()
 
         result = RenderStage(
-            FakeOriginals({}), renderer, album_id, reuse(session), data_root=tmp_path
+            FakeOriginals({}),
+            renderer,
+            album_id,
+            reuse(session),
+            data_root=tmp_path,
         ).run()
 
         assert result == RenderResult()
@@ -247,10 +288,18 @@ class TestRenderStage:
         album = make_album(slug="test-album")
         album.photos = [
             make_photo(
-                album, immich_asset_id="good", filename="good.jpg", selected=True, xmp_written=True
+                album,
+                immich_asset_id="good",
+                filename="good.jpg",
+                selected=True,
+                xmp_written=True,
             ),
             make_photo(
-                album, immich_asset_id="bad", filename="bad.jpg", selected=True, xmp_written=True
+                album,
+                immich_asset_id="bad",
+                filename="bad.jpg",
+                selected=True,
+                xmp_written=True,
             ),
         ]
         album_id = self._persist(session, album)
@@ -260,7 +309,11 @@ class TestRenderStage:
         renderer = FakeRenderer(raise_for={bad_input})
 
         result = RenderStage(
-            FakeOriginals({}), renderer, album_id, reuse(session), data_root=tmp_path
+            FakeOriginals({}),
+            renderer,
+            album_id,
+            reuse(session),
+            data_root=tmp_path,
         ).run()
 
         assert result.rendered == 1
@@ -283,14 +336,22 @@ class TestRenderStage:
         album = make_album(slug="test-album")
         album.photos = [
             make_photo(
-                album, immich_asset_id="a1", filename="a1.jpg", selected=True, xmp_written=True
+                album,
+                immich_asset_id="a1",
+                filename="a1.jpg",
+                selected=True,
+                xmp_written=True,
             ),
         ]
         album_id = self._persist(session, album)
         self._make_xmp(tmp_path, "test-album", "a1.jpg")
 
         result = RenderStage(
-            RaisingOriginals(), FakeRenderer(), album_id, reuse(session), data_root=tmp_path
+            RaisingOriginals(),
+            FakeRenderer(),
+            album_id,
+            reuse(session),
+            data_root=tmp_path,
         ).run()
 
         assert result == RenderResult(failed=1)
@@ -314,14 +375,22 @@ class TestRenderStage:
         album = make_album(slug="test-album")
         album.photos = [
             make_photo(
-                album, immich_asset_id="a1", filename="a1.jpg", selected=True, xmp_written=True
+                album,
+                immich_asset_id="a1",
+                filename="a1.jpg",
+                selected=True,
+                xmp_written=True,
             ),
         ]
         album_id = self._persist(session, album)
         self._make_xmp(tmp_path, "test-album", "a1.jpg")
 
         result = RenderStage(
-            FakeOriginals({}), SilentNoOpRenderer(), album_id, reuse(session), data_root=tmp_path
+            FakeOriginals({}),
+            SilentNoOpRenderer(),
+            album_id,
+            reuse(session),
+            data_root=tmp_path,
         ).run()
 
         assert result == RenderResult(failed=1)
@@ -338,7 +407,11 @@ class TestRenderStage:
         album = make_album(slug="test-album")
         album.photos = [
             make_photo(
-                album, immich_asset_id="a1", filename="a1.jpg", selected=True, xmp_written=True
+                album,
+                immich_asset_id="a1",
+                filename="a1.jpg",
+                selected=True,
+                xmp_written=True,
             ),
         ]
         album_id = self._persist(session, album)
@@ -364,7 +437,11 @@ class TestRenderStage:
         album = make_album(slug="test-album")
         album.photos = [
             make_photo(
-                album, immich_asset_id="a1", filename="a1.jpg", selected=True, xmp_written=True
+                album,
+                immich_asset_id="a1",
+                filename="a1.jpg",
+                selected=True,
+                xmp_written=True,
             ),
         ]
         album_id = self._persist(session, album)
@@ -390,7 +467,11 @@ class TestRenderStage:
         album = make_album(slug="test-album")
         album.photos = [
             make_photo(
-                album, immich_asset_id="a1", filename="a1.jpg", selected=True, xmp_written=True
+                album,
+                immich_asset_id="a1",
+                filename="a1.jpg",
+                selected=True,
+                xmp_written=True,
             ),
         ]
         album_id = self._persist(session, album)
@@ -418,21 +499,33 @@ class TestRenderStage:
         other = make_album(slug="other")
         other.photos = [
             make_photo(
-                other, immich_asset_id="o1", filename="o1.jpg", selected=True, xmp_written=True
-            )
+                other,
+                immich_asset_id="o1",
+                filename="o1.jpg",
+                selected=True,
+                xmp_written=True,
+            ),
         ]
         other_id = self._persist(session, other)
         target = make_album(slug="target")
         target.photos = [
             make_photo(
-                target, immich_asset_id="t1", filename="t1.jpg", selected=True, xmp_written=True
-            )
+                target,
+                immich_asset_id="t1",
+                filename="t1.jpg",
+                selected=True,
+                xmp_written=True,
+            ),
         ]
         target_id = self._persist(session, target)
         self._make_xmp(tmp_path, "target", "t1.jpg")
 
         RenderStage(
-            FakeOriginals({}), FakeRenderer(), target_id, reuse(session), data_root=tmp_path
+            FakeOriginals({}),
+            FakeRenderer(),
+            target_id,
+            reuse(session),
+            data_root=tmp_path,
         ).run()
 
         other_photo = session.scalars(select(Photo).where(Photo.album_id == other_id)).one()
@@ -443,5 +536,9 @@ class TestRenderStage:
     def test_raises_for_unknown_album(self, session: Session, tmp_path: Path) -> None:
         with pytest.raises(ValueError):
             RenderStage(
-                FakeOriginals({}), FakeRenderer(), 999, reuse(session), data_root=tmp_path
+                FakeOriginals({}),
+                FakeRenderer(),
+                999,
+                reuse(session),
+                data_root=tmp_path,
             ).run()

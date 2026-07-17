@@ -72,7 +72,10 @@ class TestCaptionStage:
         photo.caption = caption
 
     def test_does_not_repeat_call_for_already_analyzed_photo(
-        self, session: Session, make_album: Callable[..., Album], make_photo: Callable[..., Photo]
+        self,
+        session: Session,
+        make_album: Callable[..., Album],
+        make_photo: Callable[..., Photo],
     ) -> None:
         album = make_album(slug="test-album")
         album.photos = [make_photo(album, immich_asset_id="a1", filename="a1.jpg", selected=True)]
@@ -92,16 +95,22 @@ class TestCaptionStage:
         assert photo.caption == "Already captioned."
 
     def test_segment_less_album_still_gets_captioned(
-        self, session: Session, make_album: Callable[..., Album], make_photo: Callable[..., Photo]
+        self,
+        session: Session,
+        make_album: Callable[..., Album],
+        make_photo: Callable[..., Photo],
     ) -> None:
         album = make_album(slug="test-album")  # no segments
         album.photos = [
-            make_photo(album, immich_asset_id="a1", filename="a1.jpg", selected=True, segment=None)
+            make_photo(album, immich_asset_id="a1", filename="a1.jpg", selected=True, segment=None),
         ]
         album_id = self._persist(session, album)
 
         result = self._stage(
-            FakeThumbnails(), analysis_test_model(), album_id, reuse(session)
+            FakeThumbnails(),
+            analysis_test_model(),
+            album_id,
+            reuse(session),
         ).run()
 
         assert result.captioned == 1
@@ -121,13 +130,20 @@ class TestCaptionStage:
         album.segments = [segment]
         album.photos = [
             make_photo(
-                album, immich_asset_id="a1", filename="a1.jpg", selected=True, segment=segment
-            )
+                album,
+                immich_asset_id="a1",
+                filename="a1.jpg",
+                selected=True,
+                segment=segment,
+            ),
         ]
         album_id = self._persist(session, album)
 
         result = self._stage(
-            FakeThumbnails(), analysis_test_model(), album_id, reuse(session)
+            FakeThumbnails(),
+            analysis_test_model(),
+            album_id,
+            reuse(session),
         ).run()
 
         assert result.captioned == 1
@@ -135,14 +151,20 @@ class TestCaptionStage:
         assert photo.caption
 
     def test_running_before_enhance_triggers_shared_call(
-        self, session: Session, make_album: Callable[..., Album], make_photo: Callable[..., Photo]
+        self,
+        session: Session,
+        make_album: Callable[..., Album],
+        make_photo: Callable[..., Photo],
     ) -> None:
         album = make_album(slug="test-album")
         album.photos = [make_photo(album, immich_asset_id="a1", filename="a1.jpg", selected=True)]
         album_id = self._persist(session, album)
 
         result = self._stage(
-            FakeThumbnails({"a1": b"img"}), analysis_test_model(), album_id, reuse(session)
+            FakeThumbnails({"a1": b"img"}),
+            analysis_test_model(),
+            album_id,
+            reuse(session),
         ).run()
 
         assert result.captioned == 1
@@ -153,7 +175,10 @@ class TestCaptionStage:
         assert photo.enhance_exposure_ev == 0.0
 
     def test_after_enhance_reads_back_without_second_call(
-        self, session: Session, make_album: Callable[..., Album], make_photo: Callable[..., Photo]
+        self,
+        session: Session,
+        make_album: Callable[..., Album],
+        make_photo: Callable[..., Photo],
     ) -> None:
         album = make_album(slug="test-album")
         album.photos = [make_photo(album, immich_asset_id="a1", filename="a1.jpg", selected=True)]
@@ -162,7 +187,8 @@ class TestCaptionStage:
 
         # A prior analysis run (as enhance would trigger).
         PhotoAnalyzer(FakeThumbnails({"a1": b"img"}), model=analysis_test_model()).ensure(
-            session, photo
+            session,
+            photo,
         )
         session.flush()
 
@@ -174,14 +200,20 @@ class TestCaptionStage:
         assert result.captioned == 0
 
     def test_skips_unselected_photos(
-        self, session: Session, make_album: Callable[..., Album], make_photo: Callable[..., Photo]
+        self,
+        session: Session,
+        make_album: Callable[..., Album],
+        make_photo: Callable[..., Photo],
     ) -> None:
         album = make_album(slug="test-album")
         album.photos = [make_photo(album, immich_asset_id="a1", filename="a1.jpg", selected=False)]
         album_id = self._persist(session, album)
 
         result = self._stage(
-            FakeThumbnails(), analysis_test_model(), album_id, reuse(session)
+            FakeThumbnails(),
+            analysis_test_model(),
+            album_id,
+            reuse(session),
         ).run()
 
         assert result.captioned == 0
@@ -190,7 +222,10 @@ class TestCaptionStage:
         assert photo.caption is None
 
     def test_isolates_per_photo_failure(
-        self, session: Session, make_album: Callable[..., Album], make_photo: Callable[..., Photo]
+        self,
+        session: Session,
+        make_album: Callable[..., Album],
+        make_photo: Callable[..., Photo],
     ) -> None:
         album = make_album(slug="test-album")
         album.photos = [
@@ -200,7 +235,10 @@ class TestCaptionStage:
         album_id = self._persist(session, album)
 
         result = self._stage(
-            RaisingThumbnails(), analysis_test_model(), album_id, reuse(session)
+            RaisingThumbnails(),
+            analysis_test_model(),
+            album_id,
+            reuse(session),
         ).run()
 
         assert result.captioned == 1
@@ -210,16 +248,19 @@ class TestCaptionStage:
         assert photos["bad"].caption is None
 
     def test_scoped_to_album(
-        self, session: Session, make_album: Callable[..., Album], make_photo: Callable[..., Photo]
+        self,
+        session: Session,
+        make_album: Callable[..., Album],
+        make_photo: Callable[..., Photo],
     ) -> None:
         other_album = make_album(slug="other")
         other_album.photos = [
-            make_photo(other_album, immich_asset_id="o1", filename="o1.jpg", selected=True)
+            make_photo(other_album, immich_asset_id="o1", filename="o1.jpg", selected=True),
         ]
         other_id = self._persist(session, other_album)
         target_album = make_album(slug="target")
         target_album.photos = [
-            make_photo(target_album, immich_asset_id="t1", filename="t1.jpg", selected=True)
+            make_photo(target_album, immich_asset_id="t1", filename="t1.jpg", selected=True),
         ]
         target_id = self._persist(session, target_album)
 
@@ -235,7 +276,10 @@ class TestCaptionStage:
             self._stage(FakeThumbnails(), analysis_test_model(), 999, reuse(session)).run()
 
     def test_force_reanalyzes_already_captioned_photo(
-        self, session: Session, make_album: Callable[..., Album], make_photo: Callable[..., Photo]
+        self,
+        session: Session,
+        make_album: Callable[..., Album],
+        make_photo: Callable[..., Photo],
     ) -> None:
         album = make_album(slug="test-album")
         album.photos = [make_photo(album, immich_asset_id="a1", filename="a1.jpg", selected=True)]

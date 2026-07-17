@@ -60,14 +60,17 @@ class TestPgVectorSimilarity:
         similarity = PgVectorSimilarity()
 
         assert similarity.max_similarity(pg_session, identical_a, [p2.id]) == pytest.approx(
-            1.0, abs=1e-6
+            1.0,
+            abs=1e-6,
         )
         assert similarity.max_similarity(pg_session, identical_a, [p3.id]) == pytest.approx(
-            0.0, abs=1e-6
+            0.0,
+            abs=1e-6,
         )
         # Highest similarity wins when compared against several already-picked photos.
         assert similarity.max_similarity(pg_session, identical_a, [p3.id, p2.id]) == pytest.approx(
-            1.0, abs=1e-6
+            1.0,
+            abs=1e-6,
         )
 
     def test_empty_against_returns_minimum(self, pg_session: Session) -> None:
@@ -83,7 +86,10 @@ class TestPgVectorSimilarity:
     ) -> None:
         album = make_album(slug="none-embedding", immich_album_id="immich-none-embedding")
         p1 = make_photo(
-            album, immich_asset_id="solo", filename="solo.jpg", clip_embedding=_vector((0, 1.0))
+            album,
+            immich_asset_id="solo",
+            filename="solo.jpg",
+            clip_embedding=_vector((0, 1.0)),
         )
         album.photos = [p1]
         pg_session.add(album)
@@ -103,7 +109,10 @@ class TestPgVectorSimilarity:
         # data-model.md) must be skipped, not crash the query with a SQL NULL distance.
         album = make_album(slug="null-against", immich_album_id="immich-null-against")
         no_embedding = make_photo(
-            album, immich_asset_id="no-embedding", filename="no-embedding.jpg", clip_embedding=None
+            album,
+            immich_asset_id="no-embedding",
+            filename="no-embedding.jpg",
+            clip_embedding=None,
         )
         has_embedding = make_photo(
             album,
@@ -118,7 +127,9 @@ class TestPgVectorSimilarity:
         similarity = PgVectorSimilarity()
 
         result = similarity.max_similarity(
-            pg_session, _vector((0, 1.0)), [no_embedding.id, has_embedding.id]
+            pg_session,
+            _vector((0, 1.0)),
+            [no_embedding.id, has_embedding.id],
         )
 
         assert result == pytest.approx(1.0, abs=1e-6)

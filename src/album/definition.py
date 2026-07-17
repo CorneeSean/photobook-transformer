@@ -54,7 +54,7 @@ class LeadFacesYAML(BaseModel):
         if len(provided) != 1:
             raise ValueError(
                 "lead_faces must set exactly one of reference_image, "
-                f"reference_asset_id, person_ids (got: {provided or 'none'})"
+                f"reference_asset_id, person_ids (got: {provided or 'none'})",
             )
         return self
 
@@ -86,7 +86,7 @@ class AlbumYAML(BaseModel):
             if segment.end_at <= segment.start_at:
                 raise ValueError(
                     f"segment {segment.label!r} has end_at ({segment.end_at}) "
-                    f"at or before start_at ({segment.start_at})"
+                    f"at or before start_at ({segment.start_at})",
                 )
 
         by_start = sorted(self.segments, key=lambda segment: segment.start_at)
@@ -111,14 +111,14 @@ class AlbumYAML(BaseModel):
             return dt.astimezone(UTC)
         if tz is None:
             raise ValueError(
-                f"time {dt.isoformat()!r} has no UTC offset and the album has no `timezone` set"
+                f"time {dt.isoformat()!r} has no UTC offset and the album has no `timezone` set",
             )
         localized = dt.replace(tzinfo=tz)
         utc = localized.astimezone(UTC)
         if utc.astimezone(tz).replace(tzinfo=None) != dt:
             raise ValueError(
                 f"time {dt.isoformat()!r} does not exist in timezone {tz.key!r} "
-                "(falls in a DST spring-forward gap)"
+                "(falls in a DST spring-forward gap)",
             )
         return utc
 

@@ -108,7 +108,9 @@ def sqlite_session_factory() -> Iterator[sessionmaker[Session]]:
     """A StaticPool in-memory SQLite factory (one shared DB across sessions),
     torn down even if the test fails — for the lead resolver's own session."""
     engine = create_engine(
-        "sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool
+        "sqlite://",
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
     )
     Base.metadata.create_all(engine)
     try:
@@ -119,7 +121,9 @@ def sqlite_session_factory() -> Iterator[sessionmaker[Session]]:
 
 class TestImmichMlIntegration:
     def test_face_detection_produces_a_real_face(
-        self, immich_client: ImmichClient, detected_asset_id: str
+        self,
+        immich_client: ImmichClient,
+        detected_asset_id: str,
     ) -> None:
         faces = immich_client.get_faces(detected_asset_id)
 
@@ -171,7 +175,9 @@ class TestImmichMlIntegration:
         )
 
     def test_smart_search_runs_clip_offline(
-        self, immich_client: ImmichClient, detected_asset_id: str
+        self,
+        immich_client: ImmichClient,
+        detected_asset_id: str,
     ) -> None:
         # Smart search is the only CLIP-observable behaviour over the API (the
         # embedding itself never crosses the wire — immich-api.md open Q1). A hit

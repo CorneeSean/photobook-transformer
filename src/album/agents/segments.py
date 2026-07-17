@@ -67,10 +67,12 @@ class ExtractedSegments(BaseModel):
     """
 
     title: str | None = Field(
-        default=None, description="The overall event's name, if the document states one."
+        default=None,
+        description="The overall event's name, if the document states one.",
     )
     segments: list[SegmentYAML] = Field(
-        default_factory=list, description="The extracted time/place windows, in order."
+        default_factory=list,
+        description="The extracted time/place windows, in order.",
     )
 
 
@@ -139,7 +141,7 @@ def _format_grounding(capture_range: tuple[datetime, datetime] | None, timezone:
         start, end = capture_range
         lines.append(
             f"The photos were captured between {start.isoformat()} and {end.isoformat()} — "
-            "use this to anchor relative or partial dates."
+            "use this to anchor relative or partial dates.",
         )
     if timezone is not None:
         lines.append(f"Interpret local times in the {timezone} timezone unless stated otherwise.")

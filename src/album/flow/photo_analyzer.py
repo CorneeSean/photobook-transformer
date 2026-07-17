@@ -76,7 +76,11 @@ class PhotoAnalyzer:
         self._model = model
 
     def ensure(
-        self, session: Session, photo: Photo, *, force: bool = False
+        self,
+        session: Session,
+        photo: Photo,
+        *,
+        force: bool = False,
     ) -> AnalysisResult | None:
         """Idempotent trigger for the one-combined-vision-call design.
 

@@ -56,7 +56,10 @@ class TestQuality:
         return album.id
 
     def test_scores_land_in_the_db(
-        self, session: Session, make_album: Callable[..., Album], make_photo: Callable[..., Photo]
+        self,
+        session: Session,
+        make_album: Callable[..., Album],
+        make_photo: Callable[..., Photo],
     ) -> None:
         album = make_album(immich_album_id="immich-abc")
         album.photos = [
@@ -76,7 +79,10 @@ class TestQuality:
         assert photos["sharp"].blur_score > photos["blurry"].blur_score  # pyright: ignore[reportOperatorIssue]
 
     def test_is_idempotent_and_skips_already_scored(
-        self, session: Session, make_album: Callable[..., Album], make_photo: Callable[..., Photo]
+        self,
+        session: Session,
+        make_album: Callable[..., Album],
+        make_photo: Callable[..., Photo],
     ) -> None:
         album = make_album(immich_album_id="immich-abc")
         album.photos = [make_photo(album, immich_asset_id="a1")]
@@ -93,7 +99,10 @@ class TestQuality:
         assert thumbs.calls == ["a1"]  # thumbnail fetched only once
 
     def test_force_rescores(
-        self, session: Session, make_album: Callable[..., Album], make_photo: Callable[..., Photo]
+        self,
+        session: Session,
+        make_album: Callable[..., Album],
+        make_photo: Callable[..., Photo],
     ) -> None:
         album = make_album(immich_album_id="immich-abc")
         album.photos = [make_photo(album, immich_asset_id="a1")]
@@ -102,14 +111,21 @@ class TestQuality:
 
         QualityStage(FakeThumbnails({}), aesthetic, album_id, reuse(session)).run()
         result = QualityStage(
-            FakeThumbnails({}), aesthetic, album_id, reuse(session), force=True
+            FakeThumbnails({}),
+            aesthetic,
+            album_id,
+            reuse(session),
+            force=True,
         ).run()
 
         assert result == QualityResult(scored=1)
         assert aesthetic.calls == 2
 
     def test_scoped_to_album(
-        self, session: Session, make_album: Callable[..., Album], make_photo: Callable[..., Photo]
+        self,
+        session: Session,
+        make_album: Callable[..., Album],
+        make_photo: Callable[..., Photo],
     ) -> None:
         other = make_album(slug="other", immich_album_id="immich-other")
         other.photos = [make_photo(other, immich_asset_id="other-1")]
@@ -126,7 +142,10 @@ class TestQuality:
         assert target_photo.blur_score is not None
 
     def test_failure_after_blur_leaves_no_partial_write(
-        self, session: Session, make_album: Callable[..., Album], make_photo: Callable[..., Photo]
+        self,
+        session: Session,
+        make_album: Callable[..., Album],
+        make_photo: Callable[..., Photo],
     ) -> None:
         # If aesthetic scoring raises *after* blur is computed, neither score is
         # persisted — the write is atomic per photo.
@@ -135,7 +154,10 @@ class TestQuality:
         album_id = self._persist(session, album)
 
         result = QualityStage(
-            FakeThumbnails({}), RaisingAesthetic(), album_id, reuse(session)
+            FakeThumbnails({}),
+            RaisingAesthetic(),
+            album_id,
+            reuse(session),
         ).run()
 
         assert result == QualityResult(failed=1)
@@ -144,7 +166,10 @@ class TestQuality:
         assert photo.aesthetic_score is None
 
     def test_computes_embedding_when_embedder_given(
-        self, session: Session, make_album: Callable[..., Album], make_photo: Callable[..., Photo]
+        self,
+        session: Session,
+        make_album: Callable[..., Album],
+        make_photo: Callable[..., Photo],
     ) -> None:
         album = make_album(immich_album_id="immich-abc")
         album.photos = [make_photo(album, immich_asset_id="a1")]
@@ -152,7 +177,11 @@ class TestQuality:
         embedder = ConstantEmbedder()
 
         QualityStage(
-            FakeThumbnails({}), ConstantAesthetic(), album_id, reuse(session), embedder=embedder
+            FakeThumbnails({}),
+            ConstantAesthetic(),
+            album_id,
+            reuse(session),
+            embedder=embedder,
         ).run()
 
         assert embedder.calls == 1
@@ -161,7 +190,10 @@ class TestQuality:
         assert len(photo.clip_embedding) == 768
 
     def test_undecodable_thumbnail_is_isolated_not_fatal(
-        self, session: Session, make_album: Callable[..., Album], make_photo: Callable[..., Photo]
+        self,
+        session: Session,
+        make_album: Callable[..., Album],
+        make_photo: Callable[..., Photo],
     ) -> None:
         album = make_album(immich_album_id="immich-abc")
         album.photos = [

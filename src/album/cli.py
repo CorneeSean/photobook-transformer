@@ -26,7 +26,8 @@ from album.ingest import _ALBUMS_DIR, IngestError, ingest_directory
 
 def main() -> None:
     parser = argparse.ArgumentParser(
-        prog="photobook-generator", description="Photo album pipeline."
+        prog="photobook-generator",
+        description="Photo album pipeline.",
     )
     subparsers = parser.add_subparsers(dest="command", required=True)
     _add_generate_parser(subparsers)
@@ -49,12 +50,16 @@ def _add_generate_parser(subparsers: argparse._SubParsersAction[argparse.Argumen
         ),
     )
     parser.add_argument(
-        "directory", metavar="DIR", help="Directory of photos ('.' for the current directory)"
+        "directory",
+        metavar="DIR",
+        help="Directory of photos ('.' for the current directory)",
     )
     parser.add_argument("--slug", help="Album slug (default: the directory name, slugified)")
     parser.add_argument("--title", help="Book title (default: the directory name)")
     parser.add_argument(
-        "--timezone", metavar="IANA", help="IANA timezone for undated photos (e.g. Europe/Warsaw)"
+        "--timezone",
+        metavar="IANA",
+        help="IANA timezone for undated photos (e.g. Europe/Warsaw)",
     )
     parser.add_argument(
         "--source-document",
@@ -72,7 +77,10 @@ def _add_generate_parser(subparsers: argparse._SubParsersAction[argparse.Argumen
 def _add_run_parser(subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
     parser = subparsers.add_parser("run", help="Run the pipeline end-to-end for one album")
     parser.add_argument(
-        "--album", required=True, metavar="SLUG", help="Album slug (data/albums/<slug>/album.yml)"
+        "--album",
+        required=True,
+        metavar="SLUG",
+        help="Album slug (data/albums/<slug>/album.yml)",
     )
     parser.set_defaults(func=_run)
 

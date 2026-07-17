@@ -50,7 +50,9 @@ class TestLuluPrinter:
         )
 
     def test_rejects_local_filesystem_path(
-        self, session: Session, make_album: Callable[..., Album]
+        self,
+        session: Session,
+        make_album: Callable[..., Album],
     ) -> None:
         printer = self._printer(FakeLuluClient())
         album = make_album(assembled_pdf_path="/data/albums/honeymoon-2026/book.pdf")
@@ -61,7 +63,9 @@ class TestLuluPrinter:
             printer.print(album, session)
 
     def test_raises_when_pdf_not_assembled_yet(
-        self, session: Session, make_album: Callable[..., Album]
+        self,
+        session: Session,
+        make_album: Callable[..., Album],
     ) -> None:
         printer = self._printer(FakeLuluClient())
         album = make_album()
@@ -72,7 +76,9 @@ class TestLuluPrinter:
             printer.print(album, session)
 
     def test_submits_for_a_reachable_url(
-        self, session: Session, make_album: Callable[..., Album]
+        self,
+        session: Session,
+        make_album: Callable[..., Album],
     ) -> None:
         fake_client = FakeLuluClient(order_id=777)
         printer = self._printer(fake_client)

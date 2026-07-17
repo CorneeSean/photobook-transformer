@@ -164,7 +164,7 @@ class AssembleStage(Stage[AssembleResult]):
         if missing_render:
             raise ValueError(
                 f"album {album_id}: {len(missing_render)} selected photo(s) have no "
-                "rendered_path yet — run `render` before `assemble`"
+                "rendered_path yet — run `render` before `assemble`",
             )
 
     def _lay_out(self, album: Album, photos: list[Photo]) -> tuple[list[str], int, int]:
@@ -184,7 +184,11 @@ class AssembleStage(Stage[AssembleResult]):
         html_pages: list[str] = []
         for segment, group in self._group_photos(album, photos):
             group_pages, page_number, group_placed = self._render_group(
-                env, base_ctx, segment, group, page_number
+                env,
+                base_ctx,
+                segment,
+                group,
+                page_number,
             )
             html_pages.extend(group_pages)
             photos_placed += group_placed
@@ -205,16 +209,19 @@ class AssembleStage(Stage[AssembleResult]):
             page_number += 1
             html_pages.append(
                 env.get_template("section.html").render(
-                    **base_ctx, label=segment.label, place=segment.place
-                )
+                    **base_ctx,
+                    label=segment.label,
+                    place=segment.place,
+                ),
             )
         photos_placed = 0
         for chunk in self._chunk_by_scene(group):
             page_number += 1
             html_pages.append(
                 env.get_template(self._layout_for_size(len(chunk))).render(
-                    **base_ctx, photos=[self._photo_ctx(p) for p in chunk]
-                )
+                    **base_ctx,
+                    photos=[self._photo_ctx(p) for p in chunk],
+                ),
             )
             for photo in chunk:
                 photo.page_number = page_number
@@ -226,7 +233,9 @@ class AssembleStage(Stage[AssembleResult]):
         return {"image_path": photo.rendered_path, "caption": photo.caption}
 
     def _group_photos(
-        self, album: Album, photos: list[Photo]
+        self,
+        album: Album,
+        photos: list[Photo],
     ) -> list[tuple[Segment | None, list[Photo]]]:
         """Order photos by segment position, then scene, then timestamp, and group
         them by segment — each group is (segment_or_None, photos). No segments

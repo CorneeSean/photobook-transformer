@@ -91,7 +91,11 @@ class CaptionStage(Stage[CaptionResult]):
         return result
 
     def _caption_photo(
-        self, photo: Photo, session: Session, force: bool, result: CaptionResult
+        self,
+        photo: Photo,
+        session: Session,
+        force: bool,
+        result: CaptionResult,
     ) -> None:
         """Ensure one photo's shared analysis has run, tallying the outcome onto
         ``result``. Isolates a per-photo failure so one bad photo (unreadable

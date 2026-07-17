@@ -71,7 +71,10 @@ class TestDirectoryIngest:
     """`DirectoryIngestor.ingest`: walk → upload → create album → materialize."""
 
     def _ingestor(
-        self, client: FakeIngestClient, albums_dir: Path, **kw: object
+        self,
+        client: FakeIngestClient,
+        albums_dir: Path,
+        **kw: object,
     ) -> DirectoryIngestor:
         # No-op sleep + tiny timeout so the readiness poll is fast and silent.
         return DirectoryIngestor(
@@ -153,7 +156,11 @@ class TestDirectoryIngest:
         ids=["kebab", "spaced", "punctuation"],
     )
     def test_slug_and_title_default_from_directory_name(
-        self, tmp_path: Path, dir_name: str, expected_slug: str, expected_title: str
+        self,
+        tmp_path: Path,
+        dir_name: str,
+        expected_slug: str,
+        expected_title: str,
     ) -> None:
         directory = self._photos_dir(tmp_path, dir_name, ["a.jpg"])
         client = FakeIngestClient()
@@ -169,7 +176,9 @@ class TestDirectoryIngest:
         albums_dir = tmp_path / "albums"
 
         slug = self._ingestor(client, albums_dir).ingest(
-            directory, slug="honeymoon-2026", title="Our Honeymoon"
+            directory,
+            slug="honeymoon-2026",
+            title="Our Honeymoon",
         )
 
         assert slug == "honeymoon-2026"
@@ -207,7 +216,10 @@ class TestReRunGuard:
 
     def _ingestor(self, client: FakeIngestClient, albums_dir: Path) -> DirectoryIngestor:
         return DirectoryIngestor(
-            client, albums_dir=albums_dir, poll_timeout_s=1.0, sleep=lambda _s: None
+            client,
+            albums_dir=albums_dir,
+            poll_timeout_s=1.0,
+            sleep=lambda _s: None,
         )
 
     def test_rerun_without_force_raises_before_uploading(self, tmp_path: Path) -> None:
@@ -273,7 +285,9 @@ class TestReadinessPoll:
         assert (tmp_path / "albums" / "trip" / "album.yml").exists()
 
     def test_timeout_warns_and_continues(
-        self, tmp_path: Path, caplog: pytest.LogCaptureFixture
+        self,
+        tmp_path: Path,
+        caplog: pytest.LogCaptureFixture,
     ) -> None:
         client = FakeIngestClient(jobs=[_busy(active=1)])  # never goes idle
 
@@ -304,7 +318,8 @@ class TestSourceDocument:
         )
 
         def handler(
-            messages: list[ModelMessage], info: AgentInfo
+            messages: list[ModelMessage],
+            info: AgentInfo,
         ) -> ModelResponse:  # pragma: no cover - exercised via FunctionModel
             return ModelResponse(parts=[TextPart(content=canned)])
 
@@ -338,7 +353,8 @@ class TestSourceDocument:
         albums_dir = tmp_path / "albums"
 
         self._ingestor(FakeIngestClient(), albums_dir).ingest(
-            directory, source_document=self._pdf(tmp_path)
+            directory,
+            source_document=self._pdf(tmp_path),
         )
 
         album_yml = albums_dir / "raw-dump" / "album.yml"
@@ -356,7 +372,9 @@ class TestSourceDocument:
         albums_dir = tmp_path / "albums"
 
         self._ingestor(FakeIngestClient(), albums_dir).ingest(
-            directory, title="Our Own Title", source_document=self._pdf(tmp_path)
+            directory,
+            title="Our Own Title",
+            source_document=self._pdf(tmp_path),
         )
 
         written = yaml.safe_load((albums_dir / "raw-dump" / "album.yml").read_text())
@@ -381,7 +399,8 @@ class TestSourceDocument:
         )
 
         def handler(
-            messages: list[ModelMessage], info: AgentInfo
+            messages: list[ModelMessage],
+            info: AgentInfo,
         ) -> ModelResponse:  # pragma: no cover - exercised via FunctionModel
             return ModelResponse(parts=[TextPart(content=naive)])
 

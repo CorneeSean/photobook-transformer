@@ -33,7 +33,7 @@ from album.flow.stages.assemble import (
 )
 
 _FIXTURE_IMAGE = str(
-    Path(__file__).parent.parent.parent.parent / "fixtures" / "images" / "sharp.jpg"
+    Path(__file__).parent.parent.parent.parent / "fixtures" / "images" / "sharp.jpg",
 )
 
 # PDF points per inch (a "PDF point" is always 1/72in — this is a unit
@@ -127,7 +127,12 @@ class TestAssembleStage:
     ) -> None:
         album = make_album()
         day1 = make_segment(
-            album, position=1, label="Day 1", place="Lisbon", start_at=_dt(0), end_at=_dt(23, 59)
+            album,
+            position=1,
+            label="Day 1",
+            place="Lisbon",
+            start_at=_dt(0),
+            end_at=_dt(23, 59),
         )
         day2 = make_segment(
             album,

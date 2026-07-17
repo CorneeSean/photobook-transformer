@@ -43,7 +43,9 @@ class TestFulfillStage:
         return album.id
 
     def test_prints_and_stores_output_ref(
-        self, session: Session, make_album: Callable[..., Album]
+        self,
+        session: Session,
+        make_album: Callable[..., Album],
     ) -> None:
         album_id = self._persist(session, make_album())
         printer = FakePrinter(output_ref="data/albums/honeymoon-2026/book/index.html")
@@ -58,7 +60,9 @@ class TestFulfillStage:
         assert album.output_ref == "data/albums/honeymoon-2026/book/index.html"
 
     def test_idempotent_skips_when_already_printed(
-        self, session: Session, make_album: Callable[..., Album]
+        self,
+        session: Session,
+        make_album: Callable[..., Album],
     ) -> None:
         album_id = self._persist(session, make_album(output_ref="already-printed"))
         printer = FakePrinter(output_ref="should-not-be-used")
@@ -73,7 +77,9 @@ class TestFulfillStage:
         assert album.output_ref == "already-printed"
 
     def test_force_reprints_even_if_already_printed(
-        self, session: Session, make_album: Callable[..., Album]
+        self,
+        session: Session,
+        make_album: Callable[..., Album],
     ) -> None:
         album_id = self._persist(session, make_album(output_ref="old-ref"))
         printer = FakePrinter(output_ref="new-ref")
