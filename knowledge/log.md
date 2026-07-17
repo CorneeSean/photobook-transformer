@@ -2,6 +2,44 @@
 
 ## 2026-07-17
 
+* **Build step 27 done — single-command `photobook-generator generate <dir>`**
+  (commit `c1c5146`, branch `step-27-ingest-cli`; playbook step 2 / Feature A of
+  [single-command-ingestion.md](/build/single-command-ingestion.md)). New
+  `src/album/ingest.py`: `DirectoryIngestor` walks a photo directory (recursing;
+  jpg/jpeg/png/heic/heif/webp), uploads each file via the existing
+  content-deduped `upload_asset`, creates the Immich album (`create_album`, step
+  26), polls `get_jobs` until EXIF extraction is idle (warn + continue on
+  timeout — undated photos are handled downstream by `sync`/`cluster`), and
+  materializes a minimal `data/albums/<slug>/album.yml`. It then calls the
+  **unchanged** `pipeline(album_slug=...)` — `album.yml` stays the single source
+  of truth and the hand-authored `album run` path is untouched. Prefect-free and
+  occasion-agnostic (genericity rule holds); shaped like `LeadFaceResolver`
+  (injected Protocol client + poll/sleep).
+    * **Two user-directed CLI decisions this step.** (1) Ingest is a *separate
+      wrapper* in front of the pipeline (a sibling of `get_or_create_album`), not
+      a `Stage` — a stage is built with an existing `album_id`/DB row, and ingest
+      is precisely what creates the album.yml + Immich album that the row is
+      bootstrapped from, so it must run before the stage machinery, and keeping it
+      out front means one pipeline serves both entry modes. (2) **One** console
+      entry point: the `album` script was renamed to **`photobook-generator`**
+      with `generate <dir>` / `run --album <slug>` subcommands (replacing the two
+      earlier separate scripts/functions). README/AGENTS/working-agreement/
+      folder-structure + poe `run`/`generate` tasks updated.
+    * **Re-run story (resolves an open question).** Load-once per slug: `generate`
+      on an already-imported slug refuses unless `--force`, which re-runs the
+      *existing* `album.yml` as is — no re-upload, no duplicate Immich album, and
+      hand-authored `segments`/`lead_faces` preserved. The first-draft design
+      (re-materialize + re-run) was caught in review as a data-loss + orphan-album
+      footgun and redesigned. Image set = common phone/edited formats (RAW
+      excluded); recurses subdirectories (both user-chosen).
+    * Two adversarial Opus reviews (correctness + cleanup/reuse) — findings
+      applied (flattened away speculative injected params, reused the albums-root
+      constant for the CLI's book-path message, occasion-neutral docstring
+      example) — then a focused correctness re-review of the `--force` redesign +
+      rename (clean). `uv run poe check` green (264 tests). Live ingestion run
+      stays deferred (same no-reachable-Immich boundary as steps 4-5/26).
+      **Next: step 28** (`agents/segments.py` + `--source-document`, Feature B).
+
 * **Build step 26 done — Immich album creation in the client** (commit `94fba06`,
   branch `step-26-immich-album-create`; playbook step 1 of
   [single-command-ingestion.md](/build/single-command-ingestion.md)). Adds two
