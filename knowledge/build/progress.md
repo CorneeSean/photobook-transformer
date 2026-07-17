@@ -16,6 +16,31 @@ order, one at a time.
 **Status values:** `todo` → `in-progress` → `agent-review` → `awaiting-user` →
 `done`. Use `blocked` (with a note) if a step cannot proceed.
 
+This tracker is split into two sections — **[Outstanding (TODO)](#outstanding-todo)**
+and **[Completed (DONE)](#completed-done)**. **Bookkeeping rule:** a step lives in
+*Outstanding* while it is `todo`/`in-progress`/`blocked` (set `in-progress` and
+record its branch when work begins); the moment it merges to `main` as `done`,
+**move its row out of Outstanding into the matching Completed sub-table**, with its
+commit hash. So *Outstanding* always shows exactly what is left, and *Completed* is
+the audit trail. Keep this split accurate — it is part of the per-step
+[implementation workflow](/process/implementation-workflow.md), not optional tidiness.
+
+## Outstanding (TODO)
+
+The implementing agent takes the **lowest-numbered** step here. All three below are
+optional/deferred — nothing is blocked on missing code (see
+[Notes / blockers](#notes--blockers)).
+
+| # | Step | Playbook | Status | Branch | Notes |
+|---|------|----------|--------|--------|-------|
+| 20 | Rating / OCR / geocoded place (optional) | enrichment | todo | — | `rating` + `exifInfo.city/state/country` + OCR into nullable columns |
+| 23 | DB-backed flow smoke test (optional) | testcontainers | todo | — | whole flow on real Postgres, Immich/Claude/Lulu as doubles — largely subsumed by step 25's `test_flow_integration.py` (real `pipeline()` on a pgvector container, every external boundary doubled); revisit only if a gap remains |
+| 24 | Immich ML integration (deferred optional) | testcontainers | todo | — | needs internet CLIP/face models or a pre-baked model-cache image — see the playbook |
+
+## Completed (DONE)
+
+### Build order
+
 | # | Step | Branch | Status | Commit | Notes |
 |---|------|--------|--------|--------|-------|
 | 0 | Scaffold | step-00-scaffold (merged, deleted) | done | 11d290f | `config.py`/`definition.py`/`flow.py` deliberately not created — deferred to steps 3 and 14 |
@@ -44,7 +69,8 @@ order, one at a time.
 | 17b | Lead-face resolution | step-17b-lead-faces (merged, deleted) | done | 06810d7 | `LeadFacesYAML` (exactly one of reference_image/reference_asset_id/person_ids) + `load_lead_faces`; client `upload_asset` (POST /assets); `Album.lead_reference_asset_id` cache (migration `d4a1c7b93e56`, verified on Postgres); `LeadFaceResolver` uploads + polls async face detection, marks `Person.is_lead` (exact set, clears stale); `_resolve_leads_task` after sync; genericity guard holds. 3-agent review (fixed stale-lead clearing); 194 tests |
 | 18 | People-aware + lead-aware `select` | step-18-people-select (merged, deleted) | done | f3afc54 | effective-score boosts (group_boost/person + lead_boost/lead, tunable) + lead guaranteed coverage (bypasses near-dup guard vs non-leads; couple each covered) + strict-on-non-leads (no generic coverage phase — chosen posture); byte-for-byte for face-free albums. 3-agent review (removed a provably-dead generic-coverage phase); 205 tests |
 | 19 | Name-grounded `caption` (optional) | step-19-name-caption (merged, deleted) | done | cd77da6 | `PhotoContext.person_names` + pure `_resolve_person_names` (photo `person_ids` → `Person.name` via the album-scoped `photo.album.people` cache — one query/album from the identity map, order preserved, unnamed/unknown dropped); `format_context` emits a `People in this photo:` line only when non-empty; rides the **one** shared analysis call (no 2nd round-trip); byte-for-byte for a face-free or all-unnamed photo (genericity guard). 2 adversarial reviews (correctness clean; style/reuse findings applied — shared `doubles.canned_analysis_response`, capturing double → class fixture). 223 tests (+5). Live-Claude caption spot-check still deferred (no `ANTHROPIC_API_KEY`). |
-| 20 | Rating / OCR / geocoded place (optional) | — | todo | — | `rating` + `exifInfo.city/state/country` + OCR into nullable columns |
+
+*(Step 20 is outstanding — see [Outstanding (TODO)](#outstanding-todo).)*
 
 ### TestContainers playbook (see [testcontainers.md](/build/testcontainers.md))
 
@@ -52,9 +78,9 @@ order, one at a time.
 |---|------|--------|--------|--------|-------|
 | 21 | pgvector schema + integration harness | step-21-pgvector-integration (merged, deleted) | done | ac2cd14 | alembic-migrated pgvector container fixture; `select` over the real `PgVectorSimilarity` (near-dup skip, idempotent; lead coverage with a negative control + `person_ids` JSON round-trip); migrations reach head + no drift; migration round-trip; `integration` marker + `poe test-fast`. 2-agent review (fixed a fileConfig/caplog cross-test leak). 211 tests |
 | 22 | darktable-cli render integration | step-22-darktable-render (merged, deleted) | done | 8aac81b | real `DarktableRenderer` inside the shipped app image renders a real `write_xmp_sidecar` sidecar → asserts output JPEG exists, decodes, **visibly brighter** (`tests/test_render_integration.py`). Validated the darktable XMP history-stack format — see [enhance.md](/stages/enhance.md). Closes step-11's deferred manual check. Shells to `docker` CLI (docker-py build breaks on the py3.14 gcloud cred-helper landmine). |
-| 23 | DB-backed flow smoke test (optional) | — | todo | — | whole flow on real Postgres, Immich/Claude/Lulu as doubles — largely subsumed by step 25's `test_flow_integration.py`, which already runs the real `pipeline()` on a pgvector container with every external boundary doubled; revisit only if a gap remains |
-| 24 | Immich ML integration (deferred optional) | — | todo | — | needs internet CLIP/face models or a pre-baked model-cache image — see the playbook |
 | 25 | Parallelize the flow (fan-out groups) | step-25-parallelize-flow (merged, deleted) | done | 036fcc2 | DAG execution per `pipeline-execution.md`: 4 sequential stages keep the shared session; 6 grouped stages (`resolve-leads`/`quality`/`cluster`/`enhance`/`render`/`caption`) take a `session_factory` and open their own pooled connection via a new `_owns_session` decorator (+ sibling `_autocommit` for the 4 sequential tasks); two `submit()`/`result()` fences — group 1 (`resolve-leads`‖`quality`‖`cluster`, join at `select`) and group 2 (`enhance`, then `render`‖`caption`, join at `assemble`). Commit-before-fanout/`expire_all()`-after-join at both fences. Review caught a real bug in the original design sketch: `enhance`‖`caption` running fully concurrently raced on `PhotoAnalyzer.ensure`'s shared idempotency columns (double vision-model call + conflicting-write race) — fixed by joining `enhance`'s future before `render`/`caption` are even submitted. New `tests/album/test_flow_integration.py`: real concurrent per-task sessions against a Postgres+pgvector testcontainer, external boundaries doubled, incl. a counting-model regression guard for the caught bug. 3-agent Opus review (correctness/cleanup/tests) + a re-review after the fix; 218 tests. Live `album run` end-to-end stays deferred (no reachable Immich/Claude/darktable/Lulu), same standing note as every prior step. |
+
+*(Steps 23-24 are outstanding — see [Outstanding (TODO)](#outstanding-todo).)*
 
 ### Single-command ingestion playbook (see [single-command-ingestion.md](/build/single-command-ingestion.md))
 

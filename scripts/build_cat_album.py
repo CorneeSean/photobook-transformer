@@ -6,7 +6,7 @@ time/place ``Segment``s + 30 ``Photo`` rows from
 ``photos/``), then runs the actual [`cluster`](../src/album/flow/stages/cluster.py)
 and [`assemble`](../src/album/flow/stages/assemble.py) stages and the default
 [`HtmlPrinter`](../src/album/printers/html.py) — the same code a live
-``album run`` uses. The front-half stages that need external services (``sync``
+``photobook-generator run`` uses. The front-half stages that need external services (``sync``
 from Immich, ``quality``'s scorer, ``enhance``/``render`` via darktable,
 ``caption`` via Claude) are stood in for by the manifest: every photo arrives
 pre-``rendered_path``'d at its on-disk file and pre-captioned, and all are marked

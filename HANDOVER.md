@@ -103,8 +103,8 @@ generalized from a Lulu-only submitter to a pluggable `Printer`
 output is `HtmlPrinter` — a self-contained, browsable page-by-page webpage
 (`data/albums/<slug>/book/index.html`) rendered from the on-disk photos, needing
 no external service; `LuluPrinter` (physical order) is opt-in. `Album.lulu_order_id`
-became the medium-agnostic `Album.output_ref`. So a default `album run` now
-produces a real, viewable deliverable end-to-end. See the tracker's Notes.
+became the medium-agnostic `Album.output_ref`. So a default `photobook-generator
+run` now produces a real, viewable deliverable end-to-end. See the tracker's Notes.
 
 ## What's left — closing deferred items, not new build steps
 
@@ -114,8 +114,8 @@ Docker app image), or Lulu sandbox credentials. Nothing is blocked on missing
 code — see [`knowledge/build/progress.md`](./knowledge/build/progress.md)'s Notes /
 blockers section for the full, current list, including:
 
-- A genuinely full `album run --album <slug>` (real sync → real quality
-  scoring → ... → real Lulu order) once all four are available.
+- A genuinely full `photobook-generator run --album <slug>` (real sync → real
+  quality scoring → ... → real Lulu order) once all four are available.
 - The real LAION/open_clip aesthetic scorer + CLIP embedder (step 6's
   deferral) — `_UnavailableQualityModel` in `flow.py` stands in for it.
 - A PDF-hosting/upload mechanism so the opt-in `LuluPrinter` can give Lulu a

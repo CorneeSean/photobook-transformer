@@ -41,10 +41,14 @@ review chain, squash, merge, push) around it.
 ## The loop for one step
 
 1. **Select the step.** Take the lowest-numbered step whose status is `todo` in
-   the [progress tracker](/build/progress.md). Steps are strictly ordered.
+   the [progress tracker](/build/progress.md)'s **Outstanding (TODO)** section.
+   Steps are strictly ordered. (The tracker is split into *Outstanding (TODO)* and
+   *Completed (DONE)*: everything not yet merged lives in Outstanding; a step moves
+   to Completed only when it lands on `main` — see step 9.)
 2. **Branch off `main`.** `git switch main && git pull` (if a remote exists), then
-   `git switch -c step-NN-<slug>` (e.g. `step-02-data-model`). Update the tracker:
-   set the step `in-progress` and record the branch name.
+   `git switch -c step-NN-<slug>` (e.g. `step-02-data-model`). In the tracker's
+   **Outstanding (TODO)** section, set the step `in-progress` and record the branch
+   name (it stays in Outstanding until it merges).
 3. **Load the context** (see "Context to load" below) so the work respects the
    established design and the [non-negotiable rules](/reference/folder-structure.md).
 4. **Implement test-first.** Follow the [TDD loop](/process/working-agreement.md): failing
@@ -80,13 +84,17 @@ review chain, squash, merge, push) around it.
    (`<stage>: <what changed>`, verification in the body). Note its hash
    (`git rev-parse --short HEAD`) — for a fast-forward merge this *is* the hash
    the commit will have on `main`.
-9. **Record — still on the step branch, before merging.** Update the
-   [progress tracker](/build/progress.md) (status `done`, the hash just noted, the
-   date) and add a dated entry to [`log.md`](/log.md), as one small commit on
-   top of the squashed step commit. Doing this now, rather than after the merge,
-   is required: `main` is commit-protected (see hard rules above), so there is
-   no direct way to land a tracker update on `main` once the step branch is gone
-   short of opening a whole second branch for it.
+9. **Record — still on the step branch, before merging.** In the
+   [progress tracker](/build/progress.md), **move the step's row out of
+   *Outstanding (TODO)* into the matching *Completed (DONE)* sub-table** (status
+   `done`, the hash just noted, the date), and add a dated entry to
+   [`log.md`](/log.md) — as one small commit on top of the squashed step commit.
+   Moving the row (not just flipping its status) is the bookkeeping the tracker's
+   two-section split depends on, so *Outstanding* always lists only what is left.
+   Doing this now, rather than after the merge, is required: `main` is
+   commit-protected (see hard rules above), so there is no direct way to land a
+   tracker update on `main` once the step branch is gone short of opening a whole
+   second branch for it.
 10. **Merge.** Merge the step branch into `main` via **fast-forward** (linear
     history, no merge commit — which also keeps the `no-commit-to-branch`
     pre-commit hook satisfied), then delete the branch. `main` now has both the
@@ -125,7 +133,8 @@ A step is `done` only when **all** are true:
 - [ ] The user has explicitly approved.
 - [ ] Subcommits squashed into one `<stage>: <what changed>` commit with the
       verification in the body.
-- [ ] [Progress tracker](/build/progress.md) and [`log.md`](/log.md) updated **on the
-      step branch**, in a commit on top of the squashed step commit (not after
-      merging — `main` can't take a direct commit).
+- [ ] [Progress tracker](/build/progress.md) updated **on the step branch** — the
+      step's row **moved from *Outstanding (TODO)* to *Completed (DONE)*** with its
+      hash — and a dated [`log.md`](/log.md) entry added, in a commit on top of the
+      squashed step commit (not after merging — `main` can't take a direct commit).
 - [ ] Branch merged into `main`, branch deleted, and `main` pushed to `origin`.
