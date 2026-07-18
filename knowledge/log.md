@@ -2,6 +2,14 @@
 
 ## 2026-07-18
 
+* **Convention added — commit body vs. `log.md` split + "Be concise" (user-directed).**
+  [working-agreement.md](/process/working-agreement.md): a "Be concise" principle
+  over all output, and a Git-workflow subsection dividing labour — commit bodies own
+  the per-diff mechanical record, `log.md` owns the cross-commit narrative/decisions
+  and points into git via SHAs rather than restating it. Decided **against** folding
+  the log into commit history via a rewrite (entries don't map 1:1 to commits, bundle
+  links wouldn't resolve, and a rewrite invalidates the SHAs the log cites). Docs only.
+
 * **README rewritten as a one-page brief + pipeline-execution destale (user-directed).**
   `README.md` is now a brief: quick start (install → up → API key → `generate`) plus
   header-and-link sections pointing at `knowledge/`. Fixed `pipeline-execution.md`/`.html`,

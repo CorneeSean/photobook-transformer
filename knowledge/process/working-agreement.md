@@ -8,6 +8,13 @@ timestamp: 2026-07-12
 
 # Working agreement
 
+## Be concise
+
+Applies to all work here — docs, `log.md`, commit bodies, review comments, and
+chat. Say what changed, why, and what's left; then stop. Prefer bullets and
+tables over prose, cut restatement and hedging, and don't narrate the process.
+If it reads like a diary, trim it.
+
 ## Test-driven development
 
 Every stage is developed test-first:
@@ -88,6 +95,32 @@ finalized — bundled into `uv run poe check`, the one command that gates a comm
 
 - If a step can't be completed cleanly, **do not commit it and move on**. Stop
   and surface the problem.
+
+### Commit body vs. `log.md` — division of labour
+
+Two records, deliberately kept separate; neither restates the other.
+
+| Record | Owns | Granularity |
+|---|---|---|
+| **Commit body** | The *mechanical* per-diff record — what changed and why in **that** commit, plus the verification (test count / manual check). | Exactly one per commit. |
+| [**`log.md`**](/log.md) | The *narrative/decision* layer git can't hold: records that span **several** commits or **none at all** — proposals, decisions, open-question resolutions, review outcomes, and the deferral list. Cross-links into the [`knowledge/`](/index.md) bundle. | One entry per meaningful *change of state*, not per commit. |
+
+Consequences that keep the two from drifting into copies of each other:
+
+- **`log.md` points *into* git; it does not duplicate it.** Reference a commit by
+  its SHA (`commit ba6c1bf`) rather than re-listing file moves or exact test
+  counts — those live in the commit and the diff. This also means the log survives
+  a change of granularity: an entry may cite several SHAs, or none.
+- **Rationale that outlives one diff goes in the log**; rationale scoped to a
+  single diff goes in that commit's body. When in doubt, ask "does this make sense
+  to someone reading only this commit?" — if yes, commit body; if it only makes
+  sense across steps, `log.md`.
+- **Keep entries tight** (see [Be concise](#be-concise)): a few bullets per state
+  change — decision, rationale, SHA(s), deferral. Not a per-commit replay.
+- **Do not fold the log into commit history** (e.g. by rewriting messages). The
+  log's entries don't map 1:1 to commits, its markdown links only resolve inside
+  the bundle, it stays editable for de-staling, and a history rewrite would
+  invalidate the very SHAs the log cites.
 
 ### Pre-commit hooks (local enforcement)
 
