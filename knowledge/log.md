@@ -6,6 +6,23 @@ bodies this log cites; keep entries tight (see
 
 ## 2026-07-18
 
+* **Plans — folder-structure-driven ingestion (steps 32–35)** (planning only, no code).
+  New [folder-structure-ingestion.md](/build/folder-structure-ingestion.md) umbrella
+  playbook + four step plans: a root `ingest.yml` **manifest** declares which subfolders
+  are album vs segment boundaries, so `generate <root> --manifest` fans one tree into N
+  independent Immich albums / `album.yml` files / pipeline runs / books. Folder-derived
+  segments take their `[start_at, end_at]` window from the photos' capture timestamps.
+  Six decisions settled with the user up front: root manifest (over marker files /
+  interactive prompt); N independent runs (no pipeline change — every stage is already
+  `album_id`-scoped); **explicit** `--manifest` opt-in (a stray `ingest.yml` never
+  changes flat `generate`); per-album fields live in the manifest (CLI keeps only global
+  `--timezone/--captioner/--force`); mixed content degrades cleanly to zero segments;
+  per-album failure isolation with a combined summary; and build against today's upload
+  path, staying decoupled from External Libraries. **Steps 32 → 33 → 34 → 35 are a strict
+  sequential chain** (33 imports 32's models; 34 depends on 33's `ingest_album` seam and
+  both edit `ingest.py`; 35 verifies) — no parallel build. Tracked in
+  [progress.md](/build/progress.md) Outstanding.
+
 * **Step 30 — repeatable `--lead-face` CLI flag + multi-photo lead resolution**
   (`e50a54a`; [step-30-cli-lead-faces.md](/build/step-30-cli-lead-faces.md)). `generate`/`run`
   take a repeatable `--lead-face IMAGE` that writes/patches the `lead_faces.reference_images`

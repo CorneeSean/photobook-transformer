@@ -31,6 +31,15 @@ on missing code (see [Notes / blockers](#notes--blockers)).
 | # | Step | Playbook | Status | Branch | Notes |
 |---|------|----------|--------|--------|-------|
 | 23 | DB-backed flow smoke test (optional) | testcontainers | todo | — | largely subsumed by step 25's `test_flow_integration.py`; revisit only if a gap remains |
+| 32 | Ingest manifest schema + loader | [folder-structure-ingestion](/build/folder-structure-ingestion.md) · [step-32](/build/step-32-manifest-schema.md) | todo | — | pure `manifest.py`; foundational, no deps |
+| 33 | Folder-derived segments in `ingest.py` | [step-33](/build/step-33-folder-segments.md) | todo | — | **after 32**; segment-source seam; edits `ingest.py` |
+| 34 | Fan-out orchestration + `generate --manifest` | [step-34](/build/step-34-fanout-cli.md) | todo | — | **after 33**; shares `ingest.py` with 33 (no parallel) |
+| 35 | Docs + end-to-end genericity verification | [step-35](/build/step-35-docs-verify.md) | todo | — | **after 34**; README + reference docs + e2e/genericity gate |
+
+**Sequencing:** steps 32 → 33 → 34 → 35 are a **strict chain, no parallelism** — 33
+imports 32's models, 34 depends on 33's `ingest_album` seam and both edit `ingest.py`,
+35 verifies the finished feature. The [parallel-build precedent](#notes--blockers)'s
+no-shared-files check fails here, so worktree fan-out is unavailable for these steps.
 
 ## Completed (DONE)
 
