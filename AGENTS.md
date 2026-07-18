@@ -2,170 +2,121 @@
 
 Orientation for coding agents working in this repo. Read this first, then treat
 the **[`knowledge/`](./knowledge/index.md) OKF bundle as the source of truth**
-for the domain model, architecture decisions (and their rationale), the full
-pipeline stage list, the data model, and the step-by-step build order. This file
-is the short operational summary; the bundle is the detail. If the two ever
-conflict, the bundle wins — and fix this file.
+for the domain model, architecture (and rationale), the pipeline stages, the data
+model, and the build order. This file is the short operational summary; the bundle
+is the detail. **If the two ever conflict, the bundle wins — and fix this file.**
 
 The bundle is an [Open Knowledge Format](https://github.com/GoogleCloudPlatform/knowledge-catalog/blob/main/okf/SPEC.md)
-directory: start at [`knowledge/index.md`](./knowledge/index.md), which links to
-one document per concept (each with `type` frontmatter), plus a `stages/`
-subdirectory with one document per pipeline stage.
+directory: start at [`knowledge/index.md`](./knowledge/index.md).
 
 ## What this project is
 
 A batch pipeline that turns a raw dump of photos into a curated, enhanced,
-captioned, print-ready photo book, submitted to a print API — with minimal
-manual work. It is **event-type agnostic**: trips, weddings, a baby's first
-year, a festival are all just *albums*. The abstraction is `Album` + optional
-`Segment` (a named, time-bounded, optionally-placed period). See
-[`knowledge/foundations/domain-model.md`](./knowledge/foundations/domain-model.md) before touching
+captioned, print-ready photo book — with minimal manual work. It is
+**event-type agnostic**: trips, weddings, a baby's first year, a festival are all
+just *albums* (`Album` + optional `Segment`). Read
+[`domain-model.md`](./knowledge/foundations/domain-model.md) before touching
 anything that reasons about structure.
 
 ## Current state
 
-All 16 steps of the numbered [**Build order**](./knowledge/build/build-order.md) are
-done and merged to `main` — every stage (`sync` through `fulfill`) is
-implemented, wired into one Prefect flow, and step 16 confirmed the
-`Album`/`Segment` abstraction needs no code change for a structurally
-different album. Since then (post-step-16, user-directed) `fulfill` was
-generalized to a pluggable `Printer` (`src/album/printers/`), with a browsable
-HTML book (`HtmlPrinter`) as the default output and Lulu opt-in — see
-[`knowledge/build/progress.md`](./knowledge/build/progress.md)'s Notes / blockers section.
-See [`HANDOVER.md`](./HANDOVER.md) for a full summary and
-[`knowledge/build/progress.md`](./knowledge/build/progress.md)'s Notes / blockers section
-for what's still deferred (live-Immich/Claude/Lulu/darktable-cli checks — this
-sandbox has no reachable instances of any of them, so those are the live
-follow-ups, not new build steps). There is no more build-order work queued;
-further changes are either closing a deferred item or new, user-directed work
-— both still follow the workflow described below (branch, checks, review,
-squash-merge).
+The build order and every follow-on playbook are done and merged to `main`:
+build order (0–16), Immich enrichment (17–20), TestContainers integration
+(21–25), single-command ingestion (26–28), and offline analysis (29). Only the
+**optional step 23** (DB-backed flow smoke test) is outstanding. The pipeline is
+**fully offline by default** (classical tone + template caption, no API key);
+Claude is an opt-in caption upgrade (`--captioner claude`). See
+[`progress.md`](./knowledge/build/progress.md) — its **Notes / blockers** section
+is the current list of everything still deferred (all "no reachable live
+Immich / `ANTHROPIC_API_KEY` / `darktable-cli` / Lulu creds in this sandbox"
+follow-ups, not new code).
 
-## How a step is implemented (read before writing any code)
+There is no queued build work. Further changes are either closing a deferred item
+or new, user-directed work — both still follow the workflow below.
 
-Deliver **one build step at a time**, following
-[`knowledge/process/implementation-workflow.md`](./knowledge/process/implementation-workflow.md),
-and keep [`knowledge/build/progress.md`](./knowledge/build/progress.md) current. The order is
-fixed — **checks → sub-agent review → user review → commit** — and any change
-re-runs what precedes it. In short:
+## Starting a session
 
-1. Take the next `todo` step from the [progress tracker](./knowledge/build/progress.md).
-2. **Branch off `main`** (`step-NN-<slug>`) — **never work on or commit to `main`**
-   (a `no-commit-to-branch` pre-commit hook enforces this).
-3. Load the step's context (its [build-order](./knowledge/build/build-order.md) entry +
-   every doc it links) and implement **test-first**. Subcommits are fine.
-4. **Get `uv run poe check` green first** (ruff + basedpyright + pytest), or do
-   the step's manual verification. No review starts until checks are green.
-5. **Then invoke a review sub-agent** on the diff; address comments, **re-run
-   `poe check` to green**, re-review — until it has no comments. **Cap this at a
-   maximum of 3 essential, broad-scope review sub-agents** (correctness /
-   cleanup / tests-conventions) — don't fan out into many narrow angles; use
-   fewer for a small diff. See implementation-workflow.md step 6.
-6. **Then ask the user to review;** on requested changes, fix, **re-run `poe
-   check`**, **re-run the sub-agent review**, then return to the user — until
-   approved.
-7. **Squash** subcommits into one `<stage>: <what changed>` commit, **then update
-   the tracker + `log.md`** in a commit on top of that (still on the step branch
-   — `main` is commit-protected, so this can't happen after the merge), **then
-   fast-forward merge** to `main`, **push `main` to `origin`**, and delete the
-   branch.
+A fresh agent should read `AGENTS.md`, then
+[`knowledge/index.md`](./knowledge/index.md) and
+[`implementation-workflow.md`](./knowledge/process/implementation-workflow.md),
+then [`progress.md`](./knowledge/build/progress.md)'s **Notes / blockers** in
+full. Follow the same per-step workflow (branch off `main`, TDD where applicable,
+then checks → sub-agent review → squash → fast-forward merge → push) for any new
+or deferred-item work. **Stop and show a plan before writing code.**
 
-Commit to `main` **only** when checks are green, the sub-agent is satisfied, and
-the user has approved — in that order.
+## How a step is implemented
+
+The full loop is [`implementation-workflow.md`](./knowledge/process/implementation-workflow.md)
+(mandatory); the quality gate is [`working-agreement.md`](./knowledge/process/working-agreement.md).
+The order is fixed — **checks → sub-agent review → user review → commit** — and
+any change re-runs what precedes it. In short:
+
+1. Take the next `todo` step from the [tracker](./knowledge/build/progress.md).
+2. **Branch off `main`** (`step-NN-<slug>`) — **never commit to `main`** (a
+   `no-commit-to-branch` hook enforces it).
+3. Load the step's context and implement **test-first**.
+4. Get **`uv run poe check` green** (or the step's manual verification) — no review
+   starts until it is.
+5. **Sub-agent review** the diff — **up to 4 broad-scope agents** (2 adversarial
+   correctness, 1 style/reuse, 1 architecture; scale down for small diffs). Address
+   comments, re-run `poe check`, re-review until clean.
+6. **User review** (skipped per standing instruction — merge autonomously once
+   checks + sub-agent review are clean; see the tracker's process-change note).
+7. **Squash** into one `<stage>: <what changed>` commit, **update the tracker +
+   `log.md`** on the branch, **fast-forward merge** to `main`, **push to
+   `origin`**, delete the branch.
 
 ## Workflow commands
 
-Once scaffolded, workflow actions are `poethepoet` tasks run via `uv run poe`:
-
-| Command | What it does |
-|---|---|
-| `uv run poe check` | ruff + `ruff format --check` + basedpyright + pytest — **the commit gate** |
-| `uv run poe lint` / `poe format` | `ruff check .` / `ruff format .` |
-| `uv run poe typecheck` | `basedpyright` |
-| `uv run poe test` | `pytest` — the whole suite (unit + integration) |
-| `uv run poe test-unit` | `pytest -m "not integration"` — pure-logic tests only (fast) |
-| `uv run poe test-integration` | `pytest -m integration` — containers + real HTTP-client boundary |
-| `uv run poe up` / `poe down` | `docker compose up` / `down` (app + Postgres + Immich + Prefect) |
-| `uv run poe migrate` | `alembic upgrade head` |
-| `uv run poe run -- --album <slug>` | run the pipeline flow for one album |
-| `uv run poe generate -- <dir>` | ingest a photo directory and generate the book |
-
-The pipeline is also a console entry point: `uv run photobook-generator`
-(`generate <dir>` for the one-command path, or `run --album <slug>` for a
-hand-authored `album.yml`).
+The canonical `poe` task table lives in
+[`working-agreement.md`](./knowledge/process/working-agreement.md#local-workflow-commands).
+The commit gate is **`uv run poe check`** (ruff + `ruff format --check` +
+basedpyright + xenon complexity + pytest). The pipeline is a console entry point:
+`uv run photobook-generator generate <dir>` (one-command path) or
+`run --album <slug>` (hand-authored `album.yml`).
 
 ## Non-negotiable rules
 
-These are the guardrails that keep the design honest. Enforce them in tests, not
-just prose.
+Guardrails that keep the design honest — enforce them in tests, not just prose.
+Detail and rationale live in
+[`folder-structure.md`](./knowledge/reference/folder-structure.md) and
+[`quality-practices.md`](./knowledge/process/quality-practices.md).
 
-1. **Genericity.** Nothing in `src/` may reference trips, itineraries, days, or
-   any occasion-specific concept. If a stage needs to know an album is a "trip,"
-   the abstraction has leaked — fix the abstraction, don't special-case.
-2. **Segments are optional.** Every stage that reads segments must have a
-   *tested* fallback for an album with none (and, where relevant, no GPS).
-3. **`album_id` first.** Every stage function takes `album_id` as its first
-   argument; no stage assumes it's the only album in the DB.
-4. **Stage classes are Prefect-free logic; the `@task` is co-located per stage.**
-   *(Changed 2026-07-16.)* Each `flow/stages/*.py` defines both its Prefect-free
-   stage **class** (unit-testable without an orchestrator — tests target
-   `run`/`_process`, never the task) *and* a thin `@task` wrapping it
-   (`sync_task`, …); `flow/_flow.py` is the **aggregator** that imports those
-   tasks and composes the DAG via the `Pipeline` class. Session/commit policy
-   lives in `flow/_tasks.py`. `flow/stages/base.py` still imports no Prefect, and
-   nothing adds Prefect to `db/`, `immich/`, `lulu/`, `printers/`, `agents/`,
-   `config.py`, `definition.py`. See folder-structure.md for the rationale.
-5. **AI estimates parameters, never generates pixels.** Enhancement produces
-   bounded numeric deltas (Pydantic `Field(ge=, le=)`); classical code applies
-   them. No invented detail.
+1. **Genericity.** Nothing in `src/` may reference trips, itineraries, days, or any
+   occasion-specific concept. If a stage needs to know an album is a "trip," the
+   abstraction has leaked — fix the abstraction, don't special-case.
+2. **Segments are optional.** Every stage that reads segments must have a *tested*
+   fallback for an album with none (and, where relevant, no GPS).
+3. **`album_id` first.** Every stage **class** is constructed with `album_id` (and
+   a `session_factory`) as its first per-run inputs; no stage assumes it's the only
+   album in the DB.
+4. **A stage *is* its own Prefect task.** Each stage class subclasses
+   `flow.stages.base.Stage` and is turned into a named Prefect task by the
+   `TaskUnit` base — there are **no module-level `@task` functions and no
+   `flow/_tasks.py`**. The stage class stays Prefect-free at module scope
+   (unit-tested via `run`/`_process`); `flow/_flow.py` is the aggregator that
+   composes the DAG. `prefect` is imported only by `flow/stages/base.py` and
+   `flow/_flow.py` — never in `db/`, `immich/`, `lulu/`, `printers/`, `analysis/`,
+   `agents/`, `config.py`, `definition.py`.
+5. **Enhancement estimates bounded numeric deltas, never generates pixels.** Tone
+   deltas are Pydantic `Field(ge=, le=)`; classical code applies them via XMP. Tone
+   is **classical/offline by default** (`ClassicalToneEstimator`); no invented
+   detail.
 6. **`config.py` is the only place that reads env vars.**
-7. **Idempotent stages.** Re-running a stage on a processed album must be safe
-   and produce the same result. Nullability in the schema is meaningful (`NULL`
-   = "that stage hasn't run for this photo yet") — that's what makes it
-   resumable.
+7. **Idempotent stages.** Re-running a stage on a processed album must be safe and
+   produce the same result. `NULL` = "that stage hasn't run for this photo yet" —
+   that's what makes it resumable.
 8. **Migrations, always.** Use alembic; never `Base.metadata.create_all()`.
 
 ## How work is done
 
-- **Test-driven.** Write the failing pytest first (against the contract), watch
-  it fail for the right reason, then implement the minimum to pass, then
-  refactor. Pure-logic stages are the highest-value tests — write them
-  thoroughly. See the per-stage testing table in
-  [`knowledge/process/working-agreement.md`](./knowledge/process/working-agreement.md) for what to
-  use (in-memory SQLite, `testcontainers` for `pgvector`, `respx`/`vcrpy` for the
-  Immich client, PydanticAI `TestModel` for agents).
-- **Static typing is a gate.** The code is heavily typed (SQLAlchemy 2.0
-  `Mapped[...]`, Pydantic v2). `basedpyright` must be clean before commit.
-  (Astral's `ty` is the planned future checker — don't assume a specific one.)
-- **One squashed commit per build step, on a branch, merged to `main` and pushed
-  to `origin`** — never a direct commit to `main`, never one big dump. A step is done only when
-  `uv run poe check` is green (or the manual verification is performed), **then**
-  the review sub-agent is satisfied, **then** the user has approved — in that
-  order, re-running checks after each round. Put the verification in the commit
-  body. Commit format: `<stage>: <what changed>`. See
-  [`implementation-workflow.md`](./knowledge/process/implementation-workflow.md).
-- **If a step can't be completed cleanly, do not commit and move on.** Stop and
-  surface the problem.
+Test-driven (failing pytest first — see the per-stage testing table in
+[`working-agreement.md`](./knowledge/process/working-agreement.md)), heavily typed
+(`basedpyright` clean is a gate), one squashed commit per step on a branch merged
+to `main` and pushed. If a step can't be completed cleanly, **stop and surface the
+problem** — don't commit and move on. Structure and testing conventions:
+[`quality-practices.md`](./knowledge/process/quality-practices.md). Target layout:
+[`folder-structure.md`](./knowledge/reference/folder-structure.md).
 
-## Layout (target)
-
-See [`knowledge/reference/folder-structure.md`](./knowledge/reference/folder-structure.md) for the
-full tree and rules. In brief:
-
-```
-src/album/
-  config.py      cli.py      definition.py
-  flow/          _flow.py (Pipeline + the one Prefect @flow) _tasks.py (txn wrappers) tone.py photo_analyzer.py
-  flow/stages/   sync quality cluster select enhance render caption assemble fulfill (each: Stage class + its @task)
-  db/            models.py similarity.py session.py
-  immich/        client.py
-  lulu/          client.py     (thin Lulu Print API HTTP transport)
-  printers/      base.py html.py lulu.py  (pluggable output media; HtmlPrinter is default)
-  agents/        analysis.py   (ONE agent: tone deltas + caption, swap for TestModel)
-templates/       Jinja2 page layouts (+ book/ for the HTML viewer)
-data/albums/     <slug>/album.yml (the only thing needed to define an album)
-tests/           conftest.py + per-stage tests + fixtures/
-```
-
-Adding a new album must require **only** an `album.yml` plus an Immich album —
-no code change. That's the real test of the abstraction (build step 16).
+Adding a new album must require **only** an `album.yml` plus an Immich album — no
+code change. That's the real test of the abstraction (build step 16).

@@ -36,17 +36,12 @@ staying generic.
 [`caption`](/stages/caption.md) produces ungrounded (but still accurate)
 captions. Segments make the output *better*, not possible.
 
-## Design note — why not just a free-form `metadata: dict` on Photo?
+## Design note — why not a free-form `metadata: dict`?
 
-Because then no stage could reason about it. The value of the itinerary was never
-"arbitrary key-value data" — it was "this time range has a name and a place,"
-which is precisely what lets `cluster` assign photos to a narrative unit and
-`caption` say "harbour in Lisbon" instead of "a scenic view." Flattening that to
-an opaque dict would make the pipeline dumber, not more general. A
-structured-but-optional `Segment` is the right level of abstraction: universal in
-shape, flexible in meaning.
-
-A free-form `Album.meta` JSON column is still there as an escape hatch for
-genuinely album-specific extras (e.g. the couple's names, a trip's country) that
-stages don't need to reason about but templates and caption prompts can
-interpolate. See [Data model](/reference/data-model.md).
+- An opaque dict is something no stage can *reason* about. A `Segment`'s value is "this
+  time range has a name and a place" — precisely what lets `cluster` assign a photo to a
+  narrative unit and `caption` say "harbour in Lisbon" instead of "a scenic view."
+- Structured-but-optional is the right level: universal in shape, flexible in meaning.
+- A free-form `Album.meta` JSON column *is* the escape hatch for album-specific extras
+  (couple's names, a trip's country) that stages don't reason about but templates and
+  caption prompts interpolate. See [Data model](/reference/data-model.md).

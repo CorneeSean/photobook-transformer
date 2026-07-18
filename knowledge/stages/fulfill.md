@@ -14,22 +14,16 @@ injected [`Printer`](../../src/album/printers/base.py) and records the
 printer-agnostic reference the printer returns on `Album.output_ref` (idempotent —
 a second run is a no-op unless `force=True`). The output *medium* is swappable:
 
-- **`HtmlPrinter` (default).** Renders a single self-contained `index.html` — a
-  browsable, page-by-page viewer with captions, segment dividers, and a bit of
-  live-flow feel (animated page turns, a progress bar, an "Auto" switch that
-  advances a page every 5s to the end) — from the on-disk
-  rendered photos. Needs **no external service or credentials**, so it's the
-  default output: unlike every other pipeline dependency (Immich, Claude,
-  darktable, Lulu), the HTML book renders from what's already on disk. Images are
-  referenced by a path relative to the written file, so the browser loads them
-  straight from disk. Styling uses a CDN CSS lib + a little vanilla JS, but it's
-  deliberately *one static file*, not a web app.
-- **`LuluPrinter` (opt-in).** POSTs the assembled master PDF to Lulu's Print API
-  (photo books as a native product type) for a physical copy on the doormat.
-  Injected by the caller when wanted, because a real order needs live Lulu
-  credentials **and** a PDF hosted at a URL Lulu's servers can fetch — see the
-  `UnreachablePdfError` gap. Test against recorded fixtures; **manually verify**
-  with a single-copy test order before the real one.
+- **`HtmlPrinter` (default).** A single self-contained `index.html` — a browsable,
+  page-by-page viewer (captions, segment dividers, animated page turns, an "Auto"
+  advance) rendered from the on-disk photos, referenced by relative path. Needs **no
+  external service or credentials**, so it's the default; deliberately *one static
+  file* (CDN CSS + a little vanilla JS), not a web app.
+- **`LuluPrinter` (opt-in).** POSTs the assembled master PDF to Lulu's Print API for a
+  physical copy. Injected by the caller, because a real order needs live Lulu
+  credentials **and** a PDF hosted at a URL Lulu can fetch (see the `UnreachablePdfError`
+  gap). Tested against recorded fixtures; **manually verify** with a single-copy test
+  order first.
 
 Each printer validates its own precondition (a webpage needs the placed photos; a
 Lulu order needs the master PDF), which is what keeps `fulfill` medium-agnostic.

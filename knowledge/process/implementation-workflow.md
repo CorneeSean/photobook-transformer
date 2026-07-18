@@ -16,27 +16,20 @@ review chain, squash, merge, push) around it.
 
 ## Hard rules
 
-- **One step at a time.** Do not start step N+1 until step N is merged and marked
-  `done` in the [progress tracker](/build/progress.md).
-- **Never work on or commit to `main`.** Every step is done on its own branch and
-  merged. `main` only ever advances by merging a reviewed, approved step branch.
-- **Commit to `main` (via merge) only when ALL of these hold:** the review
-  sub-agent has no remaining comments, **the user has approved**, and
-  `uv run poe check` is green (plus any manual verification the step requires).
-- **Subcommits are allowed on the step branch, but squash before merge** — the
-  step lands on `main` as a single, clean commit.
-- **Reviews run on green checks, and every change re-runs them.** The order is
-  fixed: **checks → sub-agent review → user review → commit**. `uv run poe check`
-  must be green *immediately before each review*; any change made in response to a
-  review round re-runs the checks to green (and re-runs the sub-agent review
-  before returning to the user).
-- **`main` is commit-protected, full stop — including bookkeeping.** The
-  `no-commit-to-branch` hook blocks *any* direct commit to `main`, not just code
-  changes. This means the [progress tracker](/build/progress.md) and [`log.md`](/log.md)
-  updates for a step **cannot be done after that step's merge** without opening a
-  second branch just to land a docs commit. Do the tracker/log update **on the
-  step branch, before the fast-forward merge** (see step 9 below) — the fast
-  forward carries it to `main` in the same motion as the code.
+- **One step at a time.** Don't start step N+1 until step N is merged and `done`.
+- **Never work on or commit to `main`.** Every step is a branch merged in; `main`
+  only advances by merging a reviewed, approved step branch (`no-commit-to-branch`
+  hook enforces it).
+- **Merge only when ALL hold:** sub-agent review clean, **user approved**, and
+  `uv run poe check` green (plus any manual verification).
+- **Subcommits allowed on the branch, but squash before merge** — one clean commit.
+- **Order is fixed: checks → sub-agent review → user review → commit.** `poe check`
+  must be green *immediately before each review*; any change re-runs checks (and the
+  sub-agent review before returning to the user).
+- **`main` is commit-protected, including bookkeeping.** So the tracker + `log.md`
+  updates must be done **on the step branch before the fast-forward merge** (step 9)
+  — the fast-forward carries them to `main` with the code; there's no way to land a
+  post-merge docs commit without a second branch.
 
 ## The loop for one step
 

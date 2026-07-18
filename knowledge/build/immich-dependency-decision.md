@@ -119,72 +119,30 @@ isolates.
 
 ## Build steps — `LocalPhotoSource` (gated on this decision flipping to "replace")
 
-These steps are **not scheduled**. They belong to the mainline
-[build order](/build/build-order.md) only *if and when* the decision above flips to "replace"
-(see [Revisit when](#revisit-when)). They are recorded now so the path is concrete
-and the [boundary](/stages/sync.md) is kept honest against it. Numbered `L1…L5` to signal
-they are conditional, not part of the mainline 1–22+ sequence.
+**Not scheduled** — recorded so the path is concrete and the [boundary](/stages/sync.md) stays
+honest. Only enter the mainline [build order](/build/build-order.md) *if* the decision flips
+(see [Revisit when](#revisit-when)). North star: **the switch is a config choice; no
+downstream stage changes** (everything reads the DB behind the `AssetSource` /
+`ThumbnailSource` protocols). Each follows the usual
+[implementation workflow](/process/implementation-workflow.md).
 
-Each follows the [implementation workflow](/process/implementation-workflow.md) (branch, TDD,
-sub-agent review, `uv run poe check` green, squash, fast-forward merge) and the
-[quality practices](/process/quality-practices.md) (injected dependencies, protocol-shaped
-seams). The north star: **the switch is a config choice, and no downstream stage
-changes** — everything continues to read the DB behind the `AssetSource` /
-`ThumbnailSource` protocols.
-
-**L1. Filesystem library behind the existing protocols.** A `LocalPhotoSource`
-that satisfies the same `AssetSource` (`get_album_assets`) and `ThumbnailSource`
-(`get_thumbnail`) protocols the stages already depend on, plus a `get_original`,
-reading a `photos/<album>/` directory instead of Immich. EXIF via `exiftool`/`Pillow`
-(capture time, IANA timezone, GPS, camera make/model — the exact `ImmichExif`
-subset [`sync`](/stages/sync.md) consumes, so its UTC-normalization logic is untouched);
-thumbnails via `pyvips`, cached to disk. `immich_album_id` generalizes to a source
-handle (path). *Test first*, against a small fixture tree: assets enumerate with
-correct EXIF; a missing-timezone photo still lands the same "ambiguous → NULL
-timestamp" path as today; thumbnails decode. **No downstream change; `sync` runs
-unmodified against the fake.** **Commit.**
-
-**L2. Duplicate groups without Immich.** Reproduce role 6 (`get_duplicates` /
-`duplicate_group_id`). Prefer **reusing the CLIP embeddings + `pgvector` cosine we
-already compute** ([`quality`](/stages/quality.md)) — derive dup groups by thresholded
-nearest-neighbour over the same vectors, deleting the need for a separate dedup
-model entirely; fall back to `imagehash` (pHash/dHash) only if a pre-embedding
-signal is wanted. *Test first*: near-identical frames group together; unrelated
-photos don't; the grouping populates `Photo.duplicate_group_id` in the shape
-[`dedupe`](/stages/dedupe.md) already expects. **Commit.**
-
-**L3. InsightFace faces + the `Person` concept.** Reproduce role 7 — the one piece
-of real ML. Detect + embed faces with **InsightFace `buffalo_l`** (RetinaFace +
-ArcFace), then **cluster the embeddings (DBSCAN/HDBSCAN) into album-scoped
-`Person`s**, populating `Photo.face_count` / `Photo.person_ids` and upserting
-`Person` rows exactly as [`sync`](/stages/sync.md)'s `_sync_faces` does today. Keep it
-**failure-isolated per asset** (one undetectable photo leaves face columns NULL,
-never aborts the album) and **idempotent** (re-run reuses stable cluster ids).
-Record the [InsightFace non-commercial model licence](#the-one-legal-footgun-insightface-model-licensing)
-as a conscious acceptance in [`log.md`](/log.md). *Test first*, against fixture faces:
-two photos of the same person share a `person_id`; a face-free album lands
-`person_ids=[]` and every people-aware stage reduces to its face-free behaviour
-(genericity guard); re-running doesn't duplicate `Person` rows. **Commit.**
-
-**L4. Lead faces without upload.** Rework `lead_faces` resolution
-([enrichment](/build/enrichment.md) 17b) for the local backend: the `reference_image`
-is embedded with the same InsightFace model and matched (cosine) against the
-album's clustered `Person`s — **no `POST /assets` upload, no async
-face-detection poll**, which the local path removes entirely. `reference_asset_id`
-generalizes to "a photo already in the library"; `person_ids` still passes through.
-*Test first*: a reference photo of a lead resolves to the right `Person` and marks
-it `is_lead=True`; a reference face matching nobody surfaces a clear warning; no
-`lead_faces` ⇒ no leads, no error. **Commit.**
-
-**L5. Config switch + end-to-end.** Wire a `source: immich | local` setting so
-`flow.py` injects `ImmichClient` or `LocalPhotoSource` (both satisfy the
-protocols) — **the only line the switch touches**. Add an integration test that
-runs the pipeline end-to-end over a local fixture album with no Immich stack
-running, and A/B the face-recognition + curation output against an Immich run on
-the same photos before deleting anything. Update [tech stack](/reference/tech-stack.md),
-[architecture](/foundations/architecture.md), [sync](/stages/sync.md), and this record's status.
-Only after this A/B is acceptable does dropping [`docker-compose.immich.yml`](../../docker-compose.immich.yml)
-become a separate cleanup step. **Commit.**
+- **L1. Filesystem library behind the existing protocols.** `LocalPhotoSource` satisfies
+  `AssetSource` + `ThumbnailSource` (+ `get_original`) reading a `photos/<album>/` dir:
+  EXIF via `exiftool`/`Pillow`, thumbnails via `pyvips`; `immich_album_id` → a path. `sync`
+  runs unmodified against it.
+- **L2. Duplicate groups.** Prefer deriving dup groups from the **CLIP embeddings +
+  `pgvector` cosine we already compute** (thresholded NN), deleting the need for a separate
+  dedup model; `imagehash` fallback. Populates `Photo.duplicate_group_id`.
+- **L3. InsightFace faces + `Person`** (the one real ML piece). Detect+embed with
+  `buffalo_l` (RetinaFace + ArcFace), cluster embeddings (DBSCAN) into album-scoped
+  `Person`s exactly as `sync._sync_faces` does — failure-isolated + idempotent. Record the
+  [InsightFace non-commercial licence](#the-one-legal-footgun-insightface-model-licensing)
+  as conscious acceptance.
+- **L4. Lead faces without upload.** Embed `reference_image` with the same model, match by
+  cosine against clustered `Person`s — no `POST /assets`, no async poll.
+- **L5. Config switch + end-to-end.** A `source: immich | local` setting picks which the
+  flow injects (the only line it touches); A/B recognition + curation against an Immich run
+  before deleting `docker-compose.immich.yml`.
 
 ## Revisit when
 

@@ -37,11 +37,10 @@ The call does two unrelated things; each has a good classical replacement:
 * **Job A — tone deltas** (`exposure_ev`, `temp_shift_k`, `shadows`,
   `highlights`) → **classical computer vision**: auto-exposure to a target
   luminance, gray-world/white-patch AWB, histogram-percentile shadow/highlight.
-  Produces exactly the four bounded scalars the pipeline wants; deterministic;
-  fits AGENTS.md rule 5 ("AI estimates parameters, never generates pixels").
-  `enhance.py` already uses `skimage.exposure.match_histograms` — half the
-  building blocks are present. LLM-guessing EV from a 250px thumbnail was always a
-  weak use of an LLM.
+  Produces exactly the four bounded scalars the pipeline wants; deterministic; fits
+  the bounded-delta rule (estimate deltas, never generate pixels). `enhance.py` already
+  uses `skimage.exposure.match_histograms`. LLM-guessing EV from a 250px thumbnail was
+  always a weak use of an LLM.
 
 * **Job B — grounded caption** → **classical metadata templating**. Most of a
   photo-book caption's value is *who / where / when*, which is **structured data
@@ -67,19 +66,15 @@ VLM (Florence-2 / Moondream / Ollama-served) — kept **injectable** as an optio
 `LuluPrinter` opt-in): the online path stays a quality upgrade behind the existing
 injection seam, not the baseline.
 
-## Open questions to settle when planning
+## How it resolved (as built)
 
-* **Caption template + grammar:** name joining ("A and B", "A, B and C"),
-  pluralization, place-component dedup (partly in `_format_place`), and
-  empty-field fallbacks. Must hold the genericity guard across both album shapes
-  (honeymoon vs. `smith-wedding`).
-* **Seam:** a `Captioner` protocol next to `AestheticScorer`/`Embedder`, vs.
-  composing inside `PhotoAnalyzer`. Keep the `AnalysisResult` shape, or split tone
-  and caption into two outputs now that they no longer share a call?
-* **Tone estimator:** the exact CV → darktable-XMP mapping and the existing field
-  bounds; confirm output stays within `AnalysisResult`'s `Field(ge=, le=)` ranges.
-* **Validation:** no API, so validate against real image fixtures + the honeymoon
-  / `smith-wedding` album fixtures; assert captions read well for both shapes.
+- **Seam:** separate `ToneEstimator` and `Captioner` protocols in `album.analysis`,
+  composed by `PhotoAnalyzer` — tone and caption split into two outputs (they no longer
+  share a call).
+- **Caption grammar** (name joining, place dedup, empty-field fallbacks) holds the
+  genericity guard across honeymoon + `smith-wedding`.
+- **Validated** against real image + album fixtures (no API); tone stays within the
+  existing `Field(ge=, le=)` bounds.
 
 ## Scope note
 

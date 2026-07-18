@@ -35,7 +35,7 @@ manual work. This bundle is the project's source of truth.
 * [Progress tracker](/build/progress.md) - Living per-step status.
 * [Open questions](/build/open-questions.md) - Unresolved questions to settle early.
 * [AI-pass cost estimate](/build/ai-cost-estimate.md) - What the full Claude vision pass costs per album (answer to open question 5).
-* [Offline analysis proposal](/build/local-analysis.md) - Proposal (needs planning) to replace the Claude vision call with a classical, ML-free approach.
+* [Offline analysis](/build/local-analysis.md) - How the Claude vision call was replaced with a classical, ML-free approach (step 29 — done).
 * [Pipeline stages](/stages/) - One concept per stage, from `ingest` to `fulfill`.
 
 ## Log

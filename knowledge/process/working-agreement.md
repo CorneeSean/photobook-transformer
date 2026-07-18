@@ -56,41 +56,26 @@ gate, not an afterthought.
 - It runs as part of the commit gate (`uv run poe check`) and belongs in CI once
   pipelines exist.
 
-> **Planned migration to `ty`.** Astral's `ty` (same toolchain family as `uv` and
-> `ruff`) is the intended long-term checker — it's Rust-fast and shares config
-> idioms with the rest of the stack. It's held at preview maturity for now, and
-> its handling of the advanced SQLAlchemy/Pydantic typing this project leans on is
-> still stabilizing, so we don't build the foundation on it yet. Start on
-> `basedpyright`; revisit `ty` once it reaches a stable release. The swap is
-> deliberately cheap — a dev dependency plus one line in `poe check` and CI — so
-> **nothing downstream may assume a specific checker**.
+> **Planned migration to `ty`.** Astral's `ty` (same family as `uv`/`ruff`) is the
+> intended long-term checker, held at preview maturity for now (its SQLAlchemy/Pydantic
+> handling is still stabilizing). Start on `basedpyright`; revisit `ty` at stable
+> release. The swap is cheap (a dev dep + one line), so **nothing downstream may assume
+> a specific checker**.
 
 ## Git workflow
 
-Delivery follows the [implementation workflow](/process/implementation-workflow.md): one
-build step per branch, reviewed by a sub-agent and then the user, squashed, and
-merged. **Never commit to or work on `main`.** This section defines the quality
-bar a step must clear before it can be finalized.
+The *delivery* loop (branch per step, sub-agent then user review, squash, merge, push)
+is the [implementation workflow](/process/implementation-workflow.md). **Never commit to
+or work on `main`.** This section defines the *quality bar* a step clears before it's
+finalized — bundled into `uv run poe check`, the one command that gates a commit:
 
-- `git init` at step 0. Each build step lands on `main` as **one squashed commit**
-  via its branch merge — not one big dump at the end, and never a direct commit to
-  `main`.
-- A step is "successfully completed" only when **all** of:
-  - `ruff check .` and `ruff format --check .` pass (ruff includes the mccabe
-    `C90` complexity smell check, ceiling 5)
-  - `basedpyright` reports no errors (static type check)
-  - `xenon` passes the complexity/maintainability gate — **A across the board**:
-    no block worse than A (CC ≤ 5), no module averaging worse than A,
-    whole-codebase average A (see
-    [quality practices](/process/quality-practices.md))
-  - `pytest` passes — *all* tests, not just the new ones (no regressions)
-  - If the step has no automated test: the manual verification described in that
-    step has been performed, and its result noted
-  - The review sub-agent has no remaining comments, **and the user has approved**
-    (see the [implementation workflow](/process/implementation-workflow.md))
+- `ruff check .` + `ruff format --check .` (ruff includes mccabe `C90`, ceiling 5)
+- `basedpyright` — no errors
+- `xenon` — the complexity gate, **A across the board** (see
+  [quality practices](/process/quality-practices.md) §2.7)
+- `pytest` — *all* tests, no regressions
+- If the step has no automated test: the manual verification is performed + recorded.
 
-  The first four are bundled into `uv run poe check` — the one command that gates
-  a commit.
 - Commit message format: `<stage>: <what changed>`, verification in the body:
 
   ```

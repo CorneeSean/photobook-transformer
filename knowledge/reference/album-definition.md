@@ -71,14 +71,13 @@ lead_faces:
   # person_ids: [3fa85f64-..., ...]   # or the Immich people, named directly
 ```
 
-We never run our own face model: Immich already recognizes library faces into
-`Person`s; the reference is just a way to *name* which people are the leads.
-Resolution (upload + waiting out Immich's async face detection, then reading the
-faces) happens in [`flow/stages/lead_faces.py`](/stages/index.md), which marks the
-matching `Person` rows `is_lead=True`. Omit the block entirely for an album with
-no priority subjects — every stage then behaves exactly as before. A reference
-face that Immich hasn't assigned to a named person is surfaced as a warning (the
-person must be confirmed once in Immich's UI), not silently dropped.
+We never run our own face model — Immich already recognizes library faces into
+`Person`s; the reference just *names* which are leads.
+[`flow/stages/lead_faces.py`](/stages/index.md) resolves it (upload → wait out async
+detection → read faces) and marks matching `Person` rows `is_lead=True`. Omit the block
+for an album with no priority subjects (every stage then behaves as before). A reference
+face Immich hasn't assigned to a named person surfaces a warning (confirm the person
+once in Immich's UI), not a silent drop.
 
 ## Timezone convention
 

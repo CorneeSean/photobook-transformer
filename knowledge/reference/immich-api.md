@@ -51,13 +51,10 @@ are in the same boat — internal only. What *is* exposed:
 Auth is the `x-api-key` header (key from Immich's web UI → Account Settings → API
 Keys), base URL includes the `/api` prefix (e.g. `http://localhost:2283/api`).
 
-**OCR (`GET /assets/{id}/ocr`) is deliberately not consumed (step 20).** It's the
-third enrichment-step-20 signal but was deferred: unlike `rating`/geocoded place
-(fields on data `sync` already fetches), OCR is a *separate per-asset endpoint* —
-a second N+1 over the album, on top of the faces N+1 — for what the
-[enrichment playbook](/build/enrichment.md) itself rates a "minor" signal, and its
-contract isn't in this (v3.0.2) snapshot. Revisit if a concrete need appears; see
-the enrichment step-20 write-up for the full tradeoff.
+**OCR (`GET /assets/{id}/ocr`) is deliberately not consumed** — unlike
+`rating`/geocoded place (fields `sync` already fetches), it's a *separate per-asset
+endpoint* (a second N+1) for a "minor" signal whose contract isn't in this snapshot.
+Full tradeoff: [enrichment](/build/enrichment.md) step 20.
 
 ## Timezone (informs open question #3)
 
@@ -78,17 +75,10 @@ NULL). Open question #3's remaining risk — an album that spans zones *mid-segm
 
 ## Caveat
 
-These notes and the client's test fixtures (`tests/fixtures/immich/`) are derived
-from the OpenAPI **contract**, not yet from a live capture. Re-verify against a
-running instance on the first real `sync` (the live run was intentionally deferred
-when steps 4–5 were built without a reachable stack).
-
-**Partly closed by the step-24 offline ML stack (2026-07-17):** the faces path
-(`upload_asset` → async detection → `get_faces` returning a real
-machine-learning face) and CLIP (smart search returning an uploaded asset, i.e.
-the embedding ran) are now exercised against a **real** Immich instance — a
-pinned, pre-baked, fully-offline stack (see
-[testcontainers.md](/build/testcontainers.md) step 24 / `poe test-immich-ml`). Still
-contract-only: album pagination on a real library, EXIF/`rating`/geocoded-place on
-real synced photos, and duplicate detection — re-verify those on the first live
-`sync`.
+These notes + the client's fixtures (`tests/fixtures/immich/`) derive from the OpenAPI
+**contract**, not a live capture (deferred when steps 4–5 were built without a reachable
+stack). **Partly closed by step 24's offline ML stack:** the faces path and CLIP smart
+search are now exercised against a real, pre-baked Immich instance
+([testcontainers.md](/build/testcontainers.md) step 24 / `poe test-immich-ml`). Still
+contract-only, re-verify on first live `sync`: album pagination, EXIF/`rating`/place on
+real photos, and duplicate detection.

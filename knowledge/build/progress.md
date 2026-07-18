@@ -98,253 +98,50 @@ is optional/deferred — nothing is blocked on missing code (see
 
 ## Notes / blockers
 
-- **Step 29 done — offline analysis; `--force`+`claude` A/B cost accepted
-  (2026-07-17):** the pipeline is now fully offline by default (classical tone +
-  template caption, no API/key). The captioner is selectable per run for A/B
-  (`--captioner`, `--force`). **Accepted tradeoff** (architecture-review finding,
-  deliberately kept): under `--force`, `enhance` and `caption` each re-run the shared
-  analysis for a *clustered* photo, so `--force --captioner claude` on an already-run
-  album costs ~2× the thumbnail fetches + paid Claude calls on clustered photos.
-  This is what also re-captions the *unclustered* selected photos `enhance` skips
-  (the alternative — exempting `caption` from force — left those with stale captions,
-  a correctness gap). Cheap for the offline `TemplateCaptioner`; for a large online
-  A/B prefer a **fresh slug** over `--force`. Non-force runs are unaffected (one
-  analysis per photo via the DB idempotency gate). **Live-Claude caption spot-check
-  still deferred** (no `ANTHROPIC_API_KEY`), same as steps 9/10/12/19/28. **Next: only
-  the optional step 23 (DB-backed flow smoke test) remains.**
-- **Review panel widened to 4 (2026-07-17, user-directed):** the per-step sub-agent
-  review is now up to **4 broad-scope agents** — 2 adversarial (correctness, the
-  second an independent refuter), 1 style/reuse, 1 architecture & software design —
-  see [implementation-workflow.md](/process/implementation-workflow.md) §6 (cap raised
-  from 3). Scale down for small diffs. First applied on step 29.
-- **Ruff trailing-comma reformat + `SimilaritySearch` → `Sequence` (2026-07-17,
-  user-directed, not a build step):** enabled `COM812` and applied a repo-wide
-  reformat (52 files) so multi-line collections/calls stay expanded one-per-line
-  (the formatter's magic trailing comma). Ruff prints an advisory that `COM812`
-  "may conflict with the formatter", so `COM812` was then moved to
-  `lint.ignore` — the reformat stays and the formatter maintains vertical
-  collections, but trailing commas are no longer linter-*enforced* (only
-  maintained by the formatter). Also widened the `db/similarity.py`
-  `SimilaritySearch`/`PgVectorSimilarity`/`StubSimilarity` inputs to
-  `Sequence[float]`/`Sequence[int]` (read-only seam, consistent with
-  `selected_photos`). Commits `110c35a` (Sequence), `ae8f4dd` (reformat),
-  `de49b50` (ignore). `uv run poe check` green throughout (293 pass / 3 skip).
-- **Open Q7 resolved — shared `selected_photos` query hoisted (2026-07-17,
-  user-directed, not a build step):** the "album's selected photos, ordered by
-  id" read, previously copied near-identically in `caption`/`enhance`/`render`,
-  is now a single `db/queries.py::selected_photos(album_id, session)` (option A —
-  a query-functions module, deliberately **not** a Repository framework:
-  SQLAlchemy's `Session` already is a Unit of Work / Identity Map, so a
-  repository layer would be redundant for a 4-model pipeline and would fight the
-  step-25 per-task session ownership). Fixed the latent drift the Q7 note flagged
-  — `caption` lacked the `.order_by(Photo.id)` the other two had (determinism
-  only, no behavior change). Two adversarial reviews (correctness clean; one
-  low-severity test-strength note addressed). Commit `13cf941`; see
-  [open-questions.md](/build/open-questions.md) Q7. (Related follow-up: the
-  offline-analysis proposal is tracked as **outstanding step 29**, and open Q5 —
-  AI-pass cost — is resolved; see [ai-cost-estimate.md](/build/ai-cost-estimate.md).)
-- **TestContainers step 24 done — offline Immich ML integration (2026-07-17,
-  user-directed):** the deferred "needs an internet model" step is closed by a
-  **pre-baked** ML image — CLIP + face CPU ONNX baked in at build time (mirroring
-  `immich_ml.models.base.ModelBase._download`'s layout), run with
-  `HF_HUB_OFFLINE=1`. The opt-in `poe test-immich-ml` (`@integration`, skipped in
-  `poe check`) stands up a real 4-service Immich stack via testcontainers
-  `DockerCompose` and, through the real `ImmichClient`, verifies real ML face
-  detection (closes step 17's live deferral), the real `LeadFaceResolver`
-  reference-upload + async-detection timing (closes 17b), and offline CLIP via
-  smart search (open Q1). `poe bake-immich-ml` (bake + pre-pull server/db/redis) is
-  the one internet-touching step; test runs are offline after. **Follow-up (not a
-  blocker):** the baked image is ~3.1 GB, dominated by the base ML image (~2.3 GB;
-  our models add only ~0.77 GB), so there's little to reclaim in our layer — a
-  slim/multi-stage base is possible future work if image size ever matters. **Next:
-  only the optional step 23 (DB-backed flow smoke test) remains — largely subsumed
-  by step 25's `test_flow_integration.py`.**
-- **Enrichment step 20 done — rating + geocoded place; OCR deferred; enrichment
-  playbook complete (2026-07-17):** `sync` now copies two optional signals off the
-  data it already fetches (no extra Immich call): the manual star `rating`
-  (`Photo.rating`) and reverse-geocoded place (`Photo.city/state/country`).
-  `select` uses `rating` as a soft per-star boost (`rating_boost`, honoring user
-  curation without overriding a clearly better shot; lead coverage unaffected);
-  `caption` grounds on the place via a `Location:` line (`PhotoAnalyzer._format_place`).
-  `cluster` was deliberately **not** changed — it keeps its GPS/DBSCAN logic; place
-  is caption-only. All columns nullable ⇒ an unrated, un-geocoded album is
-  byte-for-byte as before (genericity guard). **OCR (the third step-20 signal) was
-  deferred** — a separate `GET /assets/{id}/ocr` endpoint (a 2nd per-asset N+1) for
-  a playbook-rated "minor" signal whose contract isn't in the pinned v3.0.2
-  snapshot; full tradeoff write-up in [enrichment.md](/build/enrichment.md) step 20.
-  This closes the enrichment playbook (17–20). Live-Immich re-verify of the
-  rating/geocoding fields is deferred to the first real `sync`, same boundary as
-  steps 4-5. **Next: only the optional testcontainers items 23/24 remain.**
-- **Enrichment step 19 done; live-Claude caption spot-check deferred
-  (2026-07-16):** `caption` now names people. A selected photo's assigned
-  `person_ids` are resolved to `Person.name`s (`PhotoAnalyzer._resolve_person_names`,
-  via the album-scoped `photo.album.people` cache) and passed as
-  `PhotoContext.person_names` into the **one** shared analysis call, so a caption
-  can say *"Alex and Sam at the harbour in Lisbon"*. Opt-in and additive: a
-  face-free album — or a photo whose recognized people are all unnamed/unknown in
-  Immich — produces no people line, leaving the prompt byte-for-byte as before
-  (genericity guard). Tested via `TestModel`/SQLite only; the "spot-check ~20
-  captions for accuracy and non-genericity" manual step (build-order step 12,
-  enrichment 19) stays deferred — no `ANTHROPIC_API_KEY` here, same pattern as
-  steps 9/10/12. **(Step 20 — rating/geocoded place — now done; see the
-  2026-07-17 note above.)**
-- **Step 25 done; live end-to-end run stays deferred (2026-07-16):**
-  `flow.py` now runs the DAG from `pipeline-execution.md` instead of a
-  straight chain — see the tracker row above for the shape. The manual
-  `photobook-generator run --album honeymoon-2026` check (build-order.md step 14) is still
-  blocked on a reachable Immich + `ANTHROPIC_API_KEY` + `darktable-cli` +
-  Lulu creds, same standing deferral as every prior step; the new
-  `test_flow_integration.py` is the automated substitute for the
-  *concurrency* half of that check (real per-task sessions against a
-  Postgres+pgvector container), not for the external services themselves.
-- **Enrichment step 17b done; live reference-upload/detection deferred
-  (2026-07-15):** `lead_faces` resolution is built and tested against a fake
-  provider (upload → async-detection poll → `is_lead`), but the real
-  `POST /assets` upload and Immich's *actual* async face-detection timing weren't
-  exercised — no reachable Immich, same deferral as steps 4-5/9/17. On the first
-  live run: confirm the reference upload dedups on re-run, that faces appear
-  within the poll timeout (tune `LeadFaceResolver.poll_timeout_s` if Immich's job
-  queue is slow), and that a lead unassigned in Immich surfaces the warning.
-  **Next enrichment step: 18 (people/lead-aware `select`)** — the first consumer
-  of `Person.is_lead`/`Photo.person_ids`. Idempotency corner (accepted): if a
-  reference upload succeeds but the async-detection poll then times out, the run
-  rolls back and loses the cached `lead_reference_asset_id`; content-dedup makes
-  the re-upload return the same id, so it self-heals.
-- **Enrichment step 17 done; live faces re-verification deferred (2026-07-15):**
-  `sync` now fetches Immich faces/people into `Photo.face_count`/`person_ids` +
-  the `Person` cache. Built and tested against recorded `/faces` fixtures and the
-  `FakeImmich` double (schema-accurate to `AssetFaceResponseDto`), the same
-  deferral pattern as steps 4-5/9 — no reachable live Immich in this sandbox, so
-  the `?id=` contract and the async face-detection timing weren't exercised
-  against a real instance. Re-verify the faces path on the first live `sync`,
-  alongside the step-14/16 honeymoon/wedding re-runs. **Next enrichment step:
-  17b (lead-face resolution).** The N+1 `get_faces` (one call per asset) is a
-  known, accepted cost (documented in the playbook) — revisit only if a live run
-  shows it dominating sync time.
-- **Printer abstraction + HTML default output (2026-07-14, post-step-16,
-  user-directed):** `fulfill` was generalized from a Lulu-only submitter to a
-  pluggable [`Printer`](../../src/album/printers/base.py) — the output *medium* is
-  now swappable. New `src/album/printers/` package: `base.py` (the `Printer`
-  protocol + `iter_book_pages` shared page reader), `html.py`
-  (`HtmlPrinter`, the new **default** — a self-contained page-by-page webpage
-  rendered from the on-disk photos, no external service/credentials needed), and
-  `lulu.py` (`LuluPrinter`, the old `LuluPrintJobAdapter` moved out of the stage;
-  opt-in). `Album.lulu_order_id` was renamed to the medium-agnostic
-  `Album.output_ref` (migration `b7f2c1a4e8d0`); `stages/fulfill.py` now depends
-  only on the `Printer` protocol; `flow.py`'s `print_job_submitter` param became
-  `printer`, defaulting to `HtmlPrinter()` (no LuluClient built or closed unless a
-  `LuluPrinter` is injected). `album/lulu/client.py` (raw HTTP transport) is
-  unchanged. Verified: `TESTCONTAINERS_RYUK_DISABLED=true uv run poe check` green
-  (165 tests). Self-reviewed via the `code-review` sub-agent. This means a default
-  `photobook-generator run` now produces a real, viewable deliverable end-to-end (the webpage),
-  no longer blocked on the Lulu PDF-hosting gap below.
-- **Deferred live-GPS/live-Immich check (step 16):** `data/albums/smith-wedding
-  /album.yml` proves the abstraction needs no code change for a structurally
-  different (wedding, hour-scale, single-day) album — confirmed by a real
-  `photobook-generator run --album smith-wedding` against real Postgres+Prefect, which
-  bootstraps correctly and fails at the same `sync` boundary as every other
-  run in this environment (no reachable Immich instance). Real GPS-tagged
-  photos couldn't be attached for the same reason; the GPS spatial-clustering
-  code path itself is already unit-tested (step 7). Re-run against a live
-  Immich album with real, GPS-tagged wedding photos once one is reachable, to
-  close this out for real alongside the step 14 honeymoon re-verification.
-- **Full end-to-end run blocked on a reachable Immich instance (step 14):**
-  `photobook-generator run` was verified against a real Postgres + Prefect server (real
-  migrations, a real tracked flow run) but fails cleanly at `sync` with
-  `ConnectionRefused` — no reachable Immich instance with real photos in
-  this environment, a gap open since steps 4-5. Also still missing for a
-  genuinely full run: `ANTHROPIC_API_KEY`, `darktable-cli` (only in the
-  Docker app image, not this host), Lulu credentials, and the real
-  LAION/open_clip quality scorer (step 6's deferral, still open — see
-  `flow.py`'s `_UnavailableQualityModel`). Re-run `photobook-generator run --album
-  honeymoon-2026` once all of these are available to close this out.
-- **Real LAION/open_clip scorer still not wired (step 6, resurfaced at step
-  14):** `flow.py`'s `_UnavailableQualityModel` is a raising placeholder —
-  `quality()`'s per-photo failure isolation turns that into every photo
-  landing with `blur_score`/`aesthetic_score`/`clip_embedding` left `NULL`.
-  `select()` already has a tested fallback for that, so a run still
-  completes, just with degraded curation. Wiring the real predictor
-  (`open_clip` + `torch` + pretrained weights — a heavy, still-unadded
-  dependency) is follow-up work, not blocking further build steps.
-- **Deferred manual render verification (step 11) — CLOSED by step 22
-  (2026-07-15):** `tests/test_render_integration.py` now runs the real
-  `DarktableRenderer` inside the shipped app Docker image over a real source
-  JPEG + a real `write_xmp_sidecar` sidecar and asserts the output is visibly
-  corrected — the automated form of the build-11 manual check. The integration
-  test also surfaced and validated a fix to `enhance`'s XMP sidecar format — see
-  [enhance.md](/stages/enhance.md) History note. Still deferred: a real end-to-end run
-  against a live Immich (the originals source) — same boundary as steps 4-5/14.
-- **Deferred manual caption spot-check (step 12):** no `ANTHROPIC_API_KEY` in
-  this environment, so `caption` is tested only via PydanticAI `TestModel`/
-  `FunctionModel` — the build order's "spot-check ~20 captions for accuracy
-  and non-genericity" manual step wasn't performed. Same deferral pattern as
-  steps 4-5/9/15; do this once a key is available.
-- **Parallel build (2026-07-14, per user):** steps 10 (`enhance`), 12
-  (`caption`), 13 (`assemble`), and 15 (`fulfill`) were built concurrently on
-  separate branches/worktrees rather than strictly in order (step 11
-  `render` was also parallelized alongside 12, once 10 unblocked both — see
-  its own entry once merged), since a dependency check showed each pair
-  shares no files or logic. Each was self-reviewed (`code-review` skill)
-  before merging; a coordinator (not the building agent) reconciled the two
-  independently-added migrations (`assemble`'s real `Album.assembled_pdf_path`
-  vs. `fulfill`'s placeholder of the same column)
-  and updated this tracker/`log.md` centrally to avoid the three branches
-  conflicting on shared docs. This is a deliberate, user-approved exception to
-  the "steps are delivered strictly in order" rule above — not a new default.
-- **No PDF-hosting/upload mechanism yet (step 15, still open — Lulu-only):**
-  `Album.assembled_pdf_path` is a local disk path; Lulu's `source_url` needs a
-  fetchable `http(s)://` URL. `LuluPrinter.print` raises `UnreachablePdfError`
-  rather than submitting a path Lulu can't reach. Needs real hosting (static file
-  serving, S3, etc.) wired in — only for the opt-in `LuluPrinter`, since the
-  default `HtmlPrinter` needs no hosting.
-- **Deferred live-Lulu check (step 15):** no Lulu sandbox credentials in this
-  environment, so `LuluClient`/`fulfill` are tested only against recorded
-  fixtures — the build order's "manually verify with a single-copy test order"
-  step wasn't performed. Same deferral pattern as steps 4–5/9. `GET
-  /print-jobs/{id}/`'s response schema was inferred from Lulu's OpenAPI spec,
-  not directly confirmed — re-verify against a live sandbox call alongside the
-  test order.
-- **`enhance`/`caption` share one trigger (step 10):** `stages/enhance.py`'s
-  `ensure_analysis()` is the idempotent "one combined vision call" trigger
-  described in `architecture.md` — `caption` (step 12) should import and reuse
-  it rather than reimplementing the same skip-if-already-populated check.
-- **Deferred live-Claude check (step 10):** same reason and pattern as step 9
-  below — no `ANTHROPIC_API_KEY` in this environment, so `enhance` is tested
-  only via PydanticAI `TestModel`. Do this once a key is available.
-- **Process change (from step 4 onward, per user):** deliver each step with the
-  full workflow *except* the human-review gate — after `uv run poe check` is green
-  and the sub-agent review is clean, squash and fast-forward-merge autonomously
-  rather than waiting for user approval.
-- **Toolchain landmine:** `ruff` 0.15.21's formatter, under `target-version =
-  "py314"`, rewrites `except (A, B):` into invalid paren-less syntax (no fixed
-  release yet). Avoid parenthesized multi-type `except` clauses — use separate
-  clauses or `# fmt: skip`. See [log](/log.md) 2026-07-13.
-- **Deferred live checks:** steps 4–5 fixtures/sync were built without a reachable
-  Immich stack; re-verify against a live instance + the honeymoon album on the
-  first real sync (see [Immich API notes](/reference/immich-api.md)).
-- **Ryuk landmine (step 8) — RESOLVED 2026-07-15:** the Ryuk reaper now starts
-  fine and the full suite is green with **no** `TESTCONTAINERS_RYUK_DISABLED`
-  (plain `uv run poe check`). The earlier failure (`error while creating mount
-  source path '/host_mnt/.../docker.sock'` — a Docker Desktop socket-mount
-  restriction) went away with the Docker reinstall; `TESTCONTAINERS_RYUK_DISABLED`
-  is no longer needed and the historical `uv run poe check` invocations in
-  [log](/log.md) that set it are kept only as a record. Still relevant from the
-  same step: `testcontainers`' `PostgresContainer` defaults to a `psycopg2`
-  connection URL, but this project uses psycopg3 (`psycopg[binary]`), so pass
-  `driver="psycopg"` explicitly (see `tests/test_similarity.py`).
-- **Environment flakiness (step 9), resolved 2026-07-14:** during step 9, Docker
-  Desktop became fully unresponsive in this sandbox (even `docker
-  ps`/`docker system df` hung for minutes with no output — beyond the Ryuk
-  landmine above), so `tests/test_similarity.py` (the pgvector testcontainer test
-  from step 8) could not be re-verified for that step's final check; `uv run
-  pytest --ignore=tests/test_similarity.py` plus lint/typecheck were used
-  instead, and all 70 non-container tests passed. Nothing in step 9 touches
-  `db/similarity.py` or Docker. Docker was reinstalled, and
-  `TESTCONTAINERS_RYUK_DISABLED=true uv run poe check` now passes clean
-  (74/74 tests, including `test_similarity.py`) — closed, no further action.
-- **Deferred live-Claude check (step 9):** `ANTHROPIC_API_KEY` isn't set in this
-  environment's `.env`, so the agent (`agents/analysis.py`) is tested only via
-  PydanticAI's `TestModel` — the build order's "wire in real Claude calls and
-  sanity-check ~20 photos" manual step wasn't performed. Same deferral pattern
-  as steps 4–5's live-Immich check. Do this once a key is available, ideally
-  alongside step 10/12 (`enhance`/`caption`), the first real callers.
+**Current status.** Every build-order + enrichment + testcontainers + single-command-ingestion
++ offline-analysis step is done and merged; only the optional **step 23** remains (largely
+subsumed by step 25's `test_flow_integration.py`). The pipeline is **fully offline by default**
+(classical tone + template caption, no API/key); Claude is opt-in per run (`--captioner claude`,
+`--force` for A/B). Under `--force`, `enhance` and `caption` each re-run the shared analysis for a
+clustered photo — an accepted ~2× cost on paid Claude A/B (cheap offline); prefer a fresh slug for
+a large online A/B.
+
+**Standing process notes.**
+- **Human-review gate waived (step 4 onward, per user):** after `poe check` green + sub-agent
+  review clean, squash and fast-forward-merge autonomously.
+- **Sub-agent review panel is up to 4 (2026-07-17):** 2 adversarial correctness + style/reuse +
+  architecture — see [implementation-workflow.md](/process/implementation-workflow.md) §6. Scale down for small diffs.
+- **`main` is commit-protected:** do the tracker + `log.md` update on the step branch *before* the
+  fast-forward merge.
+- **Parallel-build precedent (2026-07-14, user-approved exception):** steps 10/11/12/13/15 were built
+  concurrently on separate worktrees after a dependency check showed no shared files; a coordinator
+  reconciled the two independent migrations + docs. Not a new default.
+
+**Open blockers — all "no reachable live service in this sandbox"; nothing blocked on code:**
+- **Live-integration gap.** No reachable Immich instance, `ANTHROPIC_API_KEY`, `darktable-cli` on the
+  host (only in the app image), or Lulu sandbox creds. A full `photobook-generator run` was verified
+  against real Postgres+Prefect but fails cleanly at `sync` (`ConnectionRefused`). Deferred to first
+  live run: honeymoon + wedding re-verify, faces/rating/geocode fields on real assets, live-Claude
+  caption spot-check (steps 9/10/12/19/28/29), a real darktable render against live originals, and a
+  single-copy Lulu test order (+ confirm `GET /print-jobs/{id}/` schema). Step 24's offline ML stack
+  already closed the faces + CLIP half against a real (pre-baked) Immich — see
+  [testcontainers.md](/build/testcontainers.md).
+- **No PDF-hosting for `LuluPrinter` (step 15).** `Album.assembled_pdf_path` is a local path; Lulu's
+  `source_url` needs a fetchable `http(s)://` URL, so `LuluPrinter.print` raises `UnreachablePdfError`.
+  Needs real hosting wired in — only for the opt-in `LuluPrinter` (the default `HtmlPrinter` needs none).
+- **Real LAION/open_clip scorer not wired (step 6, resurfaced step 14).** `flow/_flow.py`'s
+  `_UnavailableQualityModel` is a raising placeholder → photos land with
+  `blur_score`/`aesthetic_score`/`clip_embedding` NULL; `select` has a tested fallback, so a run
+  completes with degraded curation. Wiring the real predictor (`open_clip` + `torch` + weights, heavy)
+  is follow-up.
+
+**Toolchain landmine.** `ruff` 0.15.21's formatter under `target-version = "py314"` rewrites
+`except (A, B):` into invalid paren-less syntax — use separate `except` clauses or `# fmt: skip`, and
+re-run `poe check` immediately before every commit. See [log](/log.md) 2026-07-13.
+
+**Resolved landmines (kept as record).** Ryuk reaper socket-mount failure went away with a Docker
+reinstall (2026-07-15) — plain `poe check` is green, no `TESTCONTAINERS_RYUK_DISABLED` needed;
+`testcontainers`' `PostgresContainer` defaults to a psycopg2 URL, so pass `driver="psycopg"` (this
+project uses psycopg3). The printer abstraction / `Album.output_ref` rename (2026-07-14) and the
+`db/queries.py` hoist (open Q7) are done — see the DONE tables and
+[open-questions.md](/build/open-questions.md).

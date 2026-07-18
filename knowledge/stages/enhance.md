@@ -58,9 +58,8 @@ renders a real sidecar through the real binary and asserts a visible change.
 > [render.md](./render.md).
 
 **Cross-camera color consistency is folded into this stage**, not a separate
-post-pass. (Histogram-matching *after* rendering would partially undo the
-per-photo corrections — they must be reconciled *before* rendering, not stacked.)
-Approach: pick a reference photo per scene, compute a histogram-match offset
-(`skimage.exposure.match_histograms`) as a *baseline* per-camera correction, then
-apply the AI's per-photo deltas on top. Different cameras land on a common footing
-first; individual exposure mistakes get fixed second.
+post-pass (histogram-matching *after* rendering would partially undo the per-photo
+corrections — reconcile *before* rendering, not stacked). Approach: per scene, a
+histogram-match offset (`skimage.exposure.match_histograms`) as a *baseline* per-camera
+correction, then the per-photo tone deltas on top — cameras land on a common footing
+first, individual exposure mistakes fixed second.

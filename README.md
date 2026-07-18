@@ -25,9 +25,9 @@ turns it into a book. So the flow is: **your folder → Immich album → pipelin
 ### The one-command path
 
 Once you've installed the project (Point 0), started the services (Point 1), and
-put your two API keys in `.env` (the `IMMICH__API_KEY` + `ANTHROPIC_API_KEY` part
-of Point 3 — no album id needed), a single command does the upload, album
-creation, and pipeline run for you:
+put your Immich API key in `.env` (the `IMMICH__API_KEY` part of Point 3 — no
+album id needed; `ANTHROPIC_API_KEY` is optional, only for `--captioner claude`),
+a single command does the upload, album creation, and pipeline run for you:
 
 ```sh
 uv run photobook-generator generate ./path/to/photos   # or: ... generate .
@@ -83,17 +83,19 @@ it's up, its web UI is at `http://localhost:2283`.
 3. Let Immich finish its background jobs (EXIF extraction, plus face and
    duplicate detection). GPS is used when present but never required.
 
-### Point 3 — Collect two keys and one id
+### Point 3 — Collect your key and album id (+ an optional key)
 
 Paste these into your `.env` (see [`.env.example`](./.env.example) for the exact
 variable names):
 
 - **Immich API key** → `IMMICH__API_KEY`. In Immich: *Account Settings → API
   Keys → New*.
-- **Anthropic API key** → `ANTHROPIC_API_KEY`. Used for captions and the
-  enhance stage. Get one at `https://console.anthropic.com`.
 - **Immich album id** — open your album in Immich; it's the last part of the
   URL (`.../albums/<this-part>`). You'll paste it into `album.yml` next.
+- **Anthropic API key** (*optional*) → `ANTHROPIC_API_KEY`. Only needed for the
+  opt-in `--captioner claude` rich-caption upgrade — the default run is fully
+  offline (classical tone + template captions, no key). Get one at
+  `https://console.anthropic.com`.
 
 *(The `LULU__*` keys are only for ordering a physical book — see
 [Order a physical copy](#order-a-physical-copy). Skip them for an HTML book.)*
@@ -164,13 +166,12 @@ with degraded curation quality until that's wired.
 
 ## Workflow commands
 
+The everyday ones (full canonical list:
+[`working-agreement.md`](./knowledge/process/working-agreement.md#local-workflow-commands)):
+
 | Command | What it does |
 |---|---|
-| `uv run poe lint` | `ruff check .` |
-| `uv run poe format` | `ruff format .` (write) |
-| `uv run poe typecheck` | `basedpyright` |
-| `uv run poe test` | `pytest` |
-| `uv run poe check` | lint + `ruff format --check .` + typecheck + test — the commit gate |
+| `uv run poe check` | ruff + `ruff format --check` + typecheck + complexity + test — **the commit gate** |
 | `uv run poe up` / `uv run poe down` | bring the local stack up / down |
 | `uv run poe migrate` | `alembic upgrade head` |
 | `uv run poe run -- --album <slug>` | run the pipeline flow for one album |

@@ -180,56 +180,32 @@ class Person(Base):
 
 ## Notes
 
-- **`Segment` is nullable on `Photo` by design.** `segment_id IS NULL` means
-  either the album has no segments, or the photo fell outside all of them.
-  Distinguish the two in application logic and surface the latter as a warning
+- **`Photo.segment_id` nullable by design.** `NULL` = the album has no segments *or*
+  the photo fell outside all of them; distinguish in app logic and warn on the latter
   rather than dropping the photo.
-- **`clip_embedding` is a `pgvector` column**, so similarity queries
-  ([`select`](/stages/select.md)'s MMR, [`cluster`](/stages/cluster.md)'s visual
-  refinement) run in the database with an index rather than as brute-force numpy
-  over every pair. Add an HNSW or IVFFlat index on it once populated.
-  > **Testing caveat:** `pgvector` doesn't exist in SQLite, so pure-logic unit
-  > tests that run against in-memory SQLite must not depend on it. Keep
-  > similarity search behind a small function in `db/` that tests can substitute
-  > — the *MMR selection logic* (which is what matters) is then testable in
-  > SQLite with a stub similarity function, while the real `pgvector` query is
-  > covered by a separate, slower test against a Postgres test container.
-  > `testcontainers-python` is the clean way to do that.
-- **Faces are Immich-provided, structured, not opaque.** `Photo.person_ids` is a
-  JSON array of *stable Immich person UUIDs* (assigned faces only) — the value
-  [`select`](/stages/select.md) reasons about structurally (set membership /
-  per-person coverage), analogous to `duplicate_group_id`; `caption` joins it to
-  `Person.name`. `face_count` counts *all* detected faces (including
-  recognized-but-unassigned ones, which contribute no `person_id`) as a
-  portrait-vs-landscape signal. The small album-scoped `Person` table is the
-  id→name cache. Both `Photo` columns are nullable for the usual reason (`NULL` =
-  `sync` hasn't fetched faces yet); an album with no recognized faces leaves
-  `person_ids=[]` and every people-aware stage reduces to its face-free behavior
-  (genericity guard). See [Immich enrichment](/build/enrichment.md).
-- **`rating` + geocoded place are optional `sync` signals (enrichment step 20).**
-  Both come off data `sync` already fetches (the asset + its `exifInfo`), so they
-  cost no extra Immich call. `rating` (Immich's −1…5 stars) is a *soft* `select`
-  boost honoring the user's own curation — a starred photo edges out comparable
-  frames, a rejected (negative) one is pushed below them, never overriding a
-  clearly better shot. `city`/`state`/`country` are `caption` grounding only;
-  `cluster` deliberately keeps its GPS/DBSCAN logic and does not cluster on place
-  *names*. All four are nullable for the usual reason (NULL = not synced, or the
-  photo simply has none), so an unrated / un-geocoded album behaves byte-for-byte
-  as before (genericity guard). OCR — the third enrichment-step-20 signal — is
-  deferred; see [Immich enrichment](/build/enrichment.md) step 20.
-- **`Album.meta` is deliberately dumb.** No stage branches on its contents; it's
-  interpolated into caption prompts and templates only. Anything a stage needs to
-  *reason* about belongs in a real column or a `Segment`.
-- **All datetimes are stored timezone-aware, in UTC** (`DateTime(timezone=True)`).
-  Segment boundaries in `album.yml` carry an explicit UTC offset (or inherit
-  `Album.timezone`); [`definition.py`](/reference/album-definition.md) converts them to UTC
-  on load, and [`sync`](/stages/sync.md) normalizes each photo's capture time to
-  UTC too. [`cluster`](/stages/cluster.md) therefore compares photo time against
-  segment bounds entirely in UTC, so segment-edge assignment is unambiguous even
-  when an album spans zones. (The remaining open question is only *how* a photo's
-  source zone is determined — see [Open questions](/build/open-questions.md) #3.)
-- Columns are grouped by the stage that populates them — a photo's row fills up
-  left-to-right through the pipeline. Nullability is *meaningful*: `NULL` means
-  "that stage hasn't run for this photo yet," which is what makes resumability
-  work.
-- Use **alembic migrations from the start**, never `Base.metadata.create_all()`.
+- **`clip_embedding` is a `pgvector` column** — similarity queries
+  ([`select`](/stages/select.md) MMR, [`cluster`](/stages/cluster.md) refinement) run
+  indexed in the DB, not brute-force numpy. *Testing caveat:* `pgvector` doesn't exist
+  in SQLite, so similarity lives behind a substitutable `db/` interface — MMR logic is
+  SQLite-testable with a stub, the real query is covered by a `testcontainers` Postgres
+  test.
+- **Faces are Immich-provided + structured.** `Photo.person_ids` = JSON array of stable
+  Immich person UUIDs (assigned faces only), reasoned about structurally by
+  [`select`](/stages/select.md), joined to `Person.name` by `caption`. `face_count`
+  counts *all* detected faces (incl. unassigned) as a portrait signal. The album-scoped
+  `Person` table is the id→name cache. Nullable (`NULL` = faces not synced yet); a
+  face-free album leaves `person_ids=[]` and every people-aware stage reduces to
+  face-free behavior. See [enrichment](/build/enrichment.md).
+- **`rating` + geocoded place** come off data `sync` already fetches (no extra call).
+  `rating` (−1…5) is a *soft* `select` boost (never overrides a clearly better shot);
+  `city`/`state`/`country` are `caption` grounding only — `cluster` keeps GPS/DBSCAN.
+  All nullable ⇒ unrated/un-geocoded album is byte-for-byte as before. OCR deferred —
+  see [enrichment](/build/enrichment.md) step 20.
+- **`Album.meta` is deliberately dumb** — interpolated into prompts/templates only, no
+  stage branches on it. Anything a stage *reasons* about belongs in a real column.
+- **All datetimes stored UTC-aware** (`DateTime(timezone=True)`); `definition.py` and
+  `sync` normalize to UTC on load, so `cluster` compares in UTC unambiguously even
+  across zones. How a photo's source zone is determined: [Open questions](/build/open-questions.md) #3.
+- **Nullability is meaningful:** `NULL` = "that stage hasn't run for this photo yet" —
+  what makes resumability work. Columns fill left-to-right through the pipeline.
+- **Alembic migrations from the start**, never `Base.metadata.create_all()`.

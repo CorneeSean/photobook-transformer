@@ -89,15 +89,11 @@ exactly that, **locally** — and after a one-time setup the test fetches **no M
 model** (ever) and **no images** from the internet.
 
 - **The bake** ([`ml-baked.Dockerfile`](../../tests/fixtures/immich/ml-baked.Dockerfile)):
-  `FROM ghcr.io/immich-app/immich-machine-learning:<pinned>`, then a build-time
-  `snapshot_download` that **mirrors `immich_ml.models.base.ModelBase._download`**
-  — same `immich-app/<model>` repo, same on-disk layout (`/cache/<task>/<model>/…`,
-  since `cache_folder=/cache`), same `*.armnn`/`*.rknn` ignore, and it drops the
-  redundant `.cache` blob dir in-layer. Only the CPU `.onnx` variants are fetched
-  (**~0.77 GB** of the ~3.6 GB repos); the image is **~3.1 GB** on disk (the base
-  ML image is ~2.3 GB — its `/opt/venv` alone is ~0.9 GB — plus the models). The
-  container runs with `HF_HUB_OFFLINE=1`/`TRANSFORMERS_OFFLINE=1` so a cache miss
-  fails loudly instead of silently reaching the network.
+  `FROM immich-machine-learning:<pinned>` + a build-time `snapshot_download` that
+  **mirrors `ModelBase._download`** (same repo, on-disk layout, CPU `.onnx` variants
+  only — ~0.77 GB of models; ~3.1 GB image, base-ML-dominated). Runs with
+  `HF_HUB_OFFLINE=1`/`TRANSFORMERS_OFFLINE=1` so a cache miss fails loudly instead of
+  reaching the network.
 - **One-time setup, then offline.** `poe bake-immich-ml` bakes that image **and**
   pre-pulls the server/db/redis images, so it is the *only* internet-touching step;
   `compose up` at test time then finds every image present and pulls nothing.
