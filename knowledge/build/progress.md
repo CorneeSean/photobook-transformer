@@ -34,6 +34,7 @@ is optional/deferred — nothing is blocked on missing code (see
 | # | Step | Playbook | Status | Branch | Notes |
 |---|------|----------|--------|--------|-------|
 | 23 | DB-backed flow smoke test (optional) | testcontainers | todo | — | whole flow on real Postgres, Immich/Claude/Lulu as doubles — largely subsumed by step 25's `test_flow_integration.py` (real `pipeline()` on a pgvector container, every external boundary doubled); revisit only if a gap remains |
+| 30 | CLI flag for multiple lead-face reference photos | [step-30-cli-lead-faces.md](/build/step-30-cli-lead-faces.md) | todo | step-30-cli-lead-faces | adds `reference_images` to `lead_faces`, a DB migration generalizing `Album.lead_reference_asset_id` to a list, and a repeatable `--lead-face` flag on `generate`/`run` — no hand-authored `album.yml` needed |
 
 ## Completed (DONE)
 

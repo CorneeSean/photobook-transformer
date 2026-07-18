@@ -30,6 +30,7 @@ manual work. This bundle is the project's source of truth.
 * [Build order](/build/build-order.md) - The ordered, one-step-at-a-time plan.
 * [Immich enrichment](/build/enrichment.md) - Follow-on steps (17+) adopting the faces/people, rating, OCR, and geocoding API surface Immich has grown since steps 4–5.
 * [Single-command ingestion](/build/single-command-ingestion.md) - Plan for a `photobook-generator <dir>` one-shot (folder → Immich album → `album.yml` → book) plus an optional `--source-document=doc.pdf` that extracts segments via a PydanticAI agent.
+* [CLI lead-face flag (step 30)](/build/step-30-cli-lead-faces.md) - Plan for a repeatable `--lead-face` flag on `generate`/`run`: multiple reference photos, no hand-authored `album.yml` needed.
 * [Immich dependency decision](/build/immich-dependency-decision.md) - Keep-or-replace analysis for the Immich stack: what we actually consume, the open-source substitutes (InsightFace, pgvector dedup), and why replaceability is preserved rather than acted on.
 * [TestContainers integration](/build/testcontainers.md) - Follow-on steps (21+) promoting the highest-value boundaries (pgvector, darktable-cli) to real containerized integration tests; Immich ML deferred optional.
 * [Progress tracker](/build/progress.md) - Living per-step status.
