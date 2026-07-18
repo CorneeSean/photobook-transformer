@@ -31,7 +31,6 @@ on missing code (see [Notes / blockers](#notes--blockers)).
 | # | Step | Playbook | Status | Branch | Notes |
 |---|------|----------|--------|--------|-------|
 | 23 | DB-backed flow smoke test (optional) | testcontainers | todo | — | largely subsumed by step 25's `test_flow_integration.py`; revisit only if a gap remains |
-| 33 | Folder-derived segments in `ingest.py` | [step-33](/build/step-33-folder-segments.md) | todo | — | **after 32**; segment-source seam; edits `ingest.py` |
 | 34 | Fan-out orchestration + `generate --manifest` | [step-34](/build/step-34-fanout-cli.md) | todo | — | **after 33**; shares `ingest.py` with 33 (no parallel) |
 | 35 | Docs + end-to-end genericity verification | [step-35](/build/step-35-docs-verify.md) | todo | — | **after 34**; README + reference docs + e2e/genericity gate |
 
@@ -120,6 +119,7 @@ Audit trail — one line per step; see the commit and [log.md](/log.md) for deta
 | # | Step | Branch | Commit | Notes |
 |---|------|--------|--------|-------|
 | 32 | Ingest manifest schema + loader | step-32-manifest-schema | 445357f | pure `src/album/manifest.py` — `Manifest`/`AlbumSpec`/`SegmentSpec` (`extra="forbid"`) + `load_manifest()`; relationship validation (path escape, dup paths, resolved-slug collision, component-prefix segment non-nesting, `segments` XOR `source_document`), path existence deferred to ingest. `slugify`/`titleize` hoisted to shared `src/album/text.py` to break the step-33 `ingest↔manifest` cycle. 3-agent review (2× correctness, style): no defects; applied token-cleanup (no trip/day/itinerary in src) + `a/../b` as-built tightening. `poe check` green (370/6) |
+| 33 | Folder-derived segments in `ingest.py` | step-33-folder-segments | 28c3ba0 | `DirectoryIngestor.ingest_album(spec, root)` derives each subfolder's `[start_at, end_at]` from its photos' capture timestamps, behind a `SegmentSource` seam shared with the PDF path (spine refactored into `_ingest`; flat/PDF path behavior-preserving). Undated/empty folders skip with a warning (→ zero-segment album, byte-identical to flat), single-instant widens +1s, overlap caught by the shared `AlbumYAML` loader. Manifest hardened to reject `path: "."`. 4-agent review (2× correctness, style/reuse, architecture): no defects; keep the title-suggestion tuple seam (doc-title co-product predates step 33); applied DRY `_document_source` + cleanups. `poe check` green (389/6); live multi-folder ingest deferred |
 
 ## Notes / blockers
 

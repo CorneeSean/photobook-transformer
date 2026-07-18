@@ -6,6 +6,30 @@ bodies this log cites; keep entries tight (see
 
 ## 2026-07-19
 
+* **Step 33 — folder-derived segments in `ingest.py`** (`28c3ba0`;
+  [step-33-folder-segments.md](/build/step-33-folder-segments.md)). New
+  `DirectoryIngestor.ingest_album(spec, root)` ingests one manifest album, deriving
+  each declared subfolder's `[start_at, end_at]` window from the capture timestamps of
+  the photos in it. The upload → create → readiness → segments → materialize spine was
+  factored into a shared `_ingest` behind a `SegmentSource` seam, so the PDF
+  (`--source-document`) and folder paths differ only in *how* segments are computed; the
+  flat/PDF `ingest()` path is behavior-preserving. Undated/empty folders are skipped with
+  a warning (→ a zero-segment `album.yml`, byte-identical to the flat path), a
+  single-instant folder widens `end_at` by 1s, and overlap is caught by the same
+  `AlbumYAML` loader the pipeline uses (`_validate_materialized`, message generalized to
+  be source-agnostic). **Design decision upheld under review:** the seam returns
+  `(title_suggestion, segments)` rather than the plan's `list[SegmentYAML] | None` — the
+  doc-title co-product *predates* this step (`_extract_segments` already returned it), so
+  the tuple keeps the PDF's single-parse title+segments flowing through the shared spine
+  without a second channel or spine special-casing; the architecture reviewer confirmed
+  keeping it. 4-agent review (2× correctness, style/reuse, architecture): no correctness
+  defects across all four; applied the style pass's DRY `_document_source` factory (one
+  PDF source shared by both entry points) + fake-client cleanups. Two reviewers
+  independently flagged a latent `path: "."` inconsistency (manifest `effective_slug`
+  → `"album"` vs `ingest_album`'s dir-name slug), so the manifest now rejects `.` as an
+  album/segment path. `poe check` green (389 passed, 6 skipped); live multi-folder ingest
+  still deferred to the standing no-reachable-Immich gap.
+
 * **Step 32 — ingest manifest schema + loader** (`445357f`;
   [step-32-manifest-schema.md](/build/step-32-manifest-schema.md)). New pure
   `src/album/manifest.py`: `Manifest`/`AlbumSpec`/`SegmentSpec` (`extra="forbid"`) +
