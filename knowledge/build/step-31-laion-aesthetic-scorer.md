@@ -181,12 +181,23 @@ note (`_flow.py:76-87`) to describe the wired scorer + graceful fallback.
 
 ```toml
 [project.optional-dependencies]
-scoring = ["torch>=...", "open_clip_torch>=..."]   # pin at implementation
+# torch>=2.13.0 is a HARD floor, not just style: 2.13.0 (2026-07-08) is the first
+# torch release shipping a cp314 wheel, and this repo is requires-python >=3.14, so
+# anything lower has no installable wheel. Apple Silicon gets the native arm64 wheel
+# (MPS-capable); Linux/CI resolves the CPU wheel. open-clip-torch>=3.3.0 (latest
+# stable, MIT, Requires-Python >=3.9) has no pinned torch minimum, so torch's floor
+# governs. `>=` matches every base dep's idiom; uv.lock pins the exact resolved build.
+# Both are large — do NOT move to base `dependencies`.
+scoring = [
+    "torch>=2.13.0",
+    "open-clip-torch>=3.3.0",
+]
 ```
 
-CPU torch wheel (sandbox has no GPU). Base `dependencies` stay unchanged, so the
-default install and `poe check` don't require torch. Dev/CI installs the extra so
-basedpyright resolves the (lazily-imported) symbols and the opt-in test can run.
+Base `dependencies` stay unchanged, so the default install and `poe check` don't
+require torch. Dev/CI installs the extra (`uv sync --extra scoring`) so basedpyright
+resolves the (lazily-imported) symbols and the opt-in test can run. The wheel is
+resolved per platform — native arm64 (MPS) on Apple Silicon, CPU on Linux/CI.
 
 ## Weights sourcing / offline — `poe` task (mirror `bake-immich-ml`)
 
