@@ -6,6 +6,19 @@ bodies this log cites; keep entries tight (see
 
 ## 2026-07-18
 
+* **Step 30 — repeatable `--lead-face` CLI flag + multi-photo lead resolution**
+  (`e50a54a`; [step-30-cli-lead-faces.md](/build/step-30-cli-lead-faces.md)). `generate`/`run`
+  take a repeatable `--lead-face IMAGE` that writes/patches the `lead_faces.reference_images`
+  block, so priority subjects are named without hand-authoring `album.yml`. Two decisions
+  changed the plan: (1) **verifying the plan first** showed dropping the scalar cache column
+  orphaned the singular path → collapsed to **three symmetric list inputs**
+  (`reference_images`/`reference_asset_ids`/`person_ids`; single = one-element, no singular
+  forms); (2) **adversarial review** (2 correctness agents independently) caught the plan's
+  *count-keyed* upload cache silently keeping the old lead on a same-count reference swap — the
+  marquee replace path — so the DB cache was **dropped** for Immich's own content-dedup
+  (re-upload each run; migration drops `Album.lead_reference_asset_id`). 3-agent review, all
+  findings applied; `poe check` green (341/3); live multi-photo verify deferred.
+
 * **Convention added — commit body vs. `log.md` split + "Be concise" (user-directed).**
   [working-agreement.md](/process/working-agreement.md): a "Be concise" principle
   over all output, and a Git-workflow subsection dividing labour — commit bodies own

@@ -31,7 +31,6 @@ on missing code (see [Notes / blockers](#notes--blockers)).
 | # | Step | Playbook | Status | Branch | Notes |
 |---|------|----------|--------|--------|-------|
 | 23 | DB-backed flow smoke test (optional) | testcontainers | todo | — | largely subsumed by step 25's `test_flow_integration.py`; revisit only if a gap remains |
-| 30 | CLI flag for multiple lead-face reference photos | [step-30-cli-lead-faces.md](/build/step-30-cli-lead-faces.md) | todo | step-30-cli-lead-faces | `reference_images` on `lead_faces` + a migration generalizing `Album.lead_reference_asset_id` to a list + a repeatable `--lead-face` flag on `generate`/`run` |
 | 31 | Wire the real LAION/open_clip aesthetic scorer | [step-31-laion-aesthetic-scorer.md](/build/step-31-laion-aesthetic-scorer.md) | todo | step-31-laion-aesthetic-scorer | closes the step-6/14 deferral: real ViT-L/14 CLIP + LAION head behind the existing `AestheticScorer`/`Embedder` seam, `scoring` extra (torch out of base deps), capability-gated with graceful fallback; no migration (`clip_embedding` already `Vector(768)`) |
 
 ## Completed (DONE)
@@ -97,11 +96,18 @@ Audit trail — one line per step; see the commit and [log.md](/log.md) for deta
 |---|------|--------|--------|-------|
 | 29 | Classical replacement for the Claude vision call | step-29-offline-analysis | ba6c1bf | dropped the **last external-API dependency** — `ClassicalToneEstimator` + `TemplateCaptioner` default, `ClaudeCaptioner` opt-in (`--captioner`); retired `agents/analysis.py`; 4-agent review; caption spot-check deferred |
 
+### Lead-face CLI playbook (see [step-30-cli-lead-faces.md](/build/step-30-cli-lead-faces.md))
+
+| # | Step | Branch | Commit | Notes |
+|---|------|--------|--------|-------|
+| 30 | CLI flag for multiple lead-face reference photos | step-30-cli-lead-faces | e50a54a | repeatable `--lead-face IMAGE` on `generate`/`run` writes/patches `lead_faces.reference_images`; `LeadFacesYAML` → three symmetric list inputs (single = one-element, no singular forms). Verify-plan-first caught it orphaning the singular path; adversarial review caught the plan's count-keyed cache silently keeping the old lead on a same-count swap → **dropped the cache**, rely on Immich content-dedup (migration `a7e3f9c21b84` drops `Album.lead_reference_asset_id`). 3-agent review, all findings applied; `poe check` green (341/3); live multi-photo verify deferred |
+
 ## Notes / blockers
 
 **Current status.** Every build-order + enrichment + testcontainers + single-command-ingestion
-+ offline-analysis step is done and merged; only the optional **step 23** remains (largely
-subsumed by step 25's `test_flow_integration.py`). The pipeline is **fully offline by default**
++ offline-analysis step is done and merged, plus the lead-face CLI follow-on (**step 30**); the
+optional **step 23** and the new **step 31** (LAION scorer) remain (23 largely subsumed by step
+25's `test_flow_integration.py`). The pipeline is **fully offline by default**
 (classical tone + template caption, no API/key); Claude is opt-in per run (`--captioner claude`,
 `--force` for A/B). Under `--force`, `enhance` and `caption` each re-run the shared analysis for a
 clustered photo — an accepted ~2× cost on paid Claude A/B; prefer a fresh slug for a large online run.
