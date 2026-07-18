@@ -1,5 +1,31 @@
 # Directory Update Log
 
+## 2026-07-18
+
+* **Docs refactor + trim (user-directed; not a build step).** Made the top-level
+  orientation files thin, current pointers to the `knowledge/` bundle (the source of
+  truth), fixed staleness + cross-file duplication, and trimmed the knowledge files to
+  bullets/tables over long prose. **Deleted** `HANDOVER.md` (stale, redundant with
+  [progress.md](/build/progress.md)) and `PROJECT_BRIEF.md` (a pure redirect table); added
+  a 3-line `CLAUDE.md` pointing at `AGENTS.md`. **Rewrote `AGENTS.md`** to point rather
+  than restate, de-staling it: status now reflects work through step 29, the review-panel
+  cap (3 → up to 4), the `TaskUnit` stage/task architecture (was the superseded
+  co-located-`@task` framing), classical-tone-by-default (rule 5), and the retired
+  `agents/analysis.py` → `album.analysis`. `README.md`: `ANTHROPIC_API_KEY` is now
+  **optional** (offline default; only for `--captioner claude`) and the poe table
+  points to [working-agreement.md](/process/working-agreement.md) as canonical. Fixed
+  two intra-bundle staleness bugs — [folder-structure.md](/reference/folder-structure.md)
+  (retired `agents/analysis.py` → the `album.analysis` package + current tree) and
+  [stages/index.md](/stages/index.md) (classical `enhance`, pluggable `Printer`
+  `fulfill`) — assigned a canonical owner per repeated fact (TaskUnit design →
+  quality-practices; commit/fanout invariants → pipeline-execution; poe table →
+  working-agreement) with others cross-linking, and trimmed every non-tight knowledge
+  file. Collapsed [progress.md](/build/progress.md)'s "Notes / blockers" (~250 → ~50
+  lines) to the still-open blockers plus one-line resolved items; `log.md` left as an
+  append-only history (this entry aside). All internal links + depended-on anchors
+  verified to still resolve. Net **−1419 lines** across 28 files; markdown only, no
+  source touched (commit `e24bebd`).
+
 ## 2026-07-17
 
 * **Step 29 — offline classical replacement for the Claude vision call**
