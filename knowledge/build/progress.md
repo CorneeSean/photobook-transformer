@@ -105,7 +105,7 @@ Audit trail — one line per step; see the commit and [log.md](/log.md) for deta
 
 | # | Step | Branch | Commit | Notes |
 |---|------|--------|--------|-------|
-| 31 | Wire the real LAION/open_clip aesthetic scorer | step-31-laion-aesthetic-scorer | _pending_ | closes the step-6/14 deferral: `ClipAestheticModel` (ViT-L/14 CLIP + LAION head) behind the existing `AestheticScorer`/`Embedder` seam; `scoring` extra (torch out of base deps); capability-gated with graceful fallback to the NULL-scoring placeholder; one shared model backs both protocols with a one-entry feature memo; no migration (`clip_embedding` already `Vector(768)`). Offline monotonicity verified via `poe test-scoring`; live within-scene curation spot-check deferred (no reachable Immich) |
+| 31 | Wire the real LAION/open_clip aesthetic scorer | step-31-laion-aesthetic-scorer | 2446901 | closes the step-6/14 deferral: `ClipAestheticModel` (ViT-L/14 CLIP + LAION head) behind the existing `AestheticScorer`/`Embedder` seam; `scoring` extra (torch out of base deps); capability-gated with graceful fallback to the NULL-scoring placeholder; one shared model backs both protocols with a one-entry feature memo; no migration (`clip_embedding` already `Vector(768)`). Offline monotonicity verified via `poe test-scoring`; live within-scene curation spot-check deferred (no reachable Immich) |
 
 ## Notes / blockers
 

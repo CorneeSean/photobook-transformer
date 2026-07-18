@@ -19,7 +19,7 @@ bodies this log cites; keep entries tight (see
   (re-upload each run; migration drops `Album.lead_reference_asset_id`). 3-agent review, all
   findings applied; `poe check` green (341/3); live multi-photo verify deferred.
 
-* **Step 31 — real LAION/open_clip aesthetic scorer wired** (`_pending_`;
+* **Step 31 — real LAION/open_clip aesthetic scorer wired** (`2446901`;
   [step-31-laion-aesthetic-scorer.md](/build/step-31-laion-aesthetic-scorer.md)). New
   `album.analysis.aesthetic.ClipAestheticModel` (ViT-L/14 CLIP + LAION MLP head) backs
   both the `AestheticScorer` + `Embedder` protocols from one loaded model, with a
