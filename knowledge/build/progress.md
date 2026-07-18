@@ -32,6 +32,7 @@ on missing code (see [Notes / blockers](#notes--blockers)).
 |---|------|----------|--------|--------|-------|
 | 23 | DB-backed flow smoke test (optional) | testcontainers | todo | — | largely subsumed by step 25's `test_flow_integration.py`; revisit only if a gap remains |
 | 30 | CLI flag for multiple lead-face reference photos | [step-30-cli-lead-faces.md](/build/step-30-cli-lead-faces.md) | todo | step-30-cli-lead-faces | `reference_images` on `lead_faces` + a migration generalizing `Album.lead_reference_asset_id` to a list + a repeatable `--lead-face` flag on `generate`/`run` |
+| 31 | Wire the real LAION/open_clip aesthetic scorer | [step-31-laion-aesthetic-scorer.md](/build/step-31-laion-aesthetic-scorer.md) | todo | step-31-laion-aesthetic-scorer | closes the step-6/14 deferral: real ViT-L/14 CLIP + LAION head behind the existing `AestheticScorer`/`Embedder` seam, `scoring` extra (torch out of base deps), capability-gated with graceful fallback; no migration (`clip_embedding` already `Vector(768)`) |
 
 ## Completed (DONE)
 
