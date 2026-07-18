@@ -66,6 +66,36 @@ class LuluSettings(BaseModel):
     shipping_phone_number: str = ""
 
 
+class QualitySettings(BaseModel):
+    """`quality` stage's aesthetic scorer / CLIP embedder config (build step 31).
+
+    Env: ``QUALITY__SCORER``, ``QUALITY__DEVICE``, etc. Drives
+    :func:`album.flow._flow._build_quality_model`, which turns ``scorer`` into a
+    concrete model — the string→model mapping and the ``device``/``precision``
+    validation live in that builder, **not here**, for the same import-cycle reason
+    the ``captioner`` registry is kept out of this module (config must not import the
+    heavy ``analysis`` adapters).
+
+    ``scorer`` defaults to ``"clip"`` (the real ViT-L/14 CLIP + LAION head): the
+    scorer is local and is the core curation signal, so it's on wherever the
+    capability exists. The builder auto-degrades to the NULL-scoring placeholder
+    (with a loud warning) when the ``scoring`` extra or the weights are absent, so a
+    base install still runs — set ``scorer="none"`` to opt out explicitly.
+    """
+
+    scorer: str = "clip"  # "clip" | "none"; validated in the builder, not here
+    device: str = "cpu"  # "cpu" | "mps" (Apple Silicon) | "cuda"; validated in the builder
+    precision: str = "fp32"  # "fp32" | "fp16"; builder rejects fp16 on cpu (MPS/CUDA only)
+    # "-quickgelu", not plain "ViT-L-14": OpenAI's CLIP weights were trained with the
+    # QuickGELU activation, and the LAION aesthetic head was trained on those QuickGELU
+    # embeddings, so pairing plain-GELU "ViT-L-14" with pretrained="openai" feeds the
+    # head subtly wrong features (open_clip warns about exactly this mismatch).
+    clip_model: str = "ViT-L-14-quickgelu"
+    clip_pretrained: str = "openai"
+    weights_dir: str = ".cache/aesthetic"  # open_clip + LAION head cache
+    aesthetic_weights: str = "sac+logos+ava1-l14-linearMSE.pth"
+
+
 class Settings(BaseSettings):
     # `__` is the nested-group separator: `IMMICH__API_KEY` populates
     # `immich.api_key`, `LULU__SHIPPING_CITY` populates `lulu.shipping_city`.
@@ -88,6 +118,7 @@ class Settings(BaseSettings):
 
     immich: ImmichSettings = ImmichSettings()
     lulu: LuluSettings = LuluSettings()
+    quality: QualitySettings = QualitySettings()
 
 
 @cache

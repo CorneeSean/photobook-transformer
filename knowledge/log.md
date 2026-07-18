@@ -19,6 +19,35 @@ bodies this log cites; keep entries tight (see
   (re-upload each run; migration drops `Album.lead_reference_asset_id`). 3-agent review, all
   findings applied; `poe check` green (341/3); live multi-photo verify deferred.
 
+* **Step 31 — real LAION/open_clip aesthetic scorer wired** (`_pending_`;
+  [step-31-laion-aesthetic-scorer.md](/build/step-31-laion-aesthetic-scorer.md)). New
+  `album.analysis.aesthetic.ClipAestheticModel` (ViT-L/14 CLIP + LAION MLP head) backs
+  both the `AestheticScorer` + `Embedder` protocols from one loaded model, with a
+  one-entry feature memo so `score`+`embed` on a thumbnail forward once; torch/open_clip
+  lazy-imported so the module (and `poe check`) stay torch-free. Delivered as an opt-in
+  `scoring` extra (torch out of base deps) and capability-gated in `_flow._build_quality_model`:
+  `quality.scorer="clip"` by default, but a missing extra/weights/bad-device-combo logs a
+  loud warning and falls back to the unchanged NULL-scoring `_UnavailableQualityModel`
+  (`select`'s tested fallback covers it) — so a base install still runs. No migration
+  (`clip_embedding` already `Vector(768)`). **Two implementation-time deviations from the
+  plan:** (a) quality deps resolve **lazily** in `_run_group_1`, not at `Pipeline`
+  construction — building reads `get_settings()` (needs `DATABASE_URL`), which would break
+  the resource-cleanup tests; matches the other lazy collaborators, keeps both-injected
+  short-circuit torch-free; (b) `clip_model="ViT-L-14-quickgelu"` not plain `"ViT-L-14"` —
+  open_clip flags a QuickGELU activation mismatch, and the OpenAI weights + the aesthetic
+  head were both trained with QuickGELU. Offline monotonicity (sharp > blurry) + 768-dim +
+  memo-hit verified via `poe test-scoring` (real weights, torch-guarded, out of `poe
+  check`); live within-scene curation spot-check deferred (no reachable Immich).
+  4-agent review (2× correctness, style/reuse, architecture) found no correctness bug;
+  applied its hardening: validate `quality.scorer` (raise on an unknown value, like
+  `build_captioner`, so a `none` typo can't silently enable the model) + `quality.device`
+  (bogus device → one clean build-time fallback, not per-photo noise); dedup the weights
+  path into `_weights_path`; `.part` cleanup on a failed head download. **Known dev-setup
+  requirement (not a defect):** `poe check`'s basedpyright needs the `scoring` extra
+  installed (`uv sync --extra scoring`) to resolve the lazy torch imports — uv 0.11.28 has
+  no `[tool.uv] default-extras` to auto-install it, so a plain `uv sync` then `poe check`
+  fails on `reportMissingImports`; documented in the playbook's Risks.
+
 * **Convention added — commit body vs. `log.md` split + "Be concise" (user-directed).**
   [working-agreement.md](/process/working-agreement.md): a "Be concise" principle
   over all output, and a Git-workflow subsection dividing labour — commit bodies own

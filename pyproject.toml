@@ -26,6 +26,24 @@ dependencies = [
     "weasyprint>=69.0",
 ]
 
+[project.optional-dependencies]
+# Opt-in heavy ML stack for the real LAION/open_clip aesthetic scorer + CLIP
+# embedder (build step 31). Kept OUT of base `dependencies` on purpose: torch
+# alone is ~1.7 GB resident + ~1.5–2 GB install, so `pip install album` (and the
+# default offline pipeline, which uses the NULL-scoring placeholder) stays lean.
+# Install with `uv sync --extra scoring` (dev/CI) or `pip install album[scoring]`.
+#
+# torch>=2.13.0 is a HARD floor, not style: 2.13.0 (2026-07-08) is the first torch
+# release shipping a cp314 wheel, and this repo is `requires-python >=3.14`, so
+# anything lower has no installable wheel. Apple Silicon resolves the native arm64
+# wheel (MPS-capable); Linux/CI resolves the CPU wheel. open-clip-torch>=3.3.0
+# (latest stable, MIT) pins no torch minimum, so torch's floor governs. `>=` matches
+# every base dep's idiom; uv.lock pins the exact resolved build. Do NOT move to base.
+scoring = [
+    "torch>=2.13.0",
+    "open-clip-torch>=3.3.0",
+]
+
 [project.scripts]
 photobook-generator = "album.cli:main"
 
@@ -132,6 +150,12 @@ generate = "photobook-generator generate"
 # model image + pre-pull the other stack images. Delegates to the test harness so
 # the command + version pin live in exactly one place.
 bake-immich-ml = "python -c \"import sys; from tests.album.immich.immich_ml_stack import prepare_offline_stack; sys.exit(prepare_offline_stack(capture=False).returncode)\""
+# One-time, internet-touching setup for the real aesthetic scorer (build step 31):
+# download the ViT-L/14 open_clip weights + the LAION aesthetic head into
+# `quality.weights_dir`, pinned, so a real `quality` run is fully offline afterward
+# (mirrors `bake-immich-ml`). Needs the `scoring` extra installed. Provenance +
+# licenses are recorded in `fetch_weights`'s docstring.
+fetch-aesthetic-weights = "python -c \"from album.analysis.aesthetic import fetch_weights; fetch_weights()\""
 
 [tool.poe.tasks.test-immich-ml]
 # Opt-in Immich ML integration test (playbook step 24) — real stack, offline
@@ -139,6 +163,15 @@ bake-immich-ml = "python -c \"import sys; from tests.album.immich.immich_ml_stac
 # setup on first run if `bake-immich-ml` hasn't been run yet.
 cmd = "pytest tests/album/immich/test_immich_ml_integration.py"
 env = { IMMICH_ML_INTEGRATION = "1" }
+
+[tool.poe.tasks.test-scoring]
+# Opt-in real-scorer test (build step 31) — needs the `scoring` extra installed AND
+# the weights fetched (`poe fetch-aesthetic-weights`). Heavy (imports torch, loads
+# ViT-L/14), so it is NOT in `poe check`; the real-model tests are `skipif`-gated on
+# `find_spec` (torch/open_clip) + weights present + `SCORING_INTEGRATION=1`, so they're
+# a no-op in the default gate (the torch-free helper tests still run there).
+cmd = "pytest tests/album/analysis/test_aesthetic.py"
+env = { SCORING_INTEGRATION = "1" }
 
 [tool.poe.tasks.metrics]
 # Non-gating human report: cyclomatic complexity (with average) + maintainability

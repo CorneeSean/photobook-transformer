@@ -86,7 +86,7 @@ at `sync` (the boundary — see [architecture](/foundations/architecture.md)).
 |---|---|---|---|
 | [`sync`](/stages/sync.md) | seq | **The boundary.** Pull the album's assets from Immich, keyed on asset id. Idempotent. | `Photo` |
 | [`resolve-leads`](/build/enrichment.md) | 1 | Resolve `album.yml` priority subjects to Immich people; mark lead. | `Person.is_lead` |
-| [`quality`](/stages/quality.md) | 1 | Score blur (real) + aesthetic + CLIP embedding (ML, deferred). | `Photo` scores |
+| [`quality`](/stages/quality.md) | 1 | Score blur (real) + aesthetic + CLIP embedding — real `ClipAestheticModel` (ViT-L/14 + LAION head, step 31), behind the opt-in `scoring` extra with a NULL-scoring fallback. | `Photo` scores |
 | [`cluster`](/stages/cluster.md) | 1 | Assign each photo to a segment (timestamp) + scene (gap detection). | `segment_id`, `Scene` |
 | [`select`](/stages/select.md) | seq | Diversity- + people-aware best-of-scene via MMR; near-dup suppression. | `Photo.selected` |
 | [`enhance`](/stages/enhance.md) | 2 | Estimate bounded tone deltas; classical code writes XMP sidecars. | XMP sidecars |

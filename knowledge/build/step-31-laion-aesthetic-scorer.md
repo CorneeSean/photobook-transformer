@@ -8,7 +8,22 @@ timestamp: 2026-07-18
 
 # Step 31: Wire the real LAION/open_clip aesthetic scorer + CLIP embedder
 
-**Status: todo — plan only, not yet implemented.** See [progress.md](/build/progress.md).
+**Status: DONE (2026-07-18, branch `step-31-laion-aesthetic-scorer`).** See
+[progress.md](/build/progress.md) and [log.md](/log.md).
+
+**Two deviations from the plan below, both discovered during implementation:**
+1. **Quality deps resolve lazily at run-time, not at `Pipeline` construction.** Building
+   the model reads `get_settings()`, which requires `DATABASE_URL`; resolving it in
+   `__init__` would have broken the two `TestPipelineResourceCleanup` tests (no DB URL,
+   client-construction-fails path). So `_resolve_quality_deps` is deferred to
+   `_run_group_1` (first use), matching every other config-dependent collaborator's
+   lazy pattern. Both-injected still short-circuits with no config read → wiring tests
+   stay torch-free. Whole-run residency is unchanged (group 1 is early).
+2. **`clip_model = "ViT-L-14-quickgelu"`, not plain `"ViT-L-14"`.** open_clip warns at
+   load that plain-GELU `ViT-L-14` + `pretrained="openai"` is an activation mismatch:
+   the OpenAI weights **and** the LAION head were trained with QuickGELU, so plain GELU
+   feeds the head subtly wrong features. The `-quickgelu` variant loads the same openai
+   checkpoint with the correct activation (no re-download).
 
 > **Numbering note.** This closes the "real LAION/open_clip scorer" item deferred at
 > [build step 6](/log.md) and resurfaced at step 14 (see progress.md's

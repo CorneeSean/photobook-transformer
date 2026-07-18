@@ -46,6 +46,7 @@ live-integration check in this project (see knowledge/build/progress.md).
 
 from __future__ import annotations
 
+import logging
 import threading
 from collections.abc import Callable, Iterator
 from pathlib import Path
@@ -55,10 +56,17 @@ import pytest
 from prefect.testing.utilities import prefect_test_harness
 from sqlalchemy.orm import Session
 
+import album.analysis.aesthetic as aesthetic_module
 import album.flow._flow as flow_module
+from album.config import QualitySettings, Settings
 from album.db.models import Album
 from album.db.session import SessionFactory
 from album.flow import get_or_create_album, pipeline
+from album.flow._flow import (
+    _build_quality_model,
+    _resolve_quality_deps,
+    _UnavailableQualityModel,
+)
 from album.flow.stages.assemble import AssembleStage
 from album.flow.stages.caption import CaptionStage
 from album.flow.stages.cluster import ClusterStage
@@ -463,6 +471,97 @@ class TestPipelineWiring:
         pipeline(album_slug="honeymoon-2026", session=session, **deps)  # pyright: ignore[reportArgumentType]
 
         assert isinstance(captured["printer"], HtmlPrinter)
+
+
+def _settings(**quality: str) -> Settings:
+    """A ``Settings`` with an explicit ``database_url`` (so no env / ``.env`` is
+    needed) and the given ``quality`` overrides — for the builder tests below."""
+    return Settings(database_url="sqlite://", quality=QualitySettings(**quality))  # pyright: ignore[reportCallIssue]
+
+
+class _StubModel:
+    """A cheap stand-in for the real ``ClipAestheticModel`` (both protocols)."""
+
+    def score(self, image: bytes) -> float:
+        return 0.0
+
+    def embed(self, image: bytes) -> list[float]:
+        return [0.0] * 768
+
+
+class TestBuildQualityModel:
+    """`_build_quality_model` / `_resolve_quality_deps`: the capability-gated wiring
+    of the real scorer with a graceful fallback (build step 31). None of these import
+    torch — the real ``ClipAestheticModel`` is monkeypatched, so the builder's
+    try/except/fallback contract is what's under test, not the model itself."""
+
+    def test_scorer_none_returns_the_placeholder(self) -> None:
+        model = _build_quality_model(_settings(scorer="none"))
+        assert isinstance(model, _UnavailableQualityModel)
+
+    def test_unknown_scorer_raises_rather_than_silently_building(self) -> None:
+        # A typo like "non" must not silently fall through to the heavy clip path —
+        # it's a config error, surfaced like build_captioner does for captioners.
+        with pytest.raises(ValueError, match="unknown quality.scorer"):
+            _build_quality_model(_settings(scorer="non"))
+
+    def test_scorer_clip_returns_the_real_model_when_available(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        built = _StubModel()
+        monkeypatch.setattr(aesthetic_module, "ClipAestheticModel", lambda _settings: built)
+
+        model = _build_quality_model(_settings(scorer="clip"))
+
+        assert model is built
+
+    def test_falls_back_to_placeholder_and_warns_when_capability_absent(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        """Extra/weights absent ⇒ the real model's construction raises, which the
+        builder turns into the placeholder **plus a loud warning** — not a crash."""
+
+        def _raise(_settings: QualitySettings) -> _StubModel:
+            raise FileNotFoundError("weights missing")
+
+        monkeypatch.setattr(aesthetic_module, "ClipAestheticModel", _raise)
+
+        with caplog.at_level(logging.WARNING):
+            model = _build_quality_model(_settings(scorer="clip"))
+
+        assert isinstance(model, _UnavailableQualityModel)
+        assert "aesthetic scorer unavailable" in caplog.text
+
+
+class TestResolveQualityDeps:
+    """`_resolve_quality_deps`: one shared model fills the un-injected slots; injected
+    doubles always win and never trigger a config read / model build."""
+
+    def test_injected_doubles_override_without_building(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        def _boom() -> Settings:
+            raise AssertionError("must not read config when both deps are injected")
+
+        monkeypatch.setattr(flow_module, "get_settings", _boom)
+        aesthetic, embedder = object(), object()
+
+        assert _resolve_quality_deps(aesthetic, embedder) == (aesthetic, embedder)  # pyright: ignore[reportArgumentType]
+
+    def test_builds_one_shared_instance_for_both_missing_slots(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        monkeypatch.setattr(flow_module, "get_settings", lambda: _settings(scorer="none"))
+
+        aesthetic, embedder = _resolve_quality_deps(None, None)
+
+        assert aesthetic is embedder  # one model backs both protocols
+        assert isinstance(aesthetic, _UnavailableQualityModel)
 
 
 class TestPipelineResourceCleanup:

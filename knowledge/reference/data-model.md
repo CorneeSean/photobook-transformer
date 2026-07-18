@@ -188,6 +188,12 @@ class Person(Base):
   in SQLite, so similarity lives behind a substitutable `db/` interface — MMR logic is
   SQLite-testable with a stub, the real query is covered by a `testcontainers` Postgres
   test.
+- **`aesthetic_score` + `clip_embedding` are populated on a normal run (build step 31),**
+  not just when Immich exposes embeddings — `quality`'s real `ClipAestheticModel`
+  (ViT-L/14 + LAION head) writes both, given the opt-in `scoring` extra + fetched
+  weights. Without the extra/weights, the flow falls back to the NULL-scoring
+  placeholder and both stay `NULL` (`select` has a tested fallback). So `NULL` still
+  means "not scored" (base install or a per-photo scoring failure), never "score of 0".
 - **Faces are Immich-provided + structured.** `Photo.person_ids` = JSON array of stable
   Immich person UUIDs (assigned faces only), reasoned about structurally by
   [`select`](/stages/select.md), joined to `Person.name` by `caption`. `face_count`

@@ -31,7 +31,6 @@ on missing code (see [Notes / blockers](#notes--blockers)).
 | # | Step | Playbook | Status | Branch | Notes |
 |---|------|----------|--------|--------|-------|
 | 23 | DB-backed flow smoke test (optional) | testcontainers | todo | — | largely subsumed by step 25's `test_flow_integration.py`; revisit only if a gap remains |
-| 31 | Wire the real LAION/open_clip aesthetic scorer | [step-31-laion-aesthetic-scorer.md](/build/step-31-laion-aesthetic-scorer.md) | todo | step-31-laion-aesthetic-scorer | closes the step-6/14 deferral: real ViT-L/14 CLIP + LAION head behind the existing `AestheticScorer`/`Embedder` seam, `scoring` extra (torch out of base deps), capability-gated with graceful fallback; no migration (`clip_embedding` already `Vector(768)`) |
 
 ## Completed (DONE)
 
@@ -102,12 +101,18 @@ Audit trail — one line per step; see the commit and [log.md](/log.md) for deta
 |---|------|--------|--------|-------|
 | 30 | CLI flag for multiple lead-face reference photos | step-30-cli-lead-faces | e50a54a | repeatable `--lead-face IMAGE` on `generate`/`run` writes/patches `lead_faces.reference_images`; `LeadFacesYAML` → three symmetric list inputs (single = one-element, no singular forms). Verify-plan-first caught it orphaning the singular path; adversarial review caught the plan's count-keyed cache silently keeping the old lead on a same-count swap → **dropped the cache**, rely on Immich content-dedup (migration `a7e3f9c21b84` drops `Album.lead_reference_asset_id`). 3-agent review, all findings applied; `poe check` green (341/3); live multi-photo verify deferred |
 
+### Aesthetic scorer playbook (see [step-31-laion-aesthetic-scorer.md](/build/step-31-laion-aesthetic-scorer.md))
+
+| # | Step | Branch | Commit | Notes |
+|---|------|--------|--------|-------|
+| 31 | Wire the real LAION/open_clip aesthetic scorer | step-31-laion-aesthetic-scorer | _pending_ | closes the step-6/14 deferral: `ClipAestheticModel` (ViT-L/14 CLIP + LAION head) behind the existing `AestheticScorer`/`Embedder` seam; `scoring` extra (torch out of base deps); capability-gated with graceful fallback to the NULL-scoring placeholder; one shared model backs both protocols with a one-entry feature memo; no migration (`clip_embedding` already `Vector(768)`). Offline monotonicity verified via `poe test-scoring`; live within-scene curation spot-check deferred (no reachable Immich) |
+
 ## Notes / blockers
 
 **Current status.** Every build-order + enrichment + testcontainers + single-command-ingestion
-+ offline-analysis step is done and merged, plus the lead-face CLI follow-on (**step 30**); the
-optional **step 23** and the new **step 31** (LAION scorer) remain (23 largely subsumed by step
-25's `test_flow_integration.py`). The pipeline is **fully offline by default**
++ offline-analysis step is done and merged, plus the lead-face CLI follow-on (**step 30**) and the
+real LAION aesthetic scorer (**step 31**); only the optional **step 23** remains (largely subsumed
+by step 25's `test_flow_integration.py`). The pipeline is **fully offline by default**
 (classical tone + template caption, no API/key); Claude is opt-in per run (`--captioner claude`,
 `--force` for A/B). Under `--force`, `enhance` and `caption` each re-run the shared analysis for a
 clustered photo — an accepted ~2× cost on paid Claude A/B; prefer a fresh slug for a large online run.
@@ -132,10 +137,12 @@ clustered photo — an accepted ~2× cost on paid Claude A/B; prefer a fresh slu
 - **No PDF-hosting for `LuluPrinter` (step 15).** `Album.assembled_pdf_path` is a local path; Lulu's
   `source_url` needs a fetchable `http(s)://` URL, so `LuluPrinter.print` raises `UnreachablePdfError`.
   Only affects the opt-in `LuluPrinter` (default `HtmlPrinter` needs none).
-- **Real LAION/open_clip scorer not wired (step 6, resurfaced step 14).** `_UnavailableQualityModel`
-  is a raising placeholder → photos land with NULL scores; `select` has a tested fallback, so a run
-  completes with degraded curation. Wiring the real predictor (heavy: `open_clip` + `torch` + weights)
-  is follow-up.
+- **Real LAION/open_clip scorer — wired (step 31, 2026-07-18).** `ClipAestheticModel` (ViT-L/14 CLIP
+  + LAION head) now backs the `AestheticScorer`/`Embedder` seam, behind the opt-in `scoring` extra and
+  capability-gated with a graceful fallback to the `_UnavailableQualityModel` placeholder (unchanged
+  NULL-score behavior when the extra/weights are absent). Offline monotonicity verified via
+  `poe test-scoring`. *Remaining, live-only:* confirm `select` picks the visibly better frame within a
+  scene on a real album (needs reachable Immich) — folded into the live-integration gap above.
 
 **Toolchain landmine.** `ruff` 0.15.21's formatter under `target-version = "py314"` rewrites
 `except (A, B):` into invalid paren-less syntax — use separate `except` clauses or `# fmt: skip`.

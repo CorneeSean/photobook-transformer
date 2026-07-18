@@ -268,7 +268,7 @@
       <tbody>
         <tr><td><span class="stg">sync</span></td><td><span class="pill seq">seq</span></td><td><b>The boundary.</b> Pull the album's assets from Immich, keyed on asset id. Idempotent.</td><td class="writes">Photo</td></tr>
         <tr><td><span class="stg">resolve-leads</span></td><td><span class="pill g1">1</span></td><td>Resolve <code>album.yml</code> priority subjects to Immich people; mark them lead.</td><td class="writes">Person.is_lead</td></tr>
-        <tr><td><span class="stg">quality</span></td><td><span class="pill g1">1</span></td><td>Score blur (Laplacian, real) + aesthetic + CLIP embedding (ML, deferred).</td><td class="writes">Photo scores</td></tr>
+        <tr><td><span class="stg">quality</span></td><td><span class="pill g1">1</span></td><td>Score blur (Laplacian, real) + aesthetic + CLIP embedding &mdash; real ClipAestheticModel (ViT-L/14 + LAION head, step 31), behind the opt-in <code>scoring</code> extra with a NULL-scoring fallback.</td><td class="writes">Photo scores</td></tr>
         <tr><td><span class="stg">cluster</span></td><td><span class="pill g1">1</span></td><td>Assign each photo to a segment (by timestamp) and a scene (gap detection).</td><td class="writes">segment_id, Scene</td></tr>
         <tr><td><span class="stg">select</span></td><td><span class="pill seq">seq</span></td><td>Diversity- + people-aware best-of-scene via MMR; near-dup suppression via embeddings.</td><td class="writes">Photo.selected</td></tr>
         <tr><td><span class="stg">enhance</span></td><td><span class="pill g2">2</span></td><td>Estimate bounded tone deltas (classical/offline by default); classical code writes XMP sidecars.</td><td class="writes">XMP sidecars</td></tr>

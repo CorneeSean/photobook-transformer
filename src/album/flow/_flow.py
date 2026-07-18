@@ -73,18 +73,21 @@ darktable-cli, or Lulu. See ``tests/album/flow/test_flow.py`` (wiring) and
 ``tests/album/flow/test_flow_integration.py`` (real concurrent per-task sessions
 against a Postgres+pgvector testcontainer).
 
-**Known gap, deferred (not new to this step — see knowledge/build/progress.md's
-step 6 note):** the real LAION-style aesthetic predictor + CLIP embedder
-(``open_clip`` + ``torch`` + pretrained weights) were never wired — a heavy
-dependency explicitly deferred at step 6. :class:`_UnavailableQualityModel`
-stands in for them here: its methods raise, which ``quality()``'s own
-per-photo failure isolation already turns into a logged, counted failure
-rather than a crash — so a real run still completes,
-just with every photo's ``blur_score``/``aesthetic_score``/``clip_embedding``
-left ``NULL``. ``select()`` already has a documented, tested fallback for
-that (``aesthetic_score is None`` sorts last; a missing ``clip_embedding``
-skips the near-duplicate check) — curation quality degrades, but nothing
-crashes. Wiring the real predictor is follow-up work, not this step's job.
+**Aesthetic scorer + CLIP embedder (build step 31).** The real LAION-style
+predictor + CLIP embedder (``open_clip`` + ``torch`` + ViT-L/14 weights) is
+:class:`~album.analysis.aesthetic.ClipAestheticModel`, wired here behind the same
+:class:`AestheticScorer`/:class:`Embedder` seam. :func:`_build_quality_model` is
+**capability-gated with a graceful fallback**: with ``quality.scorer == "clip"``
+(the default) it builds the real model, but if the ``scoring`` extra or the weights
+are absent it logs a loud warning and falls back to :class:`_UnavailableQualityModel`
+— whose methods raise, which ``quality()``'s per-photo failure isolation turns into a
+logged, counted failure rather than a crash, so a base install still completes with
+every ``blur_score``/``aesthetic_score``/``clip_embedding`` left ``NULL``.
+``select()`` already has a documented, tested fallback for that (``aesthetic_score is
+None`` sorts last; a missing ``clip_embedding`` skips the near-duplicate check).
+``quality.scorer == "none"`` opts out explicitly. The model is local, so running it
+does not violate the offline-by-default posture (step 29) — the extra stays opt-*in*
+only because ``torch`` is heavy (~1.7 GB), not for connectivity.
 """
 
 from __future__ import annotations
@@ -92,6 +95,7 @@ from __future__ import annotations
 import logging
 from collections.abc import Callable
 from pathlib import Path
+from typing import Protocol
 
 from prefect import Flow, flow
 from sqlalchemy import select as sa_select
@@ -99,6 +103,7 @@ from sqlalchemy.orm import Session
 
 from album.analysis.captioner import Captioner
 from album.analysis.tone_estimator import ToneEstimator
+from album.config import Settings, get_settings
 from album.db.models import Album
 from album.db.session import SessionFactory, new_session, reuse
 from album.db.similarity import PgVectorSimilarity, SimilaritySearch
@@ -123,24 +128,66 @@ _log = logging.getLogger(__name__)
 _ALBUMS_DIR = Path("data/albums")
 
 
+class _QualityModel(AestheticScorer, Embedder, Protocol):
+    """One model backing **both** quality protocols (score + embed) — the shape of both
+    the real :class:`~album.analysis.aesthetic.ClipAestheticModel` and the
+    :class:`_UnavailableQualityModel` placeholder, injected as both collaborators."""
+
+
 class _UnavailableQualityModel:
-    """Placeholder for the real LAION-style aesthetic predictor + CLIP
-    embedder — see this module's docstring. One model would produce both
-    (same reasoning as the shared thumbnail fetch in the ``analysis`` package), so
-    one placeholder implements both protocols. Raises rather than
-    fabricating a score/embedding; ``quality()`` catches it per-photo."""
+    """The graceful-fallback placeholder for the real aesthetic predictor + CLIP
+    embedder (build step 31) — used when the ``scoring`` extra or the weights are
+    absent (see :func:`_build_quality_model`). One model would produce both in
+    reality, so one placeholder implements both protocols. Raises rather than
+    fabricating a score/embedding; ``quality()`` catches it per-photo and leaves the
+    columns ``NULL`` (``select()``'s tested fallback then handles the degraded case)."""
 
     def score(self, image: bytes) -> float:
         raise NotImplementedError(
-            "real aesthetic scoring (LAION/open_clip) isn't wired yet — see "
-            "knowledge/build/progress.md's notes for build steps 6 and 14",
+            "real aesthetic scoring is unavailable — install the 'scoring' extra "
+            "(`uv sync --extra scoring`) and run `uv run poe fetch-aesthetic-weights`",
         )
 
     def embed(self, image: bytes) -> list[float]:
         raise NotImplementedError(
-            "real CLIP embedding (open_clip) isn't wired yet — see "
-            "knowledge/build/progress.md's notes for build steps 6 and 14",
+            "real CLIP embedding is unavailable — install the 'scoring' extra "
+            "(`uv sync --extra scoring`) and run `uv run poe fetch-aesthetic-weights`",
         )
+
+
+_SCORERS = frozenset({"clip", "none"})
+
+
+def _build_quality_model(settings: Settings) -> _QualityModel:
+    """The real :class:`~album.analysis.aesthetic.ClipAestheticModel` when
+    ``quality.scorer == "clip"`` and torch/open_clip/weights are available; otherwise
+    the raising :class:`_UnavailableQualityModel` placeholder (logged). One instance
+    backs both protocols — see the module docstring's aesthetic-scorer note.
+
+    The ``scorer`` string is validated first (raises on an unknown value, like
+    ``build_captioner`` — so a ``"none"`` typo can't silently enable the heavy model).
+    ``"none"`` opts out explicitly; ``"clip"`` tries the real model and, on a
+    **capability** failure (extra not installed, weights not fetched, bad
+    device/precision), degrades to the placeholder with a loud warning rather than
+    crashing — so a base install still runs.
+    """
+    scorer = settings.quality.scorer
+    if scorer not in _SCORERS:
+        raise ValueError(f"unknown quality.scorer {scorer!r}; choose from {sorted(_SCORERS)}")
+    if scorer == "none":
+        return _UnavailableQualityModel()
+    try:
+        from album.analysis.aesthetic import ClipAestheticModel
+
+        return ClipAestheticModel(settings.quality)
+    except Exception:  # ImportError (extra absent) | missing weights | bad device/precision
+        _log.warning(
+            "real aesthetic scorer unavailable (install the 'scoring' extra + run "
+            "`uv run poe fetch-aesthetic-weights`) — curation degrades to NULL scores; "
+            "see knowledge/build/step-31-laion-aesthetic-scorer.md",
+            exc_info=True,
+        )
+        return _UnavailableQualityModel()
 
 
 def get_or_create_album(session: Session, album_slug: str, albums_dir: Path = _ALBUMS_DIR) -> int:
@@ -186,15 +233,17 @@ def _resolve_quality_deps(
     aesthetic: AestheticScorer | None,
     embedder: Embedder | None,
 ) -> tuple[AestheticScorer, Embedder]:
-    """Fill in whichever of ``aesthetic``/``embedder`` wasn't injected with the
-    same shared :class:`_UnavailableQualityModel` placeholder — see this
-    module's docstring's "Known gap" note. Shared (not one placeholder each)
-    for the same reason the module docstring gives: one model would produce
-    both in reality."""
-    deferred = _UnavailableQualityModel()
+    """Resolve the quality collaborators. Both injected (tests) ⇒ returned untouched,
+    with **no config read and no model build** — the seam that keeps the wiring tests
+    torch-free. Otherwise build **one** shared model from config (the real scorer or
+    the placeholder — see :func:`_build_quality_model`) and use it for whichever slot
+    wasn't injected, since one model would produce both in reality."""
+    if aesthetic is not None and embedder is not None:
+        return aesthetic, embedder
+    model = _build_quality_model(get_settings())
     return (
-        aesthetic if aesthetic is not None else deferred,
-        embedder if embedder is not None else deferred,
+        aesthetic if aesthetic is not None else model,
+        embedder if embedder is not None else model,
     )
 
 
@@ -274,7 +323,12 @@ class Pipeline:
         self._session_factory = session_factory if session_factory is not None else new_session
         self._immich_client = immich_client
         self._similarity = _default_similarity(similarity)
-        self._aesthetic, self._embedder = _resolve_quality_deps(aesthetic, embedder)
+        # Resolved lazily in _run_group_1 (not here), so constructing a Pipeline never
+        # reads config or loads the ~1.7 GB model — matching the other config-dependent
+        # collaborators. Both injected ⇒ no build; see _resolve_quality_deps.
+        self._aesthetic = aesthetic
+        self._embedder = embedder
+        self._quality_deps: tuple[AestheticScorer, Embedder] | None = None
         self._renderer = _default_renderer(renderer)
         self._printer = _default_printer(printer)
         # None → PhotoAnalyzer resolves the offline classical defaults
@@ -345,14 +399,15 @@ class Pipeline:
         factory = self._session_factory
         album_dir = _ALBUMS_DIR / album_slug
         config = _load_lead_faces(album_dir)
+        aesthetic, embedder = self._resolved_quality()
         futures = [
             LeadFaceResolver(client, album_id, config, album_dir, factory).to_task().submit(),
             QualityStage(
                 client,
-                self._aesthetic,
+                aesthetic,
                 album_id,
                 factory,
-                embedder=self._embedder,
+                embedder=embedder,
                 force=self._force,
             )
             .to_task()
@@ -415,6 +470,15 @@ class Pipeline:
         )
         for future in (render_future, caption_future):
             future.result()
+
+    def _resolved_quality(self) -> tuple[AestheticScorer, Embedder]:
+        """The quality scorer + embedder, resolved once and cached. Deferred to here
+        (first use, on the main thread before the group-1 fan-out) rather than
+        construction, so building a Pipeline stays config-free and torch-free; the one
+        shared model is then handed to :class:`QualityStage` as both collaborators."""
+        if self._quality_deps is None:
+            self._quality_deps = _resolve_quality_deps(self._aesthetic, self._embedder)
+        return self._quality_deps
 
     def _build_analyzer(self, client: ImmichClient) -> PhotoAnalyzer:
         """A ``PhotoAnalyzer`` wrapping the Immich client as the thumbnail source and

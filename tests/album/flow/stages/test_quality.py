@@ -41,6 +41,25 @@ class RaisingAesthetic:
         raise RuntimeError("model unavailable")
 
 
+class SharedQualityModel:
+    """One object backing **both** :class:`AestheticScorer` and :class:`Embedder`,
+    mirroring how the real ``ClipAestheticModel`` (and the ``_UnavailableQualityModel``
+    placeholder) is injected as both collaborators. Records each call so the stage's
+    use of the single shared instance for score *and* embed is observable."""
+
+    def __init__(self) -> None:
+        self.scored = 0
+        self.embedded = 0
+
+    def score(self, image: bytes) -> float:
+        self.scored += 1
+        return 0.6
+
+    def embed(self, image: bytes) -> list[float]:
+        self.embedded += 1
+        return [0.2] * 768
+
+
 def test_compute_blur_score_ranks_sharp_above_blurry() -> None:
     # A pure module-level transform (quality-practices §1.1) — tested directly.
     assert compute_blur_score(_SHARP) > compute_blur_score(_BLURRY)
@@ -188,6 +207,28 @@ class TestQuality:
         photo = session.scalars(select(Photo)).one()
         assert photo.clip_embedding is not None
         assert len(photo.clip_embedding) == 768
+
+    def test_uses_one_shared_instance_for_both_score_and_embed(
+        self,
+        session: Session,
+        make_album: Callable[..., Album],
+        make_photo: Callable[..., Photo],
+    ) -> None:
+        # The flow wires one model as both the aesthetic scorer and the embedder
+        # (build step 31). Injecting the same object as both here proves the stage
+        # drives score() and embed() on that single shared instance.
+        album = make_album(immich_album_id="immich-abc")
+        album.photos = [make_photo(album, immich_asset_id="a1")]
+        album_id = self._persist(session, album)
+        model = SharedQualityModel()
+
+        QualityStage(FakeThumbnails({}), model, album_id, reuse(session), embedder=model).run()
+
+        assert model.scored == 1
+        assert model.embedded == 1
+        photo = session.scalars(select(Photo)).one()
+        assert photo.aesthetic_score == 0.6
+        assert photo.clip_embedding is not None
 
     def test_undecodable_thumbnail_is_isolated_not_fatal(
         self,
