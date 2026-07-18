@@ -36,6 +36,13 @@ staying generic.
 [`caption`](/stages/caption.md) produces ungrounded (but still accurate)
 captions. Segments make the output *better*, not possible.
 
+**A Segment's time window has several *sources*, not several *concepts*.** It can
+be authored by hand, extracted from a `--source-document`, or — via a manifest
+([folder-structure ingestion](/build/folder-structure-ingestion.md)) — derived as
+`[min, max]` of the capture timestamps of the photos in a subfolder. All three
+produce the identical on-disk `Segment` the pipeline reasons about; only where the
+`[start_at, end_at]` window comes from differs.
+
 ## Design note — why not a free-form `metadata: dict`?
 
 - An opaque dict is something no stage can *reason* about. A `Segment`'s value is "this

@@ -11,6 +11,7 @@ valid ``album.yml``.
 from __future__ import annotations
 
 import logging
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import pytest
@@ -20,7 +21,16 @@ from pydantic_ai.models.function import AgentInfo, FunctionModel
 
 from album.definition import AlbumDefinition, LeadFacesDefinition
 from album.immich.client import ImmichAsset, ImmichJobCounts
-from album.ingest import DirectoryIngestor, IngestError, patch_lead_faces
+from album.ingest import (
+    DirectoryIngestor,
+    IngestError,
+    _asset_times,
+    _folder_time_range,
+    _folder_times,
+    _segments_from_folders,
+    patch_lead_faces,
+)
+from album.manifest import AlbumSpec, SegmentSpec
 
 
 def _busy(active: int = 0, waiting: int = 0) -> dict[str, ImmichJobCounts]:
@@ -519,3 +529,313 @@ class TestSourceDocument:
             ingestor.ingest(directory, source_document=self._pdf(tmp_path))
         # The file is left on disk so the user can fix it and re-run with --force.
         assert (albums_dir / "raw-dump" / "album.yml").exists()
+
+
+class DatingIngestClient:
+    """Fake :class:`~album.ingest.IngestClient` that dates each uploaded photo by
+    filename, so folder-derived segment windows are deterministic.
+    ``get_album_assets`` echoes the uploaded photos with their local capture time
+    (``None`` for a filename not in ``times`` → an undated photo)."""
+
+    def __init__(self, times: dict[str, datetime]) -> None:
+        self._times = times
+        self.uploaded_ids: dict[Path, str] = {}
+
+    def upload_asset(self, path: Path) -> str:
+        asset_id = f"asset-{len(self.uploaded_ids) + 1}"
+        self.uploaded_ids[path] = asset_id
+        return asset_id
+
+    def create_album(self, name: str, asset_ids: list[str]) -> str:
+        return "immich-new-1"
+
+    def get_jobs(self) -> dict[str, ImmichJobCounts]:
+        return {}
+
+    def get_album_assets(self, immich_album_id: str) -> list[ImmichAsset]:
+        return [
+            ImmichAsset(
+                id=asset_id,
+                originalFileName=path.name,
+                localDateTime=self._times.get(path.name),
+            )
+            for path, asset_id in self.uploaded_ids.items()
+        ]
+
+
+class TestIngestAlbum:
+    """`DirectoryIngestor.ingest_album`: one manifest album → an ``album.yml`` whose
+    segment windows come from each subfolder's photo capture timestamps."""
+
+    def _ingestor(
+        self,
+        client: object,
+        albums_dir: Path,
+        **kw: object,
+    ) -> DirectoryIngestor:
+        return DirectoryIngestor(
+            client,  # pyright: ignore[reportArgumentType]
+            albums_dir=albums_dir,
+            poll_timeout_s=1.0,
+            sleep=lambda _s: None,
+            **kw,  # pyright: ignore[reportArgumentType]
+        )
+
+    def _tree(self, root: Path, name: str, folders: dict[str, list[str]]) -> Path:
+        album = root / name
+        album.mkdir(parents=True)
+        for folder, files in folders.items():
+            directory = album / folder
+            directory.mkdir(parents=True, exist_ok=True)
+            for filename in files:
+                (directory / filename).write_bytes(b"\xff\xd8\xff")
+        return album
+
+    def test_two_folder_segments_are_windowed_and_chronological(self, tmp_path: Path) -> None:
+        # day-2's photos are earlier than day-1's, so the written segments must be
+        # reordered chronologically (position follows start_at, not spec order).
+        self._tree(tmp_path, "lisbon-trip", {"day-1": ["a.jpg", "b.jpg"], "day-2": ["c.jpg"]})
+        times = {
+            "a.jpg": datetime(2026, 5, 2, 10, 0),
+            "b.jpg": datetime(2026, 5, 2, 12, 0),
+            "c.jpg": datetime(2026, 5, 1, 9, 0),
+        }
+        albums_dir = tmp_path / "albums"
+        spec = AlbumSpec(
+            path="lisbon-trip",
+            segments=[SegmentSpec(path="day-1"), SegmentSpec(path="day-2")],
+        )
+
+        slug = self._ingestor(DatingIngestClient(times), albums_dir).ingest_album(spec, tmp_path)
+
+        assert slug == "lisbon-trip"
+        loaded = AlbumDefinition().load(albums_dir / "lisbon-trip" / "album.yml")
+        # Sorted by start_at: day-2 (May 1) before day-1 (May 2); labels titleized.
+        assert [s.label for s in loaded.segments] == ["Day 2", "Day 1"]
+        assert [s.position for s in loaded.segments] == [1, 2]
+        assert loaded.segments[1].start_at == datetime(2026, 5, 2, 10, 0, tzinfo=UTC)
+        assert loaded.segments[1].end_at == datetime(2026, 5, 2, 12, 0, tzinfo=UTC)
+
+    def test_spec_label_and_place_win_over_folder_defaults(self, tmp_path: Path) -> None:
+        self._tree(tmp_path, "trip", {"old-town": ["a.jpg"]})
+        times = {"a.jpg": datetime(2026, 5, 1, 9, 0)}
+        albums_dir = tmp_path / "albums"
+        spec = AlbumSpec(
+            path="trip",
+            segments=[SegmentSpec(path="old-town", label="Old Town", place="Lisbon")],
+        )
+
+        self._ingestor(DatingIngestClient(times), albums_dir).ingest_album(spec, tmp_path)
+
+        loaded = AlbumDefinition().load(albums_dir / "trip" / "album.yml")
+        assert loaded.segments[0].label == "Old Town"  # override, not "Old Town" from folder
+        assert loaded.segments[0].place == "Lisbon"
+
+    def test_single_instant_folder_widens_end_by_one_second(self, tmp_path: Path) -> None:
+        self._tree(tmp_path, "trip", {"harbour": ["a.jpg", "b.jpg"]})
+        instant = datetime(2026, 5, 1, 9, 0)
+        times = {"a.jpg": instant, "b.jpg": instant}  # both photos one timestamp
+        albums_dir = tmp_path / "albums"
+        spec = AlbumSpec(path="trip", segments=[SegmentSpec(path="harbour")])
+
+        self._ingestor(DatingIngestClient(times), albums_dir).ingest_album(spec, tmp_path)
+
+        loaded = AlbumDefinition().load(albums_dir / "trip" / "album.yml")
+        assert loaded.segments[0].end_at == loaded.segments[0].start_at + timedelta(seconds=1)
+
+    def test_undated_segment_folder_is_skipped_with_a_warning(
+        self,
+        tmp_path: Path,
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        # "empty" has an undated photo → no window → skipped; "dated" still lands.
+        self._tree(tmp_path, "trip", {"empty": ["u.jpg"], "dated": ["a.jpg"]})
+        times = {"a.jpg": datetime(2026, 5, 1, 9, 0)}  # u.jpg absent → undated
+        albums_dir = tmp_path / "albums"
+        spec = AlbumSpec(
+            path="trip",
+            segments=[SegmentSpec(path="empty"), SegmentSpec(path="dated")],
+        )
+
+        with caplog.at_level(logging.WARNING):
+            self._ingestor(DatingIngestClient(times), albums_dir).ingest_album(spec, tmp_path)
+
+        assert "no dated photos" in caplog.text
+        loaded = AlbumDefinition().load(albums_dir / "trip" / "album.yml")
+        assert [s.label for s in loaded.segments] == ["Dated"]
+
+    def test_all_segments_skipped_yields_a_zero_segment_album(self, tmp_path: Path) -> None:
+        # Every declared segment folder is undated → a zero-segment album.yml,
+        # byte-compatible with the no-segments flat path (no `segments` key).
+        self._tree(tmp_path, "trip", {"a": ["x.jpg"], "b": ["y.jpg"]})
+        albums_dir = tmp_path / "albums"
+        spec = AlbumSpec(path="trip", segments=[SegmentSpec(path="a"), SegmentSpec(path="b")])
+
+        self._ingestor(DatingIngestClient({}), albums_dir).ingest_album(spec, tmp_path)
+
+        written = yaml.safe_load((albums_dir / "trip" / "album.yml").read_text())
+        assert "segments" not in written
+
+    def test_no_segment_specs_yields_a_zero_segment_album(self, tmp_path: Path) -> None:
+        # A flat album folder (no declared segments) degrades to today's behavior.
+        self._tree(tmp_path, "trip", {".": ["x.jpg"]})
+        albums_dir = tmp_path / "albums"
+        spec = AlbumSpec(path="trip")
+
+        self._ingestor(DatingIngestClient({}), albums_dir).ingest_album(spec, tmp_path)
+
+        written = yaml.safe_load((albums_dir / "trip" / "album.yml").read_text())
+        assert "segments" not in written
+
+    def test_overlapping_windows_fail_via_the_shared_loader(self, tmp_path: Path) -> None:
+        # day-2's window nests inside day-1's (interleaved timestamps) → the shared
+        # AlbumYAML loader raises overlap; ingest surfaces it as a clear IngestError.
+        self._tree(tmp_path, "trip", {"day-1": ["a.jpg", "b.jpg"], "day-2": ["c.jpg"]})
+        times = {
+            "a.jpg": datetime(2026, 5, 1, 10, 0),
+            "b.jpg": datetime(2026, 5, 1, 20, 0),
+            "c.jpg": datetime(2026, 5, 1, 15, 0),  # inside [10:00, 20:00]
+        }
+        albums_dir = tmp_path / "albums"
+        spec = AlbumSpec(
+            path="trip",
+            segments=[SegmentSpec(path="day-1"), SegmentSpec(path="day-2")],
+        )
+
+        with pytest.raises(IngestError, match="invalid|overlap"):
+            self._ingestor(DatingIngestClient(times), albums_dir).ingest_album(spec, tmp_path)
+
+    def test_source_document_spec_routes_through_the_pdf_path(self, tmp_path: Path) -> None:
+        # A spec naming a source_document must use the PDF segment source, not the
+        # folder one — the canned model's segment appears, and no folder is consulted.
+        from weasyprint import HTML
+
+        canned = (
+            '{"title": "Adriatic Days", "segments": [{"label": "Lisbon", "place": "Lisbon", '
+            '"start_at": "2026-05-01T09:00:00+00:00", "end_at": "2026-05-01T18:00:00+00:00"}]}'
+        )
+
+        def handler(messages: list[ModelMessage], info: AgentInfo) -> ModelResponse:
+            return ModelResponse(parts=[TextPart(content=canned)])
+
+        album = self._tree(tmp_path, "trip", {"ignored-folder": ["a.jpg"]})
+        (album / "runsheet.pdf").write_bytes(
+            HTML(string="<p>Day 1 Lisbon</p>").write_pdf() or b"",
+        )
+        albums_dir = tmp_path / "albums"
+        spec = AlbumSpec(path="trip", source_document="runsheet.pdf")
+
+        self._ingestor(
+            DatingIngestClient({}),
+            albums_dir,
+            model=FunctionModel(handler),
+        ).ingest_album(spec, tmp_path)
+
+        loaded = AlbumDefinition().load(albums_dir / "trip" / "album.yml")
+        assert [s.label for s in loaded.segments] == ["Lisbon"]  # from the doc, not folders
+
+    def test_spec_timezone_overrides_the_cli_default(self, tmp_path: Path) -> None:
+        self._tree(tmp_path, "trip", {".": ["x.jpg"]})
+        albums_dir = tmp_path / "albums"
+        spec = AlbumSpec(path="trip", timezone="Europe/Podgorica")
+
+        self._ingestor(DatingIngestClient({}), albums_dir).ingest_album(
+            spec,
+            tmp_path,
+            timezone_default="Europe/Warsaw",
+        )
+
+        written = yaml.safe_load((albums_dir / "trip" / "album.yml").read_text())
+        assert written["timezone"] == "Europe/Podgorica"  # spec wins over the CLI default
+
+    def test_cli_timezone_default_applies_when_spec_has_none(self, tmp_path: Path) -> None:
+        self._tree(tmp_path, "trip", {".": ["x.jpg"]})
+        albums_dir = tmp_path / "albums"
+        spec = AlbumSpec(path="trip")
+
+        self._ingestor(DatingIngestClient({}), albums_dir).ingest_album(
+            spec,
+            tmp_path,
+            timezone_default="Europe/Warsaw",
+        )
+
+        written = yaml.safe_load((albums_dir / "trip" / "album.yml").read_text())
+        assert written["timezone"] == "Europe/Warsaw"
+
+
+class TestFolderSegmentHelpers:
+    """The pure folder-windowing helpers, over plain in-memory data (no client)."""
+
+    def test_folder_time_range_empty_is_none(self) -> None:
+        assert _folder_time_range([]) is None
+
+    def test_folder_time_range_single_instant_widens_by_one_second(self) -> None:
+        instant = datetime(2026, 5, 1, 9, 0, tzinfo=UTC)
+        assert _folder_time_range([instant, instant]) == (instant, instant + timedelta(seconds=1))
+
+    def test_folder_time_range_spans_min_to_max(self) -> None:
+        lo = datetime(2026, 5, 1, 9, 0, tzinfo=UTC)
+        mid = datetime(2026, 5, 1, 12, 0, tzinfo=UTC)
+        hi = datetime(2026, 5, 1, 18, 0, tzinfo=UTC)
+        assert _folder_time_range([mid, hi, lo]) == (lo, hi)
+
+    def test_asset_times_maps_ids_and_drops_undated(self) -> None:
+        dated = ImmichAsset(
+            id="a1",
+            originalFileName="a.jpg",
+            localDateTime=datetime(2026, 5, 1, 9, 0),
+        )
+        undated = ImmichAsset(id="a2", originalFileName="b.jpg")
+        times = _asset_times([dated, undated])
+        assert set(times) == {"a1"}  # undated dropped
+        assert times["a1"] == datetime(2026, 5, 1, 9, 0, tzinfo=UTC)  # naive coerced to UTC
+
+    def test_folder_times_includes_deeper_and_excludes_siblings(self) -> None:
+        folder = Path("/album/day-1")
+        t_direct = datetime(2026, 5, 1, 9, 0, tzinfo=UTC)
+        t_deeper = datetime(2026, 5, 1, 10, 0, tzinfo=UTC)
+        path_to_asset_id = {
+            Path("/album/day-1/a.jpg"): "a1",  # directly in the folder
+            Path("/album/day-1/morning/b.jpg"): "a2",  # nested deeper — included
+            Path("/album/day-10/c.jpg"): "a3",  # string-prefix sibling — excluded
+            Path("/album/root.jpg"): "a4",  # album root — excluded
+        }
+        asset_times = {
+            "a1": t_direct,
+            "a2": t_deeper,
+            "a3": datetime(2026, 5, 2, 9, 0, tzinfo=UTC),
+            "a4": datetime(2026, 5, 3, 9, 0, tzinfo=UTC),
+        }
+
+        times = _folder_times(folder, path_to_asset_id, asset_times)
+
+        assert sorted(times) == [t_direct, t_deeper]  # only the two under day-1
+
+    def test_folder_times_drops_photos_without_a_capture_time(self) -> None:
+        folder = Path("/album/day-1")
+        dated = datetime(2026, 5, 1, 9, 0, tzinfo=UTC)
+        path_to_asset_id = {Path("/album/day-1/a.jpg"): "a1", Path("/album/day-1/b.jpg"): "a2"}
+        asset_times = {"a1": dated}  # a2 undated → not in asset_times
+
+        assert _folder_times(folder, path_to_asset_id, asset_times) == [dated]
+
+    def test_segments_from_folders_skips_sorts_and_defaults_labels(self) -> None:
+        album_dir = Path("/album")
+        specs = [
+            SegmentSpec(path="late"),
+            SegmentSpec(path="early"),
+            SegmentSpec(path="empty"),  # no photos → skipped
+        ]
+        path_to_asset_id = {
+            Path("/album/late/a.jpg"): "a1",
+            Path("/album/early/b.jpg"): "a2",
+        }
+        asset_times = {
+            "a1": datetime(2026, 5, 2, 9, 0, tzinfo=UTC),
+            "a2": datetime(2026, 5, 1, 9, 0, tzinfo=UTC),
+        }
+
+        segments = _segments_from_folders(album_dir, specs, path_to_asset_id, asset_times)
+
+        # "empty" skipped; the rest sorted by start_at with titleized folder labels.
+        assert [s.label for s in segments] == ["Early", "Late"]

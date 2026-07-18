@@ -27,6 +27,9 @@ photobook-generator run --album <slug>          # the album.yml-first path, unch
    `album.yml`) into one call.
 2. **Document-driven segments.** `--source-document doc.pdf` extracts `segments:`
    (time/place chapters) from an itinerary / run-sheet / lineup instead of typing them.
+   Segments can *also* come from a folder's photo timestamps rather than a document —
+   see the [folder-structure ingestion playbook](/build/folder-structure-ingestion.md)
+   (`generate <root> --manifest`), which reuses this same `DirectoryIngestor` spine.
 
 Both are **additive** — no stage logic, data-model, or DAG change. Everything
 downstream of `sync` is already directory-agnostic (reads our DB, scoped by

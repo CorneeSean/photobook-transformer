@@ -99,15 +99,18 @@ class Manifest(BaseModel):
 
 
 def _is_unsafe_path(path_str: str) -> bool:
-    """True if ``path_str`` is empty, absolute, or contains a ``..`` component —
-    i.e. cannot be trusted to stay under the directory it is relative to. Rejecting
-    *any* ``..`` component is slightly stricter than "no escape after normalization"
-    (it also refuses the interior-but-safe ``a/../b``), but never less safe — no sane
-    manifest writes that form."""
+    """True if ``path_str`` is empty, ``.`` (the directory itself), absolute, or
+    contains a ``..`` component — i.e. cannot be trusted to name a distinct
+    subfolder under the directory it is relative to. Rejecting ``.`` keeps an
+    album's ``effective_slug`` well-defined (``.`` would slugify an empty name);
+    rejecting *any* ``..`` component is slightly stricter than "no escape after
+    normalization" (it also refuses the interior-but-safe ``a/../b``), but never
+    less safe — no sane manifest writes those forms."""
     if not path_str.strip():
         return True
     pure = PurePosixPath(path_str)
-    return pure.is_absolute() or ".." in pure.parts
+    # PurePosixPath drops "." components, so an all-"." path has empty parts.
+    return not pure.parts or pure.is_absolute() or ".." in pure.parts
 
 
 def _reject_nested_segments(album_path: str, segments: list[SegmentSpec]) -> None:

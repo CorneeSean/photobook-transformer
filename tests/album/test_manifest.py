@@ -77,8 +77,8 @@ class TestManifest:
 
     @pytest.mark.parametrize(
         "album_path",
-        ["/lisbon", "../lisbon", "lisbon/../../etc"],
-        ids=["absolute", "leading-dotdot", "escaping-dotdot"],
+        ["/lisbon", "../lisbon", "lisbon/../../etc", "."],
+        ids=["absolute", "leading-dotdot", "escaping-dotdot", "dot-is-the-root"],
     )
     def test_album_path_escaping_the_root_raises(self, tmp_path: Path, album_path: str) -> None:
         with pytest.raises(ValidationError, match="relative|escape"):
@@ -97,8 +97,8 @@ class TestManifest:
 
     @pytest.mark.parametrize(
         "segment_path",
-        ["../day-1", "/day-1", "day-1/../../etc"],
-        ids=["leading-dotdot", "absolute", "escaping-dotdot"],
+        ["../day-1", "/day-1", "day-1/../../etc", "."],
+        ids=["leading-dotdot", "absolute", "escaping-dotdot", "dot-is-the-album"],
     )
     def test_segment_path_escaping_its_album_raises(
         self,

@@ -20,7 +20,7 @@ from __future__ import annotations
 import logging
 import time
 from collections.abc import Callable
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Protocol
 
@@ -34,8 +34,19 @@ from album.agents.segments import (
 )
 from album.definition import AlbumDefinition, SegmentYAML
 from album.immich.client import ImmichAsset, ImmichClient, ImmichJobCounts
+from album.manifest import AlbumSpec, SegmentSpec
 from album.text import slugify as _slugify
 from album.text import titleize as _titleize
+
+# A pluggable "how are this album's segments computed" step, shared by both the
+# PDF (`--source-document`) and the folder (manifest) paths. Given the created
+# Immich album id and the {local path → asset id} map built during upload, it
+# returns an optional title suggestion (the PDF path can propose one; folders
+# never do) plus the segments to materialize.
+SegmentSource = Callable[
+    [str, dict[Path, str]],
+    tuple[str | None, list[SegmentYAML] | None],
+]
 
 _log = logging.getLogger(__name__)
 
@@ -128,6 +139,106 @@ class DirectoryIngestor:
         :meth:`_reuse_existing`), except that ``--lead-face`` still patches leads
         onto it; ``source_document`` is ignored on that path.
         """
+        return self._ingest(
+            directory,
+            slug=slug,
+            title=title,
+            timezone=timezone,
+            segment_source=self._document_source(source_document, timezone),
+            force=force,
+            lead_face_images=lead_face_images,
+        )
+
+    def _document_source(self, source_document: Path | None, timezone: str | None) -> SegmentSource:
+        """A :data:`SegmentSource` that fills segments from a PDF via the segments
+        agent (a no-op returning ``(None, None)`` when ``source_document`` is None).
+        Shared by the flat :meth:`ingest` and a manifest album that names a
+        ``source_document``, so both routes go through the *same* PDF path."""
+
+        def from_document(
+            immich_album_id: str,
+            _path_to_asset_id: dict[Path, str],
+        ) -> tuple[str | None, list[SegmentYAML] | None]:
+            return self._extract_segments(immich_album_id, source_document, timezone)
+
+        return from_document
+
+    def ingest_album(
+        self,
+        spec: AlbumSpec,
+        root: Path,
+        *,
+        timezone_default: str | None = None,
+        force: bool = False,
+    ) -> str:
+        """Ingest one album declared by ``spec`` (relative to ``root``) and return
+        its slug — the single-album unit the manifest fan-out (step 34) drives.
+
+        The album's slug/title/timezone default to the spec's values, else the same
+        directory-name defaults as :meth:`ingest` (so the resolved slug matches the
+        manifest's ``effective_slug`` collision guard). ``timezone_default`` is the
+        CLI ``--timezone`` global, which a spec's own ``timezone`` overrides.
+        Segments come from the spec's declared subfolders (each window derived from
+        its photos' capture timestamps) unless the spec names a ``source_document``,
+        which routes through the same PDF path as :meth:`ingest` — the manifest
+        loader guarantees the two are mutually exclusive.
+        """
+        album_dir = (root / spec.path).resolve()
+        timezone = spec.timezone or timezone_default
+        lead_face_images = (
+            [album_dir / image for image in spec.lead_faces] if spec.lead_faces else None
+        )
+        return self._ingest(
+            album_dir,
+            slug=spec.slug,
+            title=spec.title,
+            timezone=timezone,
+            segment_source=self._album_segment_source(spec, album_dir, timezone),
+            force=force,
+            lead_face_images=lead_face_images,
+        )
+
+    def _album_segment_source(
+        self,
+        spec: AlbumSpec,
+        album_dir: Path,
+        timezone: str | None,
+    ) -> SegmentSource:
+        """The segment computation for a manifest album: the folder path by
+        default, or the shared PDF path when the spec names a ``source_document``."""
+        if spec.source_document is not None:
+            return self._document_source(album_dir / spec.source_document, timezone)
+
+        def from_folders(
+            immich_album_id: str,
+            path_to_asset_id: dict[Path, str],
+        ) -> tuple[str | None, list[SegmentYAML] | None]:
+            asset_times = _asset_times(self._client.get_album_assets(immich_album_id))
+            return None, _segments_from_folders(
+                album_dir,
+                spec.segments,
+                path_to_asset_id,
+                asset_times,
+            )
+
+        return from_folders
+
+    def _ingest(
+        self,
+        directory: Path,
+        *,
+        slug: str | None,
+        title: str | None,
+        timezone: str | None,
+        segment_source: SegmentSource,
+        force: bool,
+        lead_face_images: list[Path] | None,
+    ) -> str:
+        """The shared upload → create → readiness → segments → materialize spine.
+        The only variant between the flat/PDF and folder paths is ``segment_source``
+        (how segments are computed); everything else — the existing-slug guard, the
+        upload, the Immich album, the readiness wait, materialization + validation —
+        is identical."""
         directory = directory.resolve()  # so "." picks up the real directory name
         slug = slug or _slugify(directory.name)
         album_yml = self._albums_dir / slug / "album.yml"
@@ -140,17 +251,19 @@ class DirectoryIngestor:
             )
 
         image_paths = self._collect_images(directory)
-        asset_ids = [self._client.upload_asset(path) for path in image_paths]
+        # Retain the {path → asset id} map: the folder segment source needs it to
+        # tie each subfolder's photos back to their Immich capture timestamps.
+        path_to_asset_id = {path: self._client.upload_asset(path) for path in image_paths}
         # The Immich album is named before the document is read (extraction needs
         # the created, EXIF-ready album), so it uses the pre-document title; the
         # book's album.yml title below can still prefer a document-supplied one.
         immich_album_id = self._client.create_album(
             self._resolve_title(title, directory, slug),
-            asset_ids,
+            list(path_to_asset_id.values()),
         )
 
         self._wait_for_readiness()
-        doc_title, segments = self._extract_segments(immich_album_id, source_document, timezone)
+        doc_title, segments = segment_source(immich_album_id, path_to_asset_id)
         final_title = self._resolve_title(title, directory, slug, doc_title=doc_title)
         self._materialize(
             album_yml,
@@ -165,7 +278,7 @@ class DirectoryIngestor:
             self._validate_materialized(album_yml)
         _log.info(
             "ingested %d photos from %s → album %r (immich id %s)",
-            len(asset_ids),
+            len(path_to_asset_id),
             directory,
             slug,
             immich_album_id,
@@ -197,19 +310,20 @@ class DirectoryIngestor:
 
     @staticmethod
     def _validate_materialized(album_yml: Path) -> None:
-        """Fail fast if the doc-extracted segments produced an ``album.yml`` the
-        loader rejects (naive times with no timezone, overlap, bad ordering) — so
-        the error surfaces here with guidance rather than deep in the pipeline
-        after ingest already reported success. Runs the same loader the pipeline
-        does (``AlbumDefinition``), so it re-uses the one source of truth for
-        segment correctness rather than re-implementing the checks."""
+        """Fail fast if the derived segments (from a source document *or* from
+        subfolders) produced an ``album.yml`` the loader rejects (naive times with
+        no timezone, overlap, bad ordering) — so the error surfaces here with
+        guidance rather than deep in the pipeline after ingest already reported
+        success. Runs the same loader the pipeline does (``AlbumDefinition``), so it
+        re-uses the one source of truth for segment correctness rather than
+        re-implementing the checks; the loader's ``{exc}`` names the offending
+        segments."""
         try:
             _ = AlbumDefinition().load(album_yml)
         except ValueError as exc:
             raise IngestError(
-                f"the segments extracted from the source document are invalid ({exc}); "
-                f"edit {album_yml} to fix them and re-run with --force, or drop "
-                "--source-document to import without segments",
+                f"the derived segments are invalid ({exc}); edit {album_yml} to fix "
+                "them and re-run with --force, or import without segments",
             ) from exc
 
     @staticmethod
@@ -366,6 +480,74 @@ def patch_lead_faces(album_yml: Path, images: list[Path]) -> None:
         raise IngestError(f"album.yml at {album_yml} is empty or malformed — run `generate` first")
     data["lead_faces"] = _lead_faces_block(images)
     _write_album_yml(album_yml, data)
+
+
+def _segments_from_folders(
+    album_dir: Path,
+    specs: list[SegmentSpec],
+    path_to_asset_id: dict[Path, str],
+    asset_times: dict[str, datetime],
+) -> list[SegmentYAML]:
+    """One :class:`~album.definition.SegmentYAML` per spec whose subfolder holds
+    dated photos, its window ``[min, max]`` of those photos' capture instants and
+    its label defaulted from the folder name. A spec whose folder has no images (or
+    none with a timestamp) yields no window and is skipped with a warning — the
+    album still materializes (segments are optional). Sorted by ``start_at`` so
+    ``Segment.position`` ends up chronological."""
+    segments: list[SegmentYAML] = []
+    for spec in specs:
+        folder = album_dir / spec.path
+        window = _folder_time_range(_folder_times(folder, path_to_asset_id, asset_times))
+        if window is None:
+            _log.warning("segment folder %s has no dated photos; skipping it", folder)
+            continue
+        segments.append(_folder_segment(spec, window))
+    return sorted(segments, key=lambda segment: segment.start_at)
+
+
+def _folder_times(
+    folder: Path,
+    path_to_asset_id: dict[Path, str],
+    asset_times: dict[str, datetime],
+) -> list[datetime]:
+    """The capture instants of the uploaded photos that live under ``folder``."""
+    return [
+        asset_times[asset_id]
+        for path, asset_id in path_to_asset_id.items()
+        if path.is_relative_to(folder) and asset_id in asset_times
+    ]
+
+
+def _folder_segment(spec: SegmentSpec, window: tuple[datetime, datetime]) -> SegmentYAML:
+    """A :class:`~album.definition.SegmentYAML` for one folder spec + its window;
+    the label falls back to the titleized folder name."""
+    start_at, end_at = window
+    return SegmentYAML(
+        label=spec.label or _titleize(Path(spec.path).name),
+        place=spec.place,
+        start_at=start_at,
+        end_at=end_at,
+    )
+
+
+def _folder_time_range(times: list[datetime]) -> tuple[datetime, datetime] | None:
+    """``[min, max]`` of a folder's capture instants, or ``None`` if it has none. A
+    single-instant folder (``max == min``) is widened to ``end = min + 1s`` so the
+    ``AlbumYAML`` loader's ``end_at > start_at`` check passes."""
+    if not times:
+        return None
+    lo, hi = min(times), max(times)
+    return (lo, hi if hi > lo else lo + timedelta(seconds=1))
+
+
+def _asset_times(assets: list[ImmichAsset]) -> dict[str, datetime]:
+    """``{asset id → capture instant}`` for the assets that carry a timestamp, from
+    the same EXIF/local-time source :func:`_capture_range` uses (naive coerced to
+    UTC). The folder segment source joins this to the upload's ``{path → asset id}``
+    map to window each subfolder."""
+    return {
+        asset.id: _as_aware(time) for asset in assets if (time := _asset_time(asset)) is not None
+    }
 
 
 def _capture_range(assets: list[ImmichAsset]) -> tuple[datetime, datetime] | None:
