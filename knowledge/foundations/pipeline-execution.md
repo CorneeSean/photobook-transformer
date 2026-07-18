@@ -3,12 +3,12 @@ type: Architecture Reference
 title: Pipeline execution shape
 description: The stage DAG as it runs — sequential spine plus two concurrent fan-out groups, the session-ownership model, and the commit/expire invariants.
 tags: [architecture, prefect, flow, parallelism, dag]
-timestamp: 2026-07-15
+timestamp: 2026-07-18
 ---
 
 # Pipeline execution shape
 
-Eleven stages turn Immich assets into a photo book. `flow/_flow.py` (the sole
+Ten stages turn Immich assets into a photo book. `flow/_flow.py` (the sole
 `@flow`, produced by `Pipeline.flow()`) runs them as a **DAG**: a sequential spine
 with two concurrent fan-out groups. Each stage **is its own Prefect task** via the
 `TaskUnit` base — sequential stages run inline and reuse the flow's shared session;

@@ -127,9 +127,11 @@ without memorizing raw invocations. At minimum:
 | `uv run poe migrate` | `alembic upgrade head` |
 | `uv run poe makemigration -- -m "..."` | `alembic revision --autogenerate` |
 | `uv run poe run -- --album honeymoon-2026` | run the pipeline flow for one album |
+| `uv run poe generate -- ./photos` | one-shot ingest: folder → Immich album → `album.yml` → run |
 
 The pipeline is also exposed as a console entry point via `[project.scripts]`
 (`photobook-generator = "album.cli:main"`), so `uv run photobook-generator run
 --album honeymoon-2026` works directly; `poe run` is the same thing wrapped for
 symmetry with the other tasks.
-Keep this table and the README's command list in sync when tasks change.
+This is the canonical command table — the README only links here rather than
+duplicating it, so there's nothing else to keep in sync.

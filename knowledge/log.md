@@ -2,6 +2,14 @@
 
 ## 2026-07-18
 
+* **README rewritten as a one-page brief + pipeline-execution destale (user-directed).**
+  `README.md` is now a brief: quick start (install → up → API key → `generate`) plus
+  header-and-link sections pointing at `knowledge/`. Fixed `pipeline-execution.md`/`.html`,
+  which still described the DAG fan-out as a *proposed* change — it shipped in step 25.
+  Corrected stage count (11 → 10) and reworded the sections that assumed strict
+  sequential execution. Added the missing `poe generate` row to
+  `working-agreement.md`'s command table.
+
 * **Docs refactor + trim (user-directed; not a build step).** Made the top-level
   orientation files thin, current pointers to the `knowledge/` bundle (the source of
   truth), fixed staleness + cross-file duplication, and trimmed the knowledge files to

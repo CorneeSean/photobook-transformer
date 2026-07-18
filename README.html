@@ -1,0 +1,494 @@
+<title>Photo Album Pipeline — Project Guide</title>
+<style>
+  :root{
+    --paper:#F3F5F8; --panel:#FFFFFF; --ink:#131922; --muted:#5B6675; --faint:#8A94A2;
+    --line:#DCE2EA; --accent:#0F6E78; --accent-soft:#0f6e7815;
+    --g1:#3F7C4C; --g1-bg:#E7F0E9; --g1-line:#9CC3A3;
+    --g2:#42589E; --g2-bg:#E8ECF8; --g2-line:#A7B4E6;
+    --amber:#9A6A12; --amber-bg:#F8F0DE;
+    --edge:#AEB8C4;
+    --code-bg:#10171F; --code-panel:#0C1219; --code-fg:#C9D3DF; --code-c:#66748A; --code-line:#243040;
+  }
+  @media (prefers-color-scheme:dark){
+    :root{
+      --paper:#0D131A; --panel:#151D26; --ink:#E7ECF2; --muted:#9AA6B4; --faint:#697683;
+      --line:#242E39; --accent:#3FB8C2; --accent-soft:#3fb8c218;
+      --g1:#7CC08B; --g1-bg:#15241A; --g1-line:#2F5539;
+      --g2:#93A5EF; --g2-bg:#151C31; --g2-line:#313E68;
+      --amber:#E0A94A; --amber-bg:#241D0F;
+      --edge:#3A4653;
+      --code-bg:#0B1118; --code-panel:#080D13; --code-fg:#C9D3DF; --code-c:#5E6C80; --code-line:#1B2531;
+    }
+  }
+  :root[data-theme="light"]{
+    --paper:#F3F5F8; --panel:#FFFFFF; --ink:#131922; --muted:#5B6675; --faint:#8A94A2;
+    --line:#DCE2EA; --accent:#0F6E78; --accent-soft:#0f6e7815;
+    --g1:#3F7C4C; --g1-bg:#E7F0E9; --g1-line:#9CC3A3;
+    --g2:#42589E; --g2-bg:#E8ECF8; --g2-line:#A7B4E6;
+    --amber:#9A6A12; --amber-bg:#F8F0DE; --edge:#AEB8C4;
+    --code-bg:#10171F; --code-panel:#0C1219; --code-fg:#C9D3DF; --code-c:#66748A; --code-line:#243040;
+  }
+  :root[data-theme="dark"]{
+    --paper:#0D131A; --panel:#151D26; --ink:#E7ECF2; --muted:#9AA6B4; --faint:#697683;
+    --line:#242E39; --accent:#3FB8C2; --accent-soft:#3fb8c218;
+    --g1:#7CC08B; --g1-bg:#15241A; --g1-line:#2F5539;
+    --g2:#93A5EF; --g2-bg:#151C31; --g2-line:#313E68;
+    --amber:#E0A94A; --amber-bg:#241D0F; --edge:#3A4653;
+    --code-bg:#0B1118; --code-panel:#080D13; --code-fg:#C9D3DF; --code-c:#5E6C80; --code-line:#1B2531;
+  }
+
+  *{box-sizing:border-box;}
+  body{margin:0; background:var(--paper); color:var(--ink);
+    font:16px/1.65 -apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif;
+    -webkit-font-smoothing:antialiased;}
+  main{max-width:900px; margin:0 auto; padding:56px 24px 100px;}
+
+  .mono{font-family:ui-monospace,"SF Mono",SFMono-Regular,Menlo,Consolas,monospace;}
+  .eyebrow{font-family:ui-monospace,"SF Mono",SFMono-Regular,Menlo,Consolas,monospace;
+    font-size:12px; letter-spacing:.16em; text-transform:uppercase; color:var(--accent); margin:0 0 14px;}
+  h1{font-size:clamp(26px,4.6vw,40px); line-height:1.1; letter-spacing:-.02em; margin:0 0 16px;
+    text-wrap:balance; font-weight:680;}
+  .lead{font-size:17px; color:var(--muted); max-width:66ch; margin:0;}
+  .lead b{color:var(--ink); font-weight:640;}
+  .lead code{color:var(--ink);}
+
+  .meta{display:flex; flex-wrap:wrap; gap:0; margin:28px 0 0; border:1px solid var(--line);
+    border-radius:12px; background:var(--panel); overflow:hidden;}
+  .meta div{flex:1 1 140px; padding:14px 18px; border-right:1px solid var(--line);}
+  .meta div:last-child{border-right:0;}
+  .meta .k{font-family:ui-monospace,monospace; font-size:10.5px; letter-spacing:.12em; text-transform:uppercase; color:var(--faint);}
+  .meta .v{font-size:14.5px; margin-top:5px; color:var(--ink);}
+  .meta .v .u{color:var(--muted);}
+
+  .card{background:var(--panel); border:1px solid var(--line); border-radius:16px; padding:26px 24px; margin-top:28px;}
+
+  /* quickstart */
+  .qs-step{display:grid; grid-template-columns:34px 1fr; gap:14px; padding:16px 0; border-top:1px solid var(--line);}
+  .qs-step:first-of-type{border-top:none; padding-top:4px;}
+  .qs-num{width:30px; height:30px; border-radius:9px; background:var(--accent-soft); color:var(--accent);
+    display:flex; align-items:center; justify-content:center; font-family:ui-monospace,monospace; font-weight:700; font-size:13.5px;}
+  .qs-body h3{margin:2px 0 6px; font-size:15.5px; font-weight:640;}
+  .qs-body p{margin:0 0 10px; font-size:14.5px; color:var(--muted); max-width:64ch;}
+  .qs-body p code{color:var(--ink);}
+  .qs-body .tip{display:inline-block; margin-top:2px; font-size:13px; color:var(--muted); background:var(--accent-soft);
+    border-radius:8px; padding:6px 10px;}
+  .qs-body .tip b{color:var(--ink);}
+
+  pre{background:var(--code-bg); border:1px solid var(--code-line); border-radius:12px;
+    padding:16px 18px; overflow-x:auto; margin:0;}
+  pre code{font-family:ui-monospace,"SF Mono",Menlo,monospace; font-size:12.8px; line-height:1.6; color:var(--code-fg);}
+  pre .c{color:var(--code-c); font-style:italic;}
+
+  .result-line{margin-top:16px; display:flex; gap:12px; align-items:flex-start; background:var(--g1-bg);
+    border:1px solid var(--g1-line); border-radius:12px; padding:14px 16px; font-size:14px; color:var(--ink);}
+  .result-line b.mono{color:var(--g1);}
+
+  /* accordion */
+  details.card{padding:0; overflow:hidden;}
+  details.card > summary{list-style:none; cursor:pointer; padding:22px 24px; display:flex;
+    align-items:center; justify-content:space-between; gap:16px;}
+  details.card > summary::-webkit-details-marker{display:none;}
+  summary .s-left{display:flex; flex-direction:column; gap:4px;}
+  summary .chev{flex:0 0 auto; width:20px; height:20px; color:var(--faint); transition:transform .18s ease;}
+  details[open] > summary .chev{transform:rotate(90deg); color:var(--accent);}
+  summary:focus-visible{outline:2px solid var(--accent); outline-offset:4px; border-radius:8px;}
+  .acc-body{padding:0 24px 26px;}
+  .acc-eyebrow{font-family:ui-monospace,monospace; font-size:11px; letter-spacing:.14em; text-transform:uppercase; color:var(--accent);}
+  .acc-title{font-size:18.5px; font-weight:640; color:var(--ink);}
+
+  /* diagram */
+  .diagram{padding:6px 2px 2px;}
+  .diagram svg{width:100%; height:auto; display:block;}
+  .gnode rect{stroke-width:1.5;}
+  .gnode text{font-family:ui-monospace,"SF Mono",Menlo,monospace; font-size:13.5px; fill:var(--ink);
+    dominant-baseline:central; text-anchor:middle; font-weight:500;}
+  .gnode text.sub{font-size:10.5px; fill:var(--muted); font-weight:400;}
+  .node-seq rect{fill:var(--panel); stroke:var(--muted);}
+  .node-g1 rect{fill:var(--g1-bg); stroke:var(--g1-line);}
+  .node-g2 rect{fill:var(--g2-bg); stroke:var(--g2-line);}
+  .node-accent rect{fill:var(--accent-soft); stroke:var(--accent);}
+  .band-g1{fill:var(--g1-bg); opacity:.4; stroke:var(--g1-line); stroke-dasharray:4 4;}
+  .band-g2{fill:var(--g2-bg); opacity:.4; stroke:var(--g2-line); stroke-dasharray:4 4;}
+  .band-neutral{fill:var(--accent-soft); stroke:var(--line); stroke-dasharray:4 4;}
+  .band-label{font-family:ui-monospace,monospace; font-size:10.5px; letter-spacing:.1em;
+    text-transform:uppercase; dominant-baseline:central;}
+  .band-label.g1{fill:var(--g1);} .band-label.g2{fill:var(--g2);} .band-label.neutral{fill:var(--muted);}
+  .join{font-family:ui-monospace,monospace; font-size:9.5px; letter-spacing:.12em; fill:var(--accent);
+    text-transform:uppercase; dominant-baseline:central;}
+  .edge{fill:none; stroke:var(--edge); stroke-width:1.6;}
+  .legend{display:flex; flex-wrap:wrap; gap:16px; margin-top:14px; padding-top:14px; border-top:1px solid var(--line);
+    font-size:12.5px; color:var(--muted);}
+  .legend span{display:inline-flex; align-items:center; gap:7px;}
+  .swatch{width:12px; height:12px; border-radius:4px; border:1.5px solid;}
+  .sw-seq{background:var(--panel); border-color:var(--muted);}
+  .sw-g1{background:var(--g1-bg); border-color:var(--g1-line);}
+  .sw-g2{background:var(--g2-bg); border-color:var(--g2-line);}
+
+  .critical{font-family:ui-monospace,monospace; font-size:12.5px; line-height:1.8; color:var(--ink);
+    background:var(--panel); border:1px solid var(--line); border-left:3px solid var(--accent);
+    border-radius:10px; padding:14px 16px; overflow-x:auto; margin-top:14px;}
+  .critical .hl{color:var(--accent); font-weight:600;}
+
+  .scroll{overflow-x:auto; border:1px solid var(--line); border-radius:14px; background:var(--panel); margin-top:14px;}
+  table{border-collapse:collapse; width:100%; font-size:13.5px; min-width:480px;}
+  th,td{text-align:left; padding:10px 14px; border-bottom:1px solid var(--line); vertical-align:top;}
+  thead th{font-family:ui-monospace,monospace; font-size:10.5px; letter-spacing:.1em; text-transform:uppercase;
+    color:var(--faint); font-weight:600; background:var(--accent-soft);}
+  tbody tr:last-child td{border-bottom:0;}
+  td .stg{font-family:ui-monospace,monospace; font-weight:600; color:var(--ink);}
+  td.mono-cell{font-family:ui-monospace,monospace; font-size:12.5px; color:var(--muted); white-space:nowrap;}
+  .pill{display:inline-block; font-family:ui-monospace,monospace; font-size:10px; letter-spacing:.06em;
+    padding:2px 8px; border-radius:999px; text-transform:uppercase; font-weight:600;}
+  .pill.g1{background:var(--g1-bg); color:var(--g1); border:1px solid var(--g1-line);}
+  .pill.g2{background:var(--g2-bg); color:var(--g2); border:1px solid var(--g2-line);}
+  .pill.seq{background:var(--panel); color:var(--muted); border:1px solid var(--line);}
+
+  .steplist{margin:0; padding:0; list-style:none; display:flex; flex-direction:column; gap:0;}
+  .steplist li{display:grid; grid-template-columns:26px 1fr; gap:12px; padding:12px 0; border-top:1px solid var(--line);}
+  .steplist li:first-child{border-top:none; padding-top:0;}
+  .steplist .n{font-family:ui-monospace,monospace; font-size:12px; color:var(--accent); font-weight:700; padding-top:2px;}
+  .steplist p{margin:0; font-size:14px; color:var(--muted);}
+  .steplist p b{color:var(--ink);}
+  .steplist code{color:var(--ink);}
+
+  .gate{display:flex; flex-wrap:wrap; gap:8px; margin-top:14px;}
+  .gate span{font-family:ui-monospace,monospace; font-size:12px; background:var(--panel); border:1px solid var(--line);
+    color:var(--ink); padding:6px 11px; border-radius:8px;}
+  .gate span.plus{color:var(--faint); border:none; background:none; padding:6px 2px;}
+
+  .note{display:flex; gap:12px; background:var(--amber-bg); border:1px solid var(--amber);
+    border-radius:12px; padding:14px 16px; font-size:13.5px; color:var(--ink); margin-top:16px;}
+  .note .badge{font-family:ui-monospace,monospace; font-size:10.5px; letter-spacing:.1em; text-transform:uppercase;
+    color:var(--amber); font-weight:700; white-space:nowrap; padding-top:2px;}
+
+  p.body{font-size:14.5px; color:var(--muted); margin:0 0 14px; max-width:70ch;}
+  p.body b, p.body code{color:var(--ink);}
+  code{font-family:ui-monospace,monospace; font-size:.9em;}
+
+  footer{margin-top:56px; padding-top:18px; border-top:1px solid var(--line);
+    font-family:ui-monospace,monospace; font-size:11.5px; color:var(--faint); display:flex;
+    justify-content:space-between; flex-wrap:wrap; gap:8px;}
+
+  @media (max-width:600px){
+    .meta div{flex:1 1 45%;}
+  }
+</style>
+
+<main>
+  <p class="eyebrow">Project guide · photobook-transformer</p>
+  <h1>From a folder of photos to a printed book.</h1>
+  <p class="lead">A batch pipeline that turns a raw dump of photos into a curated, enhanced, captioned, print-ready photo book — <b>event-type agnostic</b> (a trip, a wedding, a baby's first year are all just <code>Album</code> + optional <code>Segment</code>). Fully offline by default; every external call is opt-in.</p>
+
+  <div class="meta">
+    <div><div class="k">Stages</div><div class="v">10 <span class="u">sync → fulfill</span></div></div>
+    <div><div class="k">Orchestrator</div><div class="v">Prefect 3 <span class="u">DAG</span></div></div>
+    <div><div class="k">Datastore</div><div class="v">Postgres <span class="u">+ pgvector</span></div></div>
+    <div><div class="k">Default run</div><div class="v">Offline <span class="u">no API key</span></div></div>
+  </div>
+
+  <!-- QUICK START — collapsible, open by default -->
+  <details class="card" open>
+    <summary>
+      <div class="s-left">
+        <span class="acc-eyebrow">Quick start</span>
+        <span class="acc-title">Your folder → an Immich album → the pipeline → <span class="mono">index.html</span></span>
+      </div>
+      <svg class="chev" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M9 6l6 6-6 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    </summary>
+    <div class="acc-body">
+
+    <div class="qs-step">
+      <div class="qs-num">0</div>
+      <div class="qs-body">
+        <h3>Install, once</h3>
+        <p>Needs <a href="https://docs.astral.sh/uv/" style="color:inherit">uv</a> and Docker. Nothing else.</p>
+        <pre><code>uv sync <span class="c"># .venv/ + deps</span>
+uv run pre-commit install
+cp .env.example .env</code></pre>
+      </div>
+    </div>
+
+    <div class="qs-step">
+      <div class="qs-num">1</div>
+      <div class="qs-body">
+        <h3>Start the local stack</h3>
+        <p>Brings up Immich, Prefect, and Postgres in Docker, then creates the app's tables.</p>
+        <pre><code>uv run poe up
+uv run poe migrate</code></pre>
+      </div>
+    </div>
+
+    <div class="qs-step">
+      <div class="qs-num">2</div>
+      <div class="qs-body">
+        <h3>Grab an Immich API key</h3>
+        <p>Open <span class="mono">http://localhost:2283</span>, create the admin account (first visit only), then <i>Account Settings → API Keys → New</i>. Paste it into <span class="mono">.env</span> as <span class="mono">IMMICH__API_KEY</span>.</p>
+        <span class="tip"><b>Optional:</b> <span class="mono">ANTHROPIC_API_KEY</span> only unlocks <span class="mono">--captioner claude</span> — the default run needs no key at all.</span>
+      </div>
+    </div>
+
+    <div class="qs-step">
+      <div class="qs-num">3</div>
+      <div class="qs-body">
+        <h3>Generate the album</h3>
+        <p>One command uploads your photos, creates the Immich album, and runs every stage.</p>
+        <pre><code>uv run photobook-generator generate ./path/to/photos</code></pre>
+        <span class="tip">Options: <span class="mono">--slug --title --timezone --force</span>, and <span class="mono">--source-document schedule.pdf</span> to extract chapters from an itinerary/run-sheet.</span>
+      </div>
+    </div>
+
+    <div class="result-line">
+      <b class="mono">→</b>
+      <span>Book lands at <b class="mono">data/albums/&lt;slug&gt;/book/index.html</b> — open it in any browser. Prefer hand-authoring <span class="mono">segments</span>/<span class="mono">lead_faces</span>? Write <span class="mono">album.yml</span> yourself and run <span class="mono">photobook-generator run --album &lt;slug&gt;</span> instead. Watch either path live in Prefect at <span class="mono">http://localhost:4200</span>.</span>
+    </div>
+
+    </div>
+  </details>
+
+  <!-- ARCHITECTURE -->
+  <details class="card" open>
+    <summary>
+      <div class="s-left">
+        <span class="acc-eyebrow">01 · Overall architecture</span>
+        <span class="acc-title">A batch pipeline over Immich + Postgres</span>
+      </div>
+      <svg class="chev" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M9 6l6 6-6 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    </summary>
+    <div class="acc-body">
+      <p class="body">Immich stores and dedupes the raw photos, shared across all albums. Our Postgres is the source of truth for everything the pipeline computes — one row per photo, scoped by <code>album_id</code> — which makes every stage resumable.</p>
+
+      <div class="diagram">
+        <svg viewBox="0 0 680 590" role="img" aria-label="Architecture: photos flow through Immich, our Prefect/Postgres pipeline, and a pluggable printer">
+          <defs>
+            <marker id="arch-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+              <path d="M0,0 L10,5 L0,10 z" fill="var(--edge)"/>
+            </marker>
+          </defs>
+
+          <path class="edge" d="M340,64 L340,100" marker-end="url(#arch-arrow)"/>
+          <path class="edge" d="M340,170 L340,206" marker-end="url(#arch-arrow)"/>
+          <path class="edge" d="M340,376 L340,404" marker-end="url(#arch-arrow)"/>
+          <path class="edge" d="M340,412 C340,424 205,424 205,440" marker-end="url(#arch-arrow)"/>
+          <path class="edge" d="M340,412 C340,424 475,424 475,440" marker-end="url(#arch-arrow)"/>
+          <path class="edge" d="M205,496 L205,516" marker-end="url(#arch-arrow)"/>
+          <path class="edge" d="M475,496 L475,516" marker-end="url(#arch-arrow)"/>
+
+          <g class="gnode node-seq"><rect x="260" y="20" width="160" height="44" rx="9"/><text x="340" y="42">Your photos</text></g>
+
+          <g class="gnode node-accent"><rect x="220" y="100" width="240" height="70" rx="10"/>
+            <text x="340" y="126">Immich</text>
+            <text class="sub" x="340" y="146">ingest · dedupe · faces/people (Docker)</text>
+          </g>
+
+          <rect class="band-neutral" x="40" y="206" width="600" height="170" rx="16"/>
+          <text class="band-label neutral" x="58" y="228">OUR PIPELINE · album_id-scoped, resumable</text>
+
+          <g class="gnode node-g1"><rect x="64" y="250" width="170" height="64" rx="9"/>
+            <text x="149" y="273">Postgres</text><text class="sub" x="149" y="292">+ pgvector, one row/photo</text>
+          </g>
+          <g class="gnode node-g1"><rect x="255" y="250" width="170" height="64" rx="9"/>
+            <text x="340" y="273">Prefect</text><text class="sub" x="340" y="292">10 tasks · DAG</text>
+          </g>
+          <g class="gnode node-g1"><rect x="446" y="250" width="170" height="64" rx="9"/>
+            <text x="531" y="273">PydanticAI</text><text class="sub" x="531" y="292">tone + caption analysis</text>
+          </g>
+
+          <text class="join" x="340" y="400">fulfill ◆ pluggable Printer</text>
+
+          <g class="gnode node-g1"><rect x="90" y="440" width="230" height="56" rx="9"/>
+            <text x="205" y="460">HtmlPrinter</text><text class="sub" x="205" y="478">default · no external service</text>
+          </g>
+          <g class="gnode node-g2"><rect x="360" y="440" width="230" height="56" rx="9"/>
+            <text x="475" y="460">LuluPrinter</text><text class="sub" x="475" y="478">opt-in · needs LULU__* + PDF host</text>
+          </g>
+
+          <g class="gnode node-seq"><rect x="90" y="516" width="230" height="50" rx="9"/><text x="205" y="541" style="font-size:12px">book/index.html</text></g>
+          <g class="gnode node-seq"><rect x="360" y="516" width="230" height="50" rx="9"/><text x="475" y="541" style="font-size:12px">Lulu print order</text></g>
+        </svg>
+        <div class="legend">
+          <span><i class="swatch sw-g1"></i> Default path — offline, no keys</span>
+          <span><i class="swatch sw-g2"></i> Opt-in path — needs credentials</span>
+        </div>
+      </div>
+
+      <p class="body" style="margin-top:18px"><b>Why Prefect:</b> per-photo retries + failure isolation across thousands of photos. <b>Why PydanticAI:</b> structured, bounded output (tone deltas, captions) with auto-retry on bad output. <b>Since step 29:</b> both are classical/offline by default (<code>ClassicalToneEstimator</code> + <code>TemplateCaptioner</code>); <code>ClaudeCaptioner</code> is opt-in.</p>
+    </div>
+  </details>
+
+  <!-- STAGES FLOW -->
+  <details class="card">
+    <summary>
+      <div class="s-left">
+        <span class="acc-eyebrow">02 · Stages flow</span>
+        <span class="acc-title">A sequential spine, plus two concurrent fan-out groups</span>
+      </div>
+      <svg class="chev" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M9 6l6 6-6 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    </summary>
+    <div class="acc-body">
+      <p class="body">Ten stages turn Immich assets into a photo book, each its own Prefect task. Solid edges are hard data dependencies; the two shaded groups read only <code>sync</code>/<code>select</code> output and write disjoint state, so they run concurrently — each opening its own pooled DB session per worker thread.</p>
+
+      <div class="diagram">
+        <svg viewBox="0 0 760 758" role="img" aria-label="Pipeline dependency DAG from sync to fulfill">
+          <defs>
+            <marker id="arrow2" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+              <path d="M0,0 L10,5 L0,10 z" fill="var(--edge)"/>
+            </marker>
+          </defs>
+
+          <rect class="band-g1" x="30" y="122" width="700" height="104" rx="14"/>
+          <text class="band-label g1" x="46" y="140">Group 1 · independent after sync</text>
+          <rect class="band-g2" x="150" y="360" width="470" height="176" rx="14"/>
+          <text class="band-label g2" x="166" y="378">Group 2 · independent after select</text>
+
+          <path class="edge" d="M380,92 C380,126 120,120 120,156" marker-end="url(#arrow2)"/>
+          <path class="edge" d="M380,92 L380,154" marker-end="url(#arrow2)"/>
+          <path class="edge" d="M380,92 C380,126 640,120 640,156" marker-end="url(#arrow2)"/>
+
+          <path class="edge" d="M120,204 C120,242 380,238 380,270" marker-end="url(#arrow2)"/>
+          <path class="edge" d="M380,204 L380,270" marker-end="url(#arrow2)"/>
+          <path class="edge" d="M640,204 C640,242 380,238 380,270" marker-end="url(#arrow2)"/>
+
+          <path class="edge" d="M380,320 C380,352 270,352 270,382" marker-end="url(#arrow2)"/>
+          <path class="edge" d="M380,320 C380,362 540,376 540,416" marker-end="url(#arrow2)"/>
+          <path class="edge" d="M270,428 L270,450" marker-end="url(#arrow2)"/>
+
+          <path class="edge" d="M270,496 C270,540 380,534 380,566" marker-end="url(#arrow2)"/>
+          <path class="edge" d="M540,462 C540,532 380,534 380,566" marker-end="url(#arrow2)"/>
+          <path class="edge" d="M380,614 L380,662" marker-end="url(#arrow2)"/>
+
+          <g class="gnode node-seq"><rect x="290" y="44" width="180" height="48" rx="9"/><text x="380" y="68">sync</text></g>
+
+          <g class="gnode node-g1"><rect x="44" y="156" width="152" height="48" rx="9"/><text x="120" y="180">resolve-leads</text></g>
+          <g class="gnode node-g1"><rect x="304" y="156" width="152" height="48" rx="9"/><text x="380" y="180">quality</text></g>
+          <g class="gnode node-g1"><rect x="564" y="156" width="152" height="48" rx="9"/><text x="640" y="180">cluster</text></g>
+
+          <g class="gnode node-seq"><rect x="290" y="272" width="180" height="48" rx="9"/><text x="380" y="296">select</text></g>
+          <text class="join" x="482" y="296">◆ join</text>
+
+          <g class="gnode node-g2"><rect x="194" y="384" width="152" height="44" rx="9"/><text x="270" y="406">enhance</text></g>
+          <g class="gnode node-g2"><rect x="194" y="452" width="152" height="44" rx="9"/><text x="270" y="474">render</text></g>
+          <g class="gnode node-g2"><rect x="464" y="416" width="152" height="44" rx="9"/><text x="540" y="438">caption</text></g>
+
+          <g class="gnode node-seq"><rect x="290" y="566" width="180" height="48" rx="9"/><text x="380" y="590">assemble</text></g>
+          <text class="join" x="482" y="590">◆ join</text>
+          <g class="gnode node-seq"><rect x="290" y="662" width="180" height="48" rx="9"/><text x="380" y="686">fulfill</text></g>
+        </svg>
+        <div class="legend">
+          <span><i class="swatch sw-seq"></i> Sequential — shared session</span>
+          <span><i class="swatch sw-g1"></i> Group 1 — runs concurrently</span>
+          <span><i class="swatch sw-g2"></i> Group 2 — runs concurrently (<span class="mono">enhance→render</span> chained)</span>
+        </div>
+      </div>
+
+      <div class="critical">
+        critical path&nbsp;&nbsp; sync <span class="hl">→</span> ( cluster ‖ quality ‖ leads ) <span class="hl">→</span> select <span class="hl">→</span> enhance → render <span class="hl">→</span> assemble <span class="hl">→</span> fulfill
+      </div>
+
+      <div class="scroll">
+        <table>
+          <thead><tr><th>Stage</th><th>Group</th><th>Responsibility</th></tr></thead>
+          <tbody>
+            <tr><td><span class="stg">sync</span></td><td><span class="pill seq">seq</span></td><td>The boundary — pull the album's assets from Immich, keyed on asset id.</td></tr>
+            <tr><td><span class="stg">resolve-leads</span></td><td><span class="pill g1">1</span></td><td>Resolve <code>album.yml</code> priority subjects to Immich people; mark them lead.</td></tr>
+            <tr><td><span class="stg">quality</span></td><td><span class="pill g1">1</span></td><td>Score blur + aesthetic + CLIP embedding.</td></tr>
+            <tr><td><span class="stg">cluster</span></td><td><span class="pill g1">1</span></td><td>Assign each photo to a segment (timestamp) and a scene (gap detection).</td></tr>
+            <tr><td><span class="stg">select</span></td><td><span class="pill seq">seq</span></td><td>Diversity- + people-aware best-of-scene via MMR; near-dup suppression.</td></tr>
+            <tr><td><span class="stg">enhance</span></td><td><span class="pill g2">2</span></td><td>Estimate bounded tone deltas (classical/offline by default); write XMP sidecars.</td></tr>
+            <tr><td><span class="stg">render</span></td><td><span class="pill g2">2</span></td><td>Batch <code>darktable-cli</code> over the sidecars → corrected JPEGs.</td></tr>
+            <tr><td><span class="stg">caption</span></td><td><span class="pill g2">2</span></td><td>Every selected photo gets a caption (shared analysis call).</td></tr>
+            <tr><td><span class="stg">assemble</span></td><td><span class="pill seq">seq</span></td><td>Jinja2 grid layouts → print-ready PDF via WeasyPrint.</td></tr>
+            <tr><td><span class="stg">fulfill</span></td><td><span class="pill seq">seq</span></td><td>Deliver via a pluggable Printer — HTML (default) or Lulu.</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </details>
+
+  <!-- PROCESS -->
+  <details class="card">
+    <summary>
+      <div class="s-left">
+        <span class="acc-eyebrow">03 · Process</span>
+        <span class="acc-title">Test-driven, one branch per step, squash-merged</span>
+      </div>
+      <svg class="chev" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M9 6l6 6-6 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    </summary>
+    <div class="acc-body">
+      <p class="body">The order is fixed — <b>checks → sub-agent review → user review → commit</b> — and any change re-runs what precedes it.</p>
+      <ol class="steplist">
+        <li><span class="n">1</span><p>Take the next <b>todo</b> step from the progress tracker.</p></li>
+        <li><span class="n">2</span><p>Branch off <code>main</code> (<code>step-NN-&lt;slug&gt;</code>) — <b>never commit to <code>main</code></b>; a <code>no-commit-to-branch</code> hook enforces it.</p></li>
+        <li><span class="n">3</span><p>Load the step's context and implement <b>test-first</b>.</p></li>
+        <li><span class="n">4</span><p>Get <code>uv run poe check</code> green (or the step's manual verification) before any review starts.</p></li>
+        <li><span class="n">5</span><p><b>Sub-agent review</b> the diff — up to 4 broad-scope agents (2 adversarial correctness, 1 style/reuse, 1 architecture). Address comments, re-check, re-review until clean.</p></li>
+        <li><span class="n">6</span><p><b>User review</b> — skipped per standing instruction; merges autonomously once checks + sub-agent review are clean.</p></li>
+        <li><span class="n">7</span><p><b>Squash</b> into one <code>&lt;stage&gt;: &lt;what changed&gt;</code> commit, update the tracker + change log, <b>fast-forward merge</b> to <code>main</code>, push, delete the branch.</p></li>
+      </ol>
+
+      <p class="acc-eyebrow" style="margin-top:22px; display:block;">The commit gate — <span class="mono">uv run poe check</span></p>
+      <div class="gate">
+        <span>ruff check</span><span class="plus">+</span>
+        <span>ruff format --check</span><span class="plus">+</span>
+        <span>basedpyright</span><span class="plus">+</span>
+        <span>xenon (CC ≤ 5, grade A)</span><span class="plus">+</span>
+        <span>pytest</span>
+      </div>
+
+      <p class="acc-eyebrow" style="margin-top:22px; display:block;">Non-negotiable rules</p>
+      <div class="gate">
+        <span>generic — no trip/wedding concepts in src/</span>
+        <span>segments optional</span>
+        <span>album_id first</span>
+        <span>stage = its own Prefect task</span>
+        <span>bounded tone deltas only</span>
+        <span>config.py owns env vars</span>
+        <span>idempotent stages</span>
+        <span>alembic, never create_all()</span>
+      </div>
+    </div>
+  </details>
+
+  <!-- COMMANDS -->
+  <details class="card">
+    <summary>
+      <div class="s-left">
+        <span class="acc-eyebrow">04 · Commands</span>
+        <span class="acc-title">Everyday <span class="mono">poe</span> tasks</span>
+      </div>
+      <svg class="chev" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M9 6l6 6-6 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    </summary>
+    <div class="acc-body">
+      <p class="body">Encoded as <code>poethepoet</code> tasks in <code>pyproject.toml</code>, triggerable via <code>uv run poe &lt;task&gt;</code>.</p>
+      <div class="scroll">
+        <table>
+          <thead><tr><th>Command</th><th>What it does</th></tr></thead>
+          <tbody>
+            <tr><td class="mono-cell">uv run poe check</td><td>lint + format-check + typecheck + complexity + test — <b>the commit gate</b></td></tr>
+            <tr><td class="mono-cell">uv run poe lint</td><td><code>ruff check .</code></td></tr>
+            <tr><td class="mono-cell">uv run poe format</td><td><code>ruff format .</code> (writes)</td></tr>
+            <tr><td class="mono-cell">uv run poe typecheck</td><td><code>basedpyright</code></td></tr>
+            <tr><td class="mono-cell">uv run poe complexity</td><td><code>xenon</code> — absolute A / modules A / average A</td></tr>
+            <tr><td class="mono-cell">uv run poe metrics</td><td>non-gating radon report (complexity + maintainability)</td></tr>
+            <tr><td class="mono-cell">uv run poe test</td><td><code>pytest</code>, full suite</td></tr>
+            <tr><td class="mono-cell">uv run poe up / down</td><td><code>docker compose up / down</code> — the full local stack</td></tr>
+            <tr><td class="mono-cell">uv run poe migrate</td><td><code>alembic upgrade head</code></td></tr>
+            <tr><td class="mono-cell">uv run poe makemigration -- -m "…"</td><td><code>alembic revision --autogenerate</code></td></tr>
+            <tr><td class="mono-cell">uv run poe run -- --album &lt;slug&gt;</td><td>run the pipeline flow for one album</td></tr>
+            <tr><td class="mono-cell">uv run poe generate -- &lt;dir&gt;</td><td>one-shot ingest: folder → Immich album → <code>album.yml</code> → run</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p class="body" style="margin-top:14px">Also a console entry point: <code>uv run photobook-generator run --album &lt;slug&gt;</code> / <code>generate &lt;dir&gt;</code> — <code>poe run</code>/<code>poe generate</code> just wrap it for symmetry with the other tasks.</p>
+
+      <div class="note">
+        <span class="badge">Note</span>
+        <span>The LAION-style aesthetic predictor + CLIP embedder (<code>open_clip</code>/<code>torch</code>) is the one deliberately deferred dependency — <code>select</code>'s MMR has a tested fallback for missing scores/embeddings, so a run still completes with degraded curation quality until it's wired.</span>
+      </div>
+    </div>
+  </details>
+
+  <footer>
+    <span>photobook-transformer · generated from knowledge/</span>
+    <span>see AGENTS.md + knowledge/index.md for the full bundle</span>
+  </footer>
+</main>

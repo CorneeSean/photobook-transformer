@@ -150,13 +150,13 @@
 
 <main>
   <p class="eyebrow">Architecture note · photobook-transformer</p>
-  <h1>The transform pipeline is a DAG run as a line.</h1>
-  <p class="lead">Eleven <span class="mono">@task</span> stages turn Immich assets into a photo book. Today they run <b>strictly sequentially</b> on one shared DB session — but the underlying data dependencies form a <b>DAG</b> with two fan-out groups that could run concurrently. Here's the shape, and the Prefect change to unlock it.</p>
+  <h1>The transform pipeline runs as a DAG, not a line.</h1>
+  <p class="lead">Ten <span class="mono">@task</span> stages turn Immich assets into a photo book. <span class="mono">flow/_flow.py</span> runs them as a <b>DAG</b>: a sequential spine of four stages sharing one DB session, plus two concurrent fan-out groups that each open their own pooled session per worker thread. Here's the shape, and the mechanism that makes it safe.</p>
 
   <div class="meta">
-    <div><div class="k">Stages</div><div class="v">11 <span class="u">+ bootstrap</span></div></div>
-    <div><div class="k">Runs as</div><div class="v">Linear chain <span class="u">· 1 session</span></div></div>
-    <div><div class="k">Truly is</div><div class="v">DAG <span class="u">· 2 fan-outs</span></div></div>
+    <div><div class="k">Stages</div><div class="v">10 <span class="u">+ bootstrap</span></div></div>
+    <div><div class="k">Sequential spine</div><div class="v">4 <span class="u">· 1 shared session</span></div></div>
+    <div><div class="k">Fan-out groups</div><div class="v">2 <span class="u">· own session/task</span></div></div>
     <div><div class="k">Orchestrator</div><div class="v">Prefect 3</div></div>
   </div>
 
@@ -213,23 +213,23 @@
     </svg>
     <div class="legend">
       <span><i class="swatch sw-seq"></i> Sequential — shared session</span>
-      <span><i class="swatch sw-g1"></i> Group 1 — parallelisable</span>
-      <span><i class="swatch sw-g2"></i> Group 2 — parallelisable (<span class="mono">enhance→render</span> chained)</span>
+      <span><i class="swatch sw-g1"></i> Group 1 — runs concurrently</span>
+      <span><i class="swatch sw-g2"></i> Group 2 — runs concurrently (<span class="mono">enhance→render</span> chained)</span>
     </div>
   </div>
 
-  <h2>Two readings</h2>
-  <p class="h2sub">The execution is a line; the dependencies are not.</p>
+  <h2>Then vs now</h2>
+  <p class="h2sub">Build step 25 turned the dependency shape into the execution shape.</p>
   <div class="cols">
     <div class="card">
-      <span class="tag" style="color:var(--muted)">Original design</span>
+      <span class="tag" style="color:var(--muted)">Original design (steps 1–24)</span>
       <h3>Linear chain</h3>
-      <p>One shared <code>Session</code>, committed after every stage (<code>flow/_flow.py</code>). Simple, resumable, one DB connection — each stage isolates its own per-photo failures, so no Prefect-level fan-out was needed to get correct. (Superseded: the fan-out DAG below is now implemented — see the companion <code>pipeline-execution.md</code> status note.)</p>
+      <p>One shared <code>Session</code>, committed after every stage. Simple, resumable, one DB connection — each stage isolated its own per-photo failures, so no Prefect-level fan-out was needed to get correct. Left real concurrency on the table: the data dependencies were a DAG the whole time.</p>
     </div>
     <div class="card">
-      <span class="tag" style="color:var(--accent)">As data flows</span>
+      <span class="tag" style="color:var(--accent)">Current (step 25, merged)</span>
       <h3>Diamond DAG</h3>
-      <p>Three stages need only <code>sync</code>; two branches feed <code>assemble</code>. Strip away the "one session, one thread" choice and two independent fan-out groups appear, each with a clean join.</p>
+      <p>Three stages need only <code>sync</code>; two branches feed <code>assemble</code>. Each fan-out stage now opens its own pooled session per worker thread and <span class="mono">.submit()</span>s to Prefect's <code>ThreadPoolTaskRunner</code>, so the two independent groups actually run concurrently.</p>
     </div>
   </div>
 
@@ -271,7 +271,7 @@
         <tr><td><span class="stg">quality</span></td><td><span class="pill g1">1</span></td><td>Score blur (Laplacian, real) + aesthetic + CLIP embedding (ML, deferred).</td><td class="writes">Photo scores</td></tr>
         <tr><td><span class="stg">cluster</span></td><td><span class="pill g1">1</span></td><td>Assign each photo to a segment (by timestamp) and a scene (gap detection).</td><td class="writes">segment_id, Scene</td></tr>
         <tr><td><span class="stg">select</span></td><td><span class="pill seq">seq</span></td><td>Diversity- + people-aware best-of-scene via MMR; near-dup suppression via embeddings.</td><td class="writes">Photo.selected</td></tr>
-        <tr><td><span class="stg">enhance</span></td><td><span class="pill g2">2</span></td><td>Vision call estimates bounded tone deltas; classical code writes XMP sidecars.</td><td class="writes">XMP sidecars</td></tr>
+        <tr><td><span class="stg">enhance</span></td><td><span class="pill g2">2</span></td><td>Estimate bounded tone deltas (classical/offline by default); classical code writes XMP sidecars.</td><td class="writes">XMP sidecars</td></tr>
         <tr><td><span class="stg">render</span></td><td><span class="pill g2">2</span></td><td>Batch <code>darktable-cli</code> over the sidecars → corrected JPEGs.</td><td class="writes">JPEG files</td></tr>
         <tr><td><span class="stg">caption</span></td><td><span class="pill g2">2</span></td><td>Guarantee every selected photo has a caption (same shared analysis call).</td><td class="writes">Photo.caption</td></tr>
         <tr><td><span class="stg">assemble</span></td><td><span class="pill seq">seq</span></td><td>Lay photos into Jinja2 grid templates; render a print-ready PDF via WeasyPrint.</td><td class="writes">book PDF</td></tr>
@@ -280,7 +280,7 @@
     </table>
   </div>
 
-  <h2>The change</h2>
+  <h2>How it's implemented</h2>
   <p class="h2sub">One structural idea — own session per concurrent task — plus a few <span class="mono">submit()</span> / <span class="mono">result()</span> calls.</p>
 
   <div class="stack">
@@ -328,7 +328,7 @@ FulfillStage(printer, album_id, shared).run_as_task()</code></pre>
   </div>
 
   <h2>What it costs</h2>
-  <p class="h2sub">The task graph already permits it — these are the real edges to mind.</p>
+  <p class="h2sub">The real edges the current design has to mind.</p>
   <div class="scroll">
     <table>
       <thead><tr><th>Concern</th><th>Detail</th></tr></thead>
@@ -343,7 +343,7 @@ FulfillStage(printer, album_id, shared).run_as_task()</code></pre>
 
   <div class="note">
     <span class="badge">Net</span>
-    <span>The whole change is <b>own session per concurrent task + two <code>submit</code>/<code>result</code> fences</b>. The real win lands in group 2, where <code>caption</code> disappears entirely into the shadow of the <code>enhance→render</code> chain.</span>
+    <span>The whole mechanism is <b>own session per concurrent task + two <code>submit</code>/<code>result</code> fences</b>. The real win lands in group 2, where <code>caption</code> disappears entirely into the shadow of the <code>enhance→render</code> chain.</span>
   </div>
 
   <footer>
