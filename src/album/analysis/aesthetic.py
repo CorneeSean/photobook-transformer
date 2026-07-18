@@ -20,7 +20,17 @@ Homed in ``analysis/`` alongside the other heavy/local ML (``tone_estimator``,
   :func:`~album.flow._flow._build_quality_model`'s graceful fallback (and the wiring
   tests) never pay the ~1.7 GB load. The heavy load happens lazily on the first
   ``score``/``embed`` call.
+
+**`torch`/`open_clip` are an OPTIONAL extra, so basedpyright can't hard-require them.**
+This one module gets a file-scoped ``reportMissingImports=false`` (a single-rule
+override, *not* a blanket ``# pyright: ignore``) so that a plain ``uv sync`` (which
+omits the ``scoring`` extra) still passes ``poe check`` — the whole point of keeping
+torch opt-in. When a dev/CI runs ``uv sync --extra scoring`` the imports resolve and
+this module is fully type-checked as normal; the override only relaxes *missing-import*
+resolution for torch/open_clip, nothing else.
 """
+
+# pyright: reportMissingImports=false
 
 from __future__ import annotations
 

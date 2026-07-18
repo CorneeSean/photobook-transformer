@@ -48,6 +48,16 @@ bodies this log cites; keep entries tight (see
   no `[tool.uv] default-extras` to auto-install it, so a plain `uv sync` then `poe check`
   fails on `reportMissingImports`; documented in the playbook's Risks.
 
+* **Step 31 follow-up — `poe check` made robust to a plain `uv sync`** (user-directed).
+  Fixed the dev-setup wart above: a file-scoped `# pyright: reportMissingImports=false`
+  in `analysis/aesthetic.py` (single-rule override for the one optional-torch module, not
+  a blanket ignore) so the gate passes without the `scoring` extra. Chosen over a default
+  dependency-group (which `--no-dev` wouldn't exclude → would bloat the production Docker
+  image) — the pyright-side fix touches no install path. Verified both ways: torch absent
+  (plain `uv sync`) → `poe check` green (353/6); torch present (`--extra scoring`) →
+  basedpyright clean (override not flagged unnecessary) + `poe test-scoring` green, and the
+  adapter is fully type-checked. CI should still `uv sync --extra scoring` for full coverage.
+
 * **Convention added — commit body vs. `log.md` split + "Be concise" (user-directed).**
   [working-agreement.md](/process/working-agreement.md): a "Be concise" principle
   over all output, and a Git-workflow subsection dividing labour — commit bodies own

@@ -27,6 +27,7 @@ from album.analysis.aesthetic import (
     _check_dim,
     _require_capability,
     _require_supported_device,
+    _require_usable_precision,
 )
 from album.config import QualitySettings
 
@@ -67,8 +68,11 @@ class TestRequireCapability:
     """Construction-time fail-fast — all cheap, none import torch."""
 
     def test_rejects_fp16_on_cpu(self) -> None:
+        # Call the sub-check directly (like the device test below), so it's isolated
+        # from `_require_capability`'s torch/extra check — the precision rule holds
+        # whether or not the `scoring` extra is installed.
         with pytest.raises(ValueError, match="fp16"):
-            _require_capability(QualitySettings(precision="fp16", device="cpu"))
+            _require_usable_precision(QualitySettings(precision="fp16", device="cpu"))
 
     def test_rejects_an_unsupported_device(self) -> None:
         # A bogus QUALITY__DEVICE fails at construction (one clean fallback) rather than

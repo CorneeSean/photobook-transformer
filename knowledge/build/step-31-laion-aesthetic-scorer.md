@@ -334,9 +334,17 @@ head); torch install ~0.3–1 GB one-time (platform-dependent) → budget ~1.5�
   `scoring` is enabled — see [Runtime memory footprint & lifetime](#runtime-memory-footprint--lifetime).
   Keeping torch in an extra (not base deps) is the mitigation; state the size in the
   extra's note so nobody adds it to base deps.
-- **basedpyright vs an uninstalled extra.** Lazy imports keep the module importable;
-  the dev/CI env must `uv sync --extra scoring` so pyright resolves the symbols — else
-  `reportMissingImports`. Do **not** paper over it with blanket `# pyright: ignore`.
+- **basedpyright vs an uninstalled extra — resolved.** Lazy imports keep the module
+  importable at runtime, but basedpyright resolves imports statically, so a plain
+  `uv sync` (no `scoring` extra) would fail `poe check` with `reportMissingImports`.
+  Fixed with a **file-scoped `# pyright: reportMissingImports=false`** in
+  `analysis/aesthetic.py` (a single-rule override for the one optional-torch module —
+  *not* a blanket `# pyright: ignore`), so the gate is green on a plain `uv sync`. When
+  a dev/CI runs `uv sync --extra scoring` the imports resolve and the adapter is fully
+  type-checked as normal — so CI should install the extra for full coverage. (uv 0.11.28
+  has no `[tool.uv] default-extras`, and torch can't go in a default dependency-group
+  without either bloating the `--no-dev` production image or per-group Dockerfile
+  juggling — hence the pyright-side fix, which touches no install path.)
 - **CPU throughput.** ViT-L/14 on CPU over thousands of thumbnails is slow but
   one-shot per photo and idempotent (`_already_scored`), so a resumed run doesn't
   repay it. Speed is a config flip, not code: `quality.device="mps"` (Apple Silicon)
