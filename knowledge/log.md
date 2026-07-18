@@ -6,6 +6,30 @@ bodies this log cites; keep entries tight (see
 
 ## 2026-07-19
 
+* **Step 35 — folder-structure-driven ingestion docs + genericity gate** (`38a3aee`;
+  [step-35-docs-verify.md](/build/step-35-docs-verify.md)). Closes the
+  [folder-structure-driven ingestion playbook](/build/folder-structure-ingestion.md)
+  (steps 32–35 all merged). User-facing docs landed (README "Multiple albums from one
+  folder tree", `album-definition.md`'s "three sources, one shape" note,
+  `folder-structure.md`'s `ingest.py` fan-out line, and a consolidated **As-built**
+  preamble on the umbrella reconciling the 32–35 deviations). The verification gate is
+  two-part: (1) a **scoped token guard** asserting `manifest.py`/`text.py`/`ingest.py`
+  carry no trip/day/itinerary/occasion vocabulary — deliberately *not* a whole-`src/`
+  grep, because the rest of `src/` legitimately *discusses* genericity ("nothing here
+  knows the occasion") and uses "round-trip", so a blanket grep would false-positive; and
+  (2) an **end-to-end test** over a committed two-album fixture tree
+  (`tests/fixtures/manifest_tree`) that drives the real `load_manifest` + `_ingest_all` +
+  materialization + a patched pipeline, proving N albums → N `album.yml` (one
+  folder-windowed, one zero-segment) → N pipeline runs — the `smith-wedding` genericity
+  precedent applied to fan-out. `DatingIngestClient` was hoisted to `tests/doubles.py`
+  (now shared) and `ingest.py`'s module docstring dropped its lone "occasion" mention so
+  the guarded modules stay token-clean. 2-agent review (adversarial + style/docs): the
+  adversarial pass caught a stray `open-questions.md` frontmatter corruption (`1---`) —
+  an accidental edit unrelated to the step — which was reverted; otherwise the gate and
+  docs were found sound. `poe check` green (408 passed, 6 skipped). Live multi-album
+  fan-out against a real Immich remains folded into the standing first-live-run gap; the
+  fixture-tree e2e is the offline stand-in.
+
 * **Step 34 — manifest fan-out + `generate --manifest`** (`0e67990`;
   [step-34-fanout-cli.md](/build/step-34-fanout-cli.md)). `ingest_manifest` ingests
   every album a manifest declares under ONE shared `ImmichClient`, returning an
