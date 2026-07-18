@@ -6,6 +6,30 @@ bodies this log cites; keep entries tight (see
 
 ## 2026-07-19
 
+* **Step 34 — manifest fan-out + `generate --manifest`** (`0e67990`;
+  [step-34-fanout-cli.md](/build/step-34-fanout-cli.md)). `ingest_manifest` ingests
+  every album a manifest declares under ONE shared `ImmichClient`, returning an
+  `AlbumOutcome` per album (slug on success, error on an isolated failure); the loop
+  lives in `_ingest_all` so it unit-tests with a fake client, mirroring
+  `ingest_directory`/`DirectoryIngestor`. `ingest.py` stays pipeline-free — it owns the
+  ingest fan-out only; the CLI turns outcomes into pipeline runs. `generate --manifest`
+  (opt-in; a stray `ingest.yml` never changes flat `generate`) rejects the per-album
+  flags, threads the globals (`--timezone/--captioner/--force`), runs the pipeline once
+  per ingested album with per-album isolation, and prints a combined books-written /
+  albums-failed summary — exit non-zero only when *every* album failed (partial success
+  is success). 4-agent review (2× correctness, style/reuse, architecture): no correctness
+  defects; two applied fixes — the refute pass caught the captioner being resolved
+  *outside* the manifest-mode error guard (a bad `CAPTIONER` env would crash with a raw
+  traceback *after* GBs of uploads), so it now resolves up front inside the guard, failing
+  fast; and the book-path print was DRY'd into a `_book_path` helper. **As-built trade-off
+  upheld under review:** the per-album pipeline catch is deliberately narrow
+  (`FileNotFoundError, ValueError`), so an *unexpected* exception aborts the batch before
+  the summary prints — consistent with `_generate_single`'s "let real bugs surface"
+  convention; broadening it is a future call if batch-completion is later valued over
+  fail-fast. `poe check` green (404 passed, 6 skipped); live multi-album fan-out deferred
+  to the standing no-reachable-Immich gap. Steps 32–34 (the feature's code) are now
+  complete; only step 35 (user docs + e2e genericity gate) remains.
+
 * **Step 33 — folder-derived segments in `ingest.py`** (`28c3ba0`;
   [step-33-folder-segments.md](/build/step-33-folder-segments.md)). New
   `DirectoryIngestor.ingest_album(spec, root)` ingests one manifest album, deriving
