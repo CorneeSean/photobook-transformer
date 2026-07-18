@@ -194,22 +194,22 @@
       <path class="edge d4" d="M380,614 L380,662" marker-end="url(#arrow)"/>
 
       <!-- nodes -->
-      <g class="gnode node-seq"><rect x="290" y="44" width="180" height="48" rx="9"/><text x="380" y="68">sync</text></g>
+      <g class="gnode node-seq"><title>sync — Immich REST client (httpx); no model, pulls assets/exif/faces</title><rect x="290" y="44" width="180" height="48" rx="9"/><text x="380" y="68">sync</text></g>
 
-      <g class="gnode node-g1"><rect x="44" y="156" width="152" height="48" rx="9"/><text x="120" y="180">resolve-leads</text></g>
-      <g class="gnode node-g1"><rect x="304" y="156" width="152" height="48" rx="9"/><text x="380" y="180">quality</text></g>
-      <g class="gnode node-g1"><rect x="564" y="156" width="152" height="48" rx="9"/><text x="640" y="180">cluster</text></g>
+      <g class="gnode node-g1"><title>resolve-leads — Immich People API (face clustering happens in Immich; we map names to person ids)</title><rect x="44" y="156" width="152" height="48" rx="9"/><text x="120" y="180">resolve-leads</text></g>
+      <g class="gnode node-g1"><title>quality — OpenCV Laplacian variance (blur) + ClipAestheticModel: CLIP ViT-L/14 via open_clip + LAION aesthetic head, opt-in scoring extra</title><rect x="304" y="156" width="152" height="48" rx="9"/><text x="380" y="180">quality</text></g>
+      <g class="gnode node-g1"><title>cluster — time-gap heuristic (segments) + scikit-learn DBSCAN over lat/lon (scenes)</title><rect x="564" y="156" width="152" height="48" rx="9"/><text x="640" y="180">cluster</text></g>
 
-      <g class="gnode node-seq"><rect x="290" y="272" width="180" height="48" rx="9"/><text x="380" y="296">select</text></g>
+      <g class="gnode node-seq"><title>select — MMR (greedy diversity) + pgvector cosine similarity over CLIP embeddings for near-dup suppression</title><rect x="290" y="272" width="180" height="48" rx="9"/><text x="380" y="296">select</text></g>
       <text class="join" x="482" y="296">◆ join</text>
 
-      <g class="gnode node-g2"><rect x="194" y="384" width="152" height="44" rx="9"/><text x="270" y="406">enhance</text></g>
-      <g class="gnode node-g2"><rect x="194" y="452" width="152" height="44" rx="9"/><text x="270" y="474">render</text></g>
-      <g class="gnode node-g2"><rect x="464" y="416" width="152" height="44" rx="9"/><text x="540" y="438">caption</text></g>
+      <g class="gnode node-g2"><title>enhance — ClassicalToneEstimator: scikit-image histogram matching, bounded deltas; writes XMP sidecars</title><rect x="194" y="384" width="152" height="44" rx="9"/><text x="270" y="406">enhance</text></g>
+      <g class="gnode node-g2"><title>render — DarktableRenderer, shells out to the darktable-cli binary</title><rect x="194" y="452" width="152" height="44" rx="9"/><text x="270" y="474">render</text></g>
+      <g class="gnode node-g2"><title>caption — TemplateCaptioner (offline default) or ClaudeCaptioner (opt-in, Claude API)</title><rect x="464" y="416" width="152" height="44" rx="9"/><text x="540" y="438">caption</text></g>
 
-      <g class="gnode node-seq"><rect x="290" y="566" width="180" height="48" rx="9"/><text x="380" y="590">assemble</text></g>
+      <g class="gnode node-seq"><title>assemble — Jinja2 grid templates rendered to PDF via WeasyPrint</title><rect x="290" y="566" width="180" height="48" rx="9"/><text x="380" y="590">assemble</text></g>
       <text class="join" x="482" y="590">◆ join</text>
-      <g class="gnode node-seq"><rect x="290" y="662" width="180" height="48" rx="9"/><text x="380" y="686">fulfill</text></g>
+      <g class="gnode node-seq"><title>fulfill — pluggable Printer: HtmlPrinter (default) or LuluPrinter (opt-in, Lulu API)</title><rect x="290" y="662" width="180" height="48" rx="9"/><text x="380" y="686">fulfill</text></g>
     </svg>
     <div class="legend">
       <span><i class="swatch sw-seq"></i> Sequential — shared session</span>
@@ -264,18 +264,18 @@
   <p class="h2sub">Every stage is <span class="mono">album_id</span>-scoped and reads from our DB — Immich is touched only at <span class="mono">sync</span>.</p>
   <div class="scroll">
     <table>
-      <thead><tr><th>Stage</th><th>Group</th><th>Responsibility</th><th>Writes</th></tr></thead>
+      <thead><tr><th>Stage</th><th>Group</th><th>Responsibility</th><th>Model / tech</th><th>Writes</th></tr></thead>
       <tbody>
-        <tr><td><span class="stg">sync</span></td><td><span class="pill seq">seq</span></td><td><b>The boundary.</b> Pull the album's assets from Immich, keyed on asset id. Idempotent.</td><td class="writes">Photo</td></tr>
-        <tr><td><span class="stg">resolve-leads</span></td><td><span class="pill g1">1</span></td><td>Resolve <code>album.yml</code> priority subjects to Immich people; mark them lead.</td><td class="writes">Person.is_lead</td></tr>
-        <tr><td><span class="stg">quality</span></td><td><span class="pill g1">1</span></td><td>Score blur (Laplacian, real) + aesthetic + CLIP embedding &mdash; real ClipAestheticModel (ViT-L/14 + LAION head, step 31), behind the opt-in <code>scoring</code> extra with a NULL-scoring fallback.</td><td class="writes">Photo scores</td></tr>
-        <tr><td><span class="stg">cluster</span></td><td><span class="pill g1">1</span></td><td>Assign each photo to a segment (by timestamp) and a scene (gap detection).</td><td class="writes">segment_id, Scene</td></tr>
-        <tr><td><span class="stg">select</span></td><td><span class="pill seq">seq</span></td><td>Diversity- + people-aware best-of-scene via MMR; near-dup suppression via embeddings.</td><td class="writes">Photo.selected</td></tr>
-        <tr><td><span class="stg">enhance</span></td><td><span class="pill g2">2</span></td><td>Estimate bounded tone deltas (classical/offline by default); classical code writes XMP sidecars.</td><td class="writes">XMP sidecars</td></tr>
-        <tr><td><span class="stg">render</span></td><td><span class="pill g2">2</span></td><td>Batch <code>darktable-cli</code> over the sidecars → corrected JPEGs.</td><td class="writes">JPEG files</td></tr>
-        <tr><td><span class="stg">caption</span></td><td><span class="pill g2">2</span></td><td>Guarantee every selected photo has a caption (same shared analysis call).</td><td class="writes">Photo.caption</td></tr>
-        <tr><td><span class="stg">assemble</span></td><td><span class="pill seq">seq</span></td><td>Lay photos into Jinja2 grid templates; render a print-ready PDF via WeasyPrint.</td><td class="writes">book PDF</td></tr>
-        <tr><td><span class="stg">fulfill</span></td><td><span class="pill seq">seq</span></td><td>Deliver via a pluggable Printer — HTML book (default) or Lulu order.</td><td class="writes">deliverable</td></tr>
+        <tr><td><span class="stg">sync</span></td><td><span class="pill seq">seq</span></td><td><b>The boundary.</b> Pull the album's assets from Immich, keyed on asset id. Idempotent.</td><td class="mono" style="color:var(--muted)">Immich REST client (httpx) — no model</td><td class="writes">Photo</td></tr>
+        <tr><td><span class="stg">resolve-leads</span></td><td><span class="pill g1">1</span></td><td>Resolve <code>album.yml</code> priority subjects to Immich people; mark them lead.</td><td class="mono" style="color:var(--muted)">Immich People API — face clustering is Immich's, we just map names → person ids</td><td class="writes">Person.is_lead</td></tr>
+        <tr><td><span class="stg">quality</span></td><td><span class="pill g1">1</span></td><td>Score blur (Laplacian, real) + aesthetic + CLIP embedding &mdash; real ClipAestheticModel (ViT-L/14 + LAION head, step 31), behind the opt-in <code>scoring</code> extra with a NULL-scoring fallback.</td><td class="mono" style="color:var(--muted)">OpenCV Laplacian (blur) + <code>ClipAestheticModel</code>: OpenAI CLIP ViT-L/14 via <code>open_clip</code>, LAION aesthetic head (768-dim)</td><td class="writes">Photo scores</td></tr>
+        <tr><td><span class="stg">cluster</span></td><td><span class="pill g1">1</span></td><td>Assign each photo to a segment (by timestamp) and a scene (gap detection).</td><td class="mono" style="color:var(--muted)">Time-gap heuristic (segments) + scikit-learn <code>DBSCAN</code> over lat/lon (scenes)</td><td class="writes">segment_id, Scene</td></tr>
+        <tr><td><span class="stg">select</span></td><td><span class="pill seq">seq</span></td><td>Diversity- + people-aware best-of-scene via MMR; near-dup suppression via embeddings.</td><td class="mono" style="color:var(--muted)">Greedy MMR + <code>pgvector</code> cosine similarity over CLIP embeddings</td><td class="writes">Photo.selected</td></tr>
+        <tr><td><span class="stg">enhance</span></td><td><span class="pill g2">2</span></td><td>Estimate bounded tone deltas (classical/offline by default); classical code writes XMP sidecars.</td><td class="mono" style="color:var(--muted)"><code>ClassicalToneEstimator</code> — scikit-image histogram matching, bounded deltas</td><td class="writes">XMP sidecars</td></tr>
+        <tr><td><span class="stg">render</span></td><td><span class="pill g2">2</span></td><td>Batch <code>darktable-cli</code> over the sidecars → corrected JPEGs.</td><td class="mono" style="color:var(--muted)"><code>DarktableRenderer</code> — shells out to <code>darktable-cli</code></td><td class="writes">JPEG files</td></tr>
+        <tr><td><span class="stg">caption</span></td><td><span class="pill g2">2</span></td><td>Guarantee every selected photo has a caption (same shared analysis call).</td><td class="mono" style="color:var(--muted)"><code>TemplateCaptioner</code> (offline default) / <code>ClaudeCaptioner</code> (opt-in, Claude API)</td><td class="writes">Photo.caption</td></tr>
+        <tr><td><span class="stg">assemble</span></td><td><span class="pill seq">seq</span></td><td>Lay photos into Jinja2 grid templates; render a print-ready PDF via WeasyPrint.</td><td class="mono" style="color:var(--muted)">Jinja2 templates + WeasyPrint (HTML → PDF)</td><td class="writes">book PDF</td></tr>
+        <tr><td><span class="stg">fulfill</span></td><td><span class="pill seq">seq</span></td><td>Deliver via a pluggable Printer — HTML book (default) or Lulu order.</td><td class="mono" style="color:var(--muted)"><code>HtmlPrinter</code> (default) / <code>LuluPrinter</code> (opt-in, Lulu API)</td><td class="writes">deliverable</td></tr>
       </tbody>
     </table>
   </div>
@@ -351,3 +351,18 @@ FulfillStage(printer, album_id, shared).run_as_task()</code></pre>
     <span>implemented (build step 25, later restructured)</span>
   </footer>
 </main>
+
+<script>
+  // Lets README.html embed this page in an iframe and size it to fit. No-op when opened standalone.
+  (function () {
+    if (window.parent === window) return;
+    function reportHeight() {
+      window.parent.postMessage({ pipelineEmbedHeight: document.documentElement.scrollHeight }, "*");
+    }
+    window.addEventListener("message", (e) => {
+      if (e.data === "pipeline-embed:measure") reportHeight();
+    });
+    window.addEventListener("load", reportHeight);
+    new ResizeObserver(reportHeight).observe(document.documentElement);
+  })();
+</script>

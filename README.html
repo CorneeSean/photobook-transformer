@@ -316,7 +316,7 @@ uv run poe migrate</code></pre>
   </details>
 
   <!-- STAGES FLOW -->
-  <details class="card">
+  <details class="card" id="stages-flow-details">
     <summary>
       <div class="s-left">
         <span class="acc-eyebrow">02 · Stages flow</span>
@@ -325,82 +325,12 @@ uv run poe migrate</code></pre>
       <svg class="chev" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M9 6l6 6-6 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
     </summary>
     <div class="acc-body">
-      <p class="body">Ten stages turn Immich assets into a photo book, each its own Prefect task. Solid edges are hard data dependencies; the two shaded groups read only <code>sync</code>/<code>select</code> output and write disjoint state, so they run concurrently — each opening its own pooled DB session per worker thread.</p>
+      <p class="body">Ten stages turn Immich assets into a photo book, each its own Prefect task. Solid edges are hard data dependencies; the two shaded groups read only <code>sync</code>/<code>select</code> output and write disjoint state, so they run concurrently — each opening its own pooled DB session per worker thread. Diagram nodes carry a hover tooltip and the table below lists the concrete model/library behind each stage; this is the same document as <span class="mono">knowledge/foundations/pipeline-execution.html</span>, embedded live so the two can never drift apart.</p>
 
-      <div class="diagram">
-        <svg viewBox="0 0 760 758" role="img" aria-label="Pipeline dependency DAG from sync to fulfill">
-          <defs>
-            <marker id="arrow2" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
-              <path d="M0,0 L10,5 L0,10 z" fill="var(--edge)"/>
-            </marker>
-          </defs>
+      <iframe id="pipeline-embed" src="knowledge/foundations/pipeline-execution.html" title="Transform pipeline — DAG &amp; parallelisation"
+        style="width:100%; height:420px; border:0; display:block; border-radius:14px; margin-top:14px; background:var(--panel); color-scheme:light dark;"></iframe>
 
-          <rect class="band-g1" x="30" y="122" width="700" height="104" rx="14"/>
-          <text class="band-label g1" x="46" y="140">Group 1 · independent after sync</text>
-          <rect class="band-g2" x="150" y="360" width="470" height="176" rx="14"/>
-          <text class="band-label g2" x="166" y="378">Group 2 · independent after select</text>
-
-          <path class="edge" d="M380,92 C380,126 120,120 120,156" marker-end="url(#arrow2)"/>
-          <path class="edge" d="M380,92 L380,154" marker-end="url(#arrow2)"/>
-          <path class="edge" d="M380,92 C380,126 640,120 640,156" marker-end="url(#arrow2)"/>
-
-          <path class="edge" d="M120,204 C120,242 380,238 380,270" marker-end="url(#arrow2)"/>
-          <path class="edge" d="M380,204 L380,270" marker-end="url(#arrow2)"/>
-          <path class="edge" d="M640,204 C640,242 380,238 380,270" marker-end="url(#arrow2)"/>
-
-          <path class="edge" d="M380,320 C380,352 270,352 270,382" marker-end="url(#arrow2)"/>
-          <path class="edge" d="M380,320 C380,362 540,376 540,416" marker-end="url(#arrow2)"/>
-          <path class="edge" d="M270,428 L270,450" marker-end="url(#arrow2)"/>
-
-          <path class="edge" d="M270,496 C270,540 380,534 380,566" marker-end="url(#arrow2)"/>
-          <path class="edge" d="M540,462 C540,532 380,534 380,566" marker-end="url(#arrow2)"/>
-          <path class="edge" d="M380,614 L380,662" marker-end="url(#arrow2)"/>
-
-          <g class="gnode node-seq"><rect x="290" y="44" width="180" height="48" rx="9"/><text x="380" y="68">sync</text></g>
-
-          <g class="gnode node-g1"><rect x="44" y="156" width="152" height="48" rx="9"/><text x="120" y="180">resolve-leads</text></g>
-          <g class="gnode node-g1"><rect x="304" y="156" width="152" height="48" rx="9"/><text x="380" y="180">quality</text></g>
-          <g class="gnode node-g1"><rect x="564" y="156" width="152" height="48" rx="9"/><text x="640" y="180">cluster</text></g>
-
-          <g class="gnode node-seq"><rect x="290" y="272" width="180" height="48" rx="9"/><text x="380" y="296">select</text></g>
-          <text class="join" x="482" y="296">◆ join</text>
-
-          <g class="gnode node-g2"><rect x="194" y="384" width="152" height="44" rx="9"/><text x="270" y="406">enhance</text></g>
-          <g class="gnode node-g2"><rect x="194" y="452" width="152" height="44" rx="9"/><text x="270" y="474">render</text></g>
-          <g class="gnode node-g2"><rect x="464" y="416" width="152" height="44" rx="9"/><text x="540" y="438">caption</text></g>
-
-          <g class="gnode node-seq"><rect x="290" y="566" width="180" height="48" rx="9"/><text x="380" y="590">assemble</text></g>
-          <text class="join" x="482" y="590">◆ join</text>
-          <g class="gnode node-seq"><rect x="290" y="662" width="180" height="48" rx="9"/><text x="380" y="686">fulfill</text></g>
-        </svg>
-        <div class="legend">
-          <span><i class="swatch sw-seq"></i> Sequential — shared session</span>
-          <span><i class="swatch sw-g1"></i> Group 1 — runs concurrently</span>
-          <span><i class="swatch sw-g2"></i> Group 2 — runs concurrently (<span class="mono">enhance→render</span> chained)</span>
-        </div>
-      </div>
-
-      <div class="critical">
-        critical path&nbsp;&nbsp; sync <span class="hl">→</span> ( cluster ‖ quality ‖ leads ) <span class="hl">→</span> select <span class="hl">→</span> enhance → render <span class="hl">→</span> assemble <span class="hl">→</span> fulfill
-      </div>
-
-      <div class="scroll">
-        <table>
-          <thead><tr><th>Stage</th><th>Group</th><th>Responsibility</th></tr></thead>
-          <tbody>
-            <tr><td><span class="stg">sync</span></td><td><span class="pill seq">seq</span></td><td>The boundary — pull the album's assets from Immich, keyed on asset id.</td></tr>
-            <tr><td><span class="stg">resolve-leads</span></td><td><span class="pill g1">1</span></td><td>Resolve <code>album.yml</code> priority subjects to Immich people; mark them lead.</td></tr>
-            <tr><td><span class="stg">quality</span></td><td><span class="pill g1">1</span></td><td>Score blur + aesthetic + CLIP embedding.</td></tr>
-            <tr><td><span class="stg">cluster</span></td><td><span class="pill g1">1</span></td><td>Assign each photo to a segment (timestamp) and a scene (gap detection).</td></tr>
-            <tr><td><span class="stg">select</span></td><td><span class="pill seq">seq</span></td><td>Diversity- + people-aware best-of-scene via MMR; near-dup suppression.</td></tr>
-            <tr><td><span class="stg">enhance</span></td><td><span class="pill g2">2</span></td><td>Estimate bounded tone deltas (classical/offline by default); write XMP sidecars.</td></tr>
-            <tr><td><span class="stg">render</span></td><td><span class="pill g2">2</span></td><td>Batch <code>darktable-cli</code> over the sidecars → corrected JPEGs.</td></tr>
-            <tr><td><span class="stg">caption</span></td><td><span class="pill g2">2</span></td><td>Every selected photo gets a caption (shared analysis call).</td></tr>
-            <tr><td><span class="stg">assemble</span></td><td><span class="pill seq">seq</span></td><td>Jinja2 grid layouts → print-ready PDF via WeasyPrint.</td></tr>
-            <tr><td><span class="stg">fulfill</span></td><td><span class="pill seq">seq</span></td><td>Deliver via a pluggable Printer — HTML (default) or Lulu.</td></tr>
-          </tbody>
-        </table>
-      </div>
+      <p class="body" style="margin-top:14px; font-size:13px;">Open <code>knowledge/foundations/pipeline-execution.html</code> directly for the standalone version (same content, full-page).</p>
     </div>
   </details>
 
@@ -491,4 +421,26 @@ uv run poe migrate</code></pre>
     <span>photobook-transformer · generated from knowledge/</span>
     <span>see AGENTS.md + knowledge/index.md for the full bundle</span>
   </footer>
+
+  <script>
+    (function () {
+      const frame = document.getElementById("pipeline-embed");
+      const details = document.getElementById("stages-flow-details");
+      if (!frame) return;
+      function requestResize() {
+        if (frame.contentWindow) frame.contentWindow.postMessage("pipeline-embed:measure", "*");
+      }
+      window.addEventListener("message", (e) => {
+        if (e.data && typeof e.data.pipelineEmbedHeight === "number") {
+          frame.style.height = e.data.pipelineEmbedHeight + "px";
+        }
+      });
+      frame.addEventListener("load", requestResize);
+      if (details) {
+        details.addEventListener("toggle", function () {
+          if (details.open) requestResize();
+        });
+      }
+    })();
+  </script>
 </main>
