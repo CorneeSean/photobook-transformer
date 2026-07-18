@@ -18,7 +18,6 @@ deals only in "a directory of images" and "an Immich album" — so the
 from __future__ import annotations
 
 import logging
-import re
 import time
 from collections.abc import Callable
 from datetime import UTC, datetime
@@ -35,6 +34,8 @@ from album.agents.segments import (
 )
 from album.definition import AlbumDefinition, SegmentYAML
 from album.immich.client import ImmichAsset, ImmichClient, ImmichJobCounts
+from album.text import slugify as _slugify
+from album.text import titleize as _titleize
 
 _log = logging.getLogger(__name__)
 
@@ -394,18 +395,6 @@ def _as_aware(dt: datetime) -> datetime:
 def _is_image(path: Path) -> bool:
     """A file the ingestor uploads — an image with a recognized suffix."""
     return path.is_file() and path.suffix.lower() in _IMAGE_SUFFIXES
-
-
-def _slugify(name: str) -> str:
-    """A filesystem/URL-safe album slug from a directory name."""
-    slug = re.sub(r"[^a-z0-9]+", "-", name.strip().lower()).strip("-")
-    return slug or "album"
-
-
-def _titleize(name: str) -> str:
-    """A human title from a directory name: ``my-photos_2026`` → ``My Photos 2026``."""
-    words = re.split(r"[-_\s]+", name.strip())
-    return " ".join(word.capitalize() for word in words if word)
 
 
 def ingest_directory(
