@@ -20,6 +20,7 @@ from __future__ import annotations
 import logging
 import time
 from collections.abc import Callable
+from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Protocol
@@ -34,7 +35,7 @@ from album.agents.segments import (
 )
 from album.definition import AlbumDefinition, SegmentYAML
 from album.immich.client import ImmichAsset, ImmichClient, ImmichJobCounts
-from album.manifest import AlbumSpec, SegmentSpec
+from album.manifest import AlbumSpec, Manifest, SegmentSpec
 from album.text import slugify as _slugify
 from album.text import titleize as _titleize
 
@@ -607,3 +608,68 @@ def ingest_directory(
             force=force,
             lead_face_images=lead_face_images,
         )
+
+
+@dataclass(frozen=True)
+class AlbumOutcome:
+    """The result of ingesting one manifest album: exactly one of ``slug`` (it
+    ingested — hand this to ``pipeline``) or ``error`` (it was isolated and
+    skipped) is set. Returned in manifest order so the CLI can report a stable,
+    readable summary of a multi-GB run."""
+
+    spec: AlbumSpec
+    slug: str | None
+    error: str | None
+
+
+def _ingest_all(
+    ingestor: DirectoryIngestor,
+    root: Path,
+    manifest: Manifest,
+    *,
+    timezone: str | None,
+    force: bool,
+) -> list[AlbumOutcome]:
+    """Ingest every album in ``manifest`` with one shared ``ingestor``, isolating
+    per-album failures (empty folder, no dated photos, an invalid derived
+    ``album.yml``) so one bad album never sinks the run — mirroring the pipeline's
+    per-photo failure isolation. The manifest itself was already validated up front
+    (step 32), so this loop only isolates *per-album ingest* failures."""
+    outcomes: list[AlbumOutcome] = []
+    for spec in manifest.albums:
+        try:
+            slug = ingestor.ingest_album(spec, root, timezone_default=timezone, force=force)
+            outcomes.append(AlbumOutcome(spec, slug, None))
+        except (IngestError, ValueError, FileNotFoundError) as exc:
+            _log.warning("skipping album %r: %s", spec.path, exc)
+            outcomes.append(AlbumOutcome(spec, None, str(exc)))
+    return outcomes
+
+
+def ingest_manifest(
+    root: Path,
+    manifest: Manifest,
+    *,
+    timezone: str | None = None,
+    force: bool = False,
+    poll_interval_s: float = _DEFAULT_POLL_INTERVAL_S,
+    poll_timeout_s: float = _DEFAULT_POLL_TIMEOUT_S,
+    sleep: Callable[[float], None] = time.sleep,
+    model: Model | None = None,
+) -> list[AlbumOutcome]:
+    """Ingest every album in ``manifest`` under ONE shared ``ImmichClient``,
+    returning an :class:`AlbumOutcome` per album in manifest order — the production
+    fan-out entry point the CLI calls. The loop logic lives in :func:`_ingest_all`
+    (exercised with a fake client in tests); this wrapper only owns acquiring the
+    real client, exactly as :func:`ingest_directory` does for the single-album path.
+    The poll/sleep/model knobs thread through to the one shared
+    :class:`DirectoryIngestor`."""
+    with ImmichClient.from_settings() as client:
+        ingestor = DirectoryIngestor(
+            client,
+            poll_interval_s=poll_interval_s,
+            poll_timeout_s=poll_timeout_s,
+            sleep=sleep,
+            model=model,
+        )
+        return _ingest_all(ingestor, root, manifest, timezone=timezone, force=force)

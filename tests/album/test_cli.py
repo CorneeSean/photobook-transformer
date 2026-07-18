@@ -19,7 +19,8 @@ import pytest
 
 from album.analysis.captioner import ClaudeCaptioner, TemplateCaptioner
 from album.cli import main
-from album.ingest import IngestError
+from album.ingest import AlbumOutcome, IngestError
+from album.manifest import AlbumSpec, Manifest
 
 
 @pytest.fixture(autouse=True)
@@ -363,3 +364,225 @@ class TestGenerate:
             main()
 
         assert exc_info.value.code == 2  # argparse's usage-error exit code
+
+
+class TestGenerateManifest:
+    """`generate <root> --manifest`: fan a tree into N albums → N books, with
+    per-album-flag rejection, path resolution, and per-album isolation."""
+
+    def _outcome(self, path: str, slug: str | None, error: str | None = None) -> AlbumOutcome:
+        return AlbumOutcome(AlbumSpec(path=path), slug, error)
+
+    def _patch_manifest(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        outcomes: list[AlbumOutcome],
+    ) -> None:
+        """Patch load_manifest + ingest_manifest so no disk/Immich is touched; the
+        fan-out returns the given outcomes."""
+        monkeypatch.setattr(
+            "album.cli.load_manifest",
+            lambda _path: Manifest(albums=[AlbumSpec(path="a")]),
+        )
+        monkeypatch.setattr("album.cli.ingest_manifest", lambda *a, **k: outcomes)
+
+    @pytest.mark.parametrize(
+        "flag",
+        [
+            ["--slug", "x"],
+            ["--title", "X"],
+            ["--source-document", "d.pdf"],
+            ["--lead-face", "r.jpg"],
+        ],
+        ids=["slug", "title", "source-document", "lead-face"],
+    )
+    def test_per_album_flags_are_rejected(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        capsys: pytest.CaptureFixture[str],
+        flag: list[str],
+    ) -> None:
+        # A per-album flag in manifest mode is a clear error before any work.
+        called = []
+        monkeypatch.setattr("album.cli.ingest_manifest", lambda *a, **k: called.append(1) or [])
+        monkeypatch.setattr(
+            sys,
+            "argv",
+            ["photobook-generator", "generate", "./photos", "--manifest", *flag],
+        )
+
+        with pytest.raises(SystemExit) as exc_info:
+            main()
+
+        assert exc_info.value.code == 1
+        assert "per-album" in capsys.readouterr().err
+        assert called == []  # rejected before the fan-out ran
+
+    @pytest.mark.parametrize(
+        ("manifest_args", "expected"),
+        [
+            ([], Path("photos/ingest.yml")),
+            (["sub/other.yml"], Path("photos/sub/other.yml")),
+            (["/abs/x.yml"], Path("/abs/x.yml")),
+        ],
+        ids=["default", "relative", "absolute"],
+    )
+    def test_manifest_path_resolution(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        manifest_args: list[str],
+        expected: Path,
+    ) -> None:
+        captured: dict[str, Path] = {}
+
+        def _load(path: Path) -> Manifest:
+            captured["path"] = path
+            return Manifest(albums=[AlbumSpec(path="a")])
+
+        monkeypatch.setattr("album.cli.load_manifest", _load)
+        monkeypatch.setattr(
+            "album.cli.ingest_manifest",
+            lambda *a, **k: [self._outcome("a", "a")],
+        )
+        monkeypatch.setattr("album.cli.pipeline", lambda **k: None)
+        monkeypatch.setattr(
+            sys,
+            "argv",
+            ["photobook-generator", "generate", "./photos", "--manifest", *manifest_args],
+        )
+
+        main()
+
+        assert captured["path"] == expected
+
+    def test_runs_pipeline_per_ingested_album_and_lists_books(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        capsys: pytest.CaptureFixture[str],
+    ) -> None:
+        self._patch_manifest(
+            monkeypatch,
+            [self._outcome("a", "lisbon-2026"), self._outcome("b", "wedding")],
+        )
+        slugs: list[str] = []
+        monkeypatch.setattr("album.cli.pipeline", lambda **k: slugs.append(k["album_slug"]))
+        monkeypatch.setattr(
+            sys, "argv", ["photobook-generator", "generate", "./photos", "--manifest"]
+        )
+
+        main()
+
+        assert slugs == ["lisbon-2026", "wedding"]  # one pipeline run per ingested slug
+        out = capsys.readouterr().out
+        assert str(Path("data/albums/lisbon-2026/book/index.html")) in out
+        assert str(Path("data/albums/wedding/book/index.html")) in out
+
+    def test_ingest_failure_is_reported_alongside_a_successful_sibling(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        capsys: pytest.CaptureFixture[str],
+    ) -> None:
+        self._patch_manifest(
+            monkeypatch,
+            [self._outcome("a", "good"), self._outcome("bad-dir", None, "no images found")],
+        )
+        monkeypatch.setattr("album.cli.pipeline", lambda **k: None)
+        monkeypatch.setattr(
+            sys, "argv", ["photobook-generator", "generate", "./photos", "--manifest"]
+        )
+
+        main()  # partial success → no SystemExit
+
+        captured = capsys.readouterr()
+        assert str(Path("data/albums/good/book/index.html")) in captured.out
+        assert "bad-dir" in captured.err and "no images found" in captured.err
+
+    def test_a_pipeline_failure_is_isolated_and_partial_success_exits_zero(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        capsys: pytest.CaptureFixture[str],
+    ) -> None:
+        self._patch_manifest(
+            monkeypatch,
+            [self._outcome("a", "boom"), self._outcome("b", "fine")],
+        )
+
+        def _pipeline(**kwargs: object) -> None:
+            if kwargs["album_slug"] == "boom":
+                raise ValueError("pipeline blew up")
+
+        monkeypatch.setattr("album.cli.pipeline", _pipeline)
+        monkeypatch.setattr(
+            sys, "argv", ["photobook-generator", "generate", "./photos", "--manifest"]
+        )
+
+        main()  # one book still produced → exit zero
+
+        captured = capsys.readouterr()
+        assert str(Path("data/albums/fine/book/index.html")) in captured.out
+        assert "pipeline blew up" in captured.err
+
+    def test_total_failure_exits_nonzero(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        capsys: pytest.CaptureFixture[str],
+    ) -> None:
+        self._patch_manifest(
+            monkeypatch,
+            [
+                self._outcome("a", None, "no images found"),
+                self._outcome("b", None, "no images found"),
+            ],
+        )
+        monkeypatch.setattr("album.cli.pipeline", lambda **k: None)
+        monkeypatch.setattr(
+            sys, "argv", ["photobook-generator", "generate", "./photos", "--manifest"]
+        )
+
+        with pytest.raises(SystemExit) as exc_info:
+            main()
+
+        assert exc_info.value.code == 1  # every album failed
+        assert "0 book(s) written" in capsys.readouterr().out
+
+    def test_malformed_manifest_fails_fast(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        capsys: pytest.CaptureFixture[str],
+    ) -> None:
+        def _raise(_path: Path) -> Manifest:
+            raise ValueError("bad manifest")
+
+        monkeypatch.setattr("album.cli.load_manifest", _raise)
+        monkeypatch.setattr(
+            sys, "argv", ["photobook-generator", "generate", "./photos", "--manifest"]
+        )
+
+        with pytest.raises(SystemExit) as exc_info:
+            main()
+
+        assert exc_info.value.code == 1
+        assert "bad manifest" in capsys.readouterr().err
+
+    def test_bad_captioner_env_fails_fast_before_ingesting(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        # A misconfigured CAPTIONER env must fail cleanly *before* any album is
+        # uploaded — the captioner is resolved up front, inside the error guard.
+        monkeypatch.setattr(
+            "album.cli.get_settings",
+            lambda: SimpleNamespace(captioner="nonsense"),
+        )
+        reached: list[str] = []
+        monkeypatch.setattr("album.cli.load_manifest", lambda _p: reached.append("load"))
+        monkeypatch.setattr("album.cli.ingest_manifest", lambda *a, **k: reached.append("ingest"))
+        monkeypatch.setattr(
+            sys, "argv", ["photobook-generator", "generate", "./photos", "--manifest"]
+        )
+
+        with pytest.raises(SystemExit) as exc_info:
+            main()
+
+        assert exc_info.value.code == 1
+        assert reached == []  # never loaded the manifest or uploaded anything

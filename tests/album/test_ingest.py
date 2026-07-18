@@ -27,10 +27,11 @@ from album.ingest import (
     _asset_times,
     _folder_time_range,
     _folder_times,
+    _ingest_all,
     _segments_from_folders,
     patch_lead_faces,
 )
-from album.manifest import AlbumSpec, SegmentSpec
+from album.manifest import AlbumSpec, Manifest, SegmentSpec
 
 
 def _busy(active: int = 0, waiting: int = 0) -> dict[str, ImmichJobCounts]:
@@ -839,3 +840,52 @@ class TestFolderSegmentHelpers:
 
         # "empty" skipped; the rest sorted by start_at with titleized folder labels.
         assert [s.label for s in segments] == ["Early", "Late"]
+
+
+class TestIngestManifest:
+    """`_ingest_all`: the fan-out loop — one shared ingestor over N manifest
+    albums, isolating per-album failures and preserving manifest order."""
+
+    def _ingestor(self, client: object, albums_dir: Path) -> DirectoryIngestor:
+        return DirectoryIngestor(
+            client,  # pyright: ignore[reportArgumentType]
+            albums_dir=albums_dir,
+            poll_timeout_s=1.0,
+            sleep=lambda _s: None,
+        )
+
+    def _album(self, root: Path, name: str, *, with_photo: bool = True) -> None:
+        directory = root / name
+        directory.mkdir()
+        if with_photo:
+            (directory / "p.jpg").write_bytes(b"\xff\xd8\xff")
+
+    def test_three_albums_ingest_in_order_with_slugs(self, tmp_path: Path) -> None:
+        for name in ("a", "b", "c"):
+            self._album(tmp_path, name)
+        manifest = Manifest(
+            albums=[AlbumSpec(path="a"), AlbumSpec(path="b"), AlbumSpec(path="c")],
+        )
+        ingestor = self._ingestor(DatingIngestClient({}), tmp_path / "albums")
+
+        outcomes = _ingest_all(ingestor, tmp_path, manifest, timezone=None, force=False)
+
+        assert [o.slug for o in outcomes] == ["a", "b", "c"]
+        assert all(o.error is None for o in outcomes)
+
+    def test_a_bad_album_is_isolated_and_the_rest_succeed(self, tmp_path: Path) -> None:
+        self._album(tmp_path, "a")
+        self._album(tmp_path, "b", with_photo=False)  # empty → no images → isolated
+        self._album(tmp_path, "c")
+        manifest = Manifest(
+            albums=[AlbumSpec(path="a"), AlbumSpec(path="b"), AlbumSpec(path="c")],
+        )
+        ingestor = self._ingestor(DatingIngestClient({}), tmp_path / "albums")
+
+        outcomes = _ingest_all(ingestor, tmp_path, manifest, timezone=None, force=False)
+
+        # The empty album is skipped with its error set; its siblings still ingest,
+        # and manifest order is preserved.
+        assert [o.slug for o in outcomes] == ["a", None, "c"]
+        assert outcomes[1].error is not None and "no images" in outcomes[1].error
+        assert [o.spec.path for o in outcomes] == ["a", "b", "c"]

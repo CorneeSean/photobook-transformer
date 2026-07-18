@@ -23,7 +23,15 @@ from pathlib import Path
 from album.analysis.captioner import Captioner, build_captioner, captioner_names
 from album.config import get_settings
 from album.flow import pipeline
-from album.ingest import _ALBUMS_DIR, IngestError, ingest_directory, patch_lead_faces
+from album.ingest import (
+    _ALBUMS_DIR,
+    AlbumOutcome,
+    IngestError,
+    ingest_directory,
+    ingest_manifest,
+    patch_lead_faces,
+)
+from album.manifest import load_manifest
 
 
 def main() -> None:
@@ -55,6 +63,18 @@ def _add_generate_parser(subparsers: argparse._SubParsersAction[argparse.Argumen
         "directory",
         metavar="DIR",
         help="Directory of photos ('.' for the current directory)",
+    )
+    parser.add_argument(
+        "--manifest",
+        nargs="?",
+        const="ingest.yml",
+        metavar="FILE",
+        help=(
+            "Fan a directory tree into N albums from a manifest "
+            "(default: <DIR>/ingest.yml). Turns generate into a multi-album run; "
+            "per-album fields (--slug/--title/--source-document/--lead-face) then "
+            "live in the manifest, not on the CLI."
+        ),
     )
     parser.add_argument("--slug", help="Album slug (default: the directory name, slugified)")
     parser.add_argument("--title", help="Book title (default: the directory name)")
@@ -131,8 +151,26 @@ def _resolve_captioner(name: str | None) -> Captioner:
     return build_captioner(name or get_settings().captioner)
 
 
+def _book_path(slug: str) -> Path:
+    """The HTML book the pipeline writes for an album — the single place the output
+    layout (``<albums_dir>/<slug>/book/index.html``) is expressed. Mirrors
+    HtmlPrinter's default; ``_ALBUMS_DIR`` is the shared album root."""
+    return _ALBUMS_DIR / slug / "book" / "index.html"
+
+
 def _generate(args: argparse.Namespace) -> None:
-    """``photobook-generator generate <dir>`` — dir of photos → HTML book, one command."""
+    """``photobook-generator generate <dir>`` — dir of photos → HTML book(s).
+
+    ``--manifest`` fans the directory tree into N albums (one book each); without
+    it, the unchanged single-album path runs."""
+    if args.manifest is not None:
+        _generate_manifest(args)
+    else:
+        _generate_single(args)
+
+
+def _generate_single(args: argparse.Namespace) -> None:
+    """The single-album path: one directory → one Immich album → one book."""
     try:
         slug = ingest_directory(
             Path(args.directory),
@@ -150,9 +188,95 @@ def _generate(args: argparse.Namespace) -> None:
         print(f"photobook-generator generate: {exc}", file=sys.stderr)
         sys.exit(1)
 
-    # Mirrors HtmlPrinter's default output layout (<albums_dir>/<slug>/book/index.html);
-    # _ALBUMS_DIR is the shared album root the pipeline also writes under.
-    print(f"Book written to {_ALBUMS_DIR / slug / 'book' / 'index.html'}")
+    print(f"Book written to {_book_path(slug)}")
+
+
+def _generate_manifest(args: argparse.Namespace) -> None:
+    """The fan-out path: a manifest → N albums → N books. Per-album flags are
+    rejected (they live in the manifest); a malformed manifest fails fast, but a
+    bad *album* is isolated — the run continues and a combined summary reports the
+    books written and the albums that failed. Exit is non-zero only if *every*
+    album failed (partial success is success)."""
+    _reject_per_album_flags(args)
+    root = Path(args.directory)
+    try:
+        # Resolve the captioner up front, inside the guard, so a misconfigured
+        # CAPTIONER env fails fast with a clean message *before* any upload — not
+        # with a raw traceback after N albums are already in Immich.
+        captioner = _resolve_captioner(args.captioner)
+        manifest = load_manifest(_resolve_manifest_path(root, args.manifest))
+        outcomes = ingest_manifest(root, manifest, timezone=args.timezone, force=args.force)
+    except (FileNotFoundError, ValueError, IngestError) as exc:
+        print(f"photobook-generator generate --manifest: {exc}", file=sys.stderr)
+        sys.exit(1)
+    books, failures = _run_album_pipelines(outcomes, captioner, force=args.force)
+    _report_manifest_run(books, failures)
+
+
+def _reject_per_album_flags(args: argparse.Namespace) -> None:
+    """Per-album fields belong in the manifest in fan-out mode; setting them on the
+    CLI is a clear error, not silent precedence. (``--timezone`` is a global default
+    a manifest album may override; ``--captioner``/``--force`` apply to every run.)"""
+    offending = [
+        name
+        for name, value in (
+            ("--slug", args.slug),
+            ("--title", args.title),
+            ("--source-document", args.source_document),
+            ("--lead-face", args.lead_faces),
+        )
+        if value
+    ]
+    if offending:
+        print(
+            f"photobook-generator generate --manifest: {', '.join(offending)} are "
+            "per-album; set them in the manifest",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+
+
+def _resolve_manifest_path(root: Path, manifest_arg: str) -> Path:
+    """The manifest file: an absolute ``--manifest`` value verbatim, else resolved
+    under the directory (so a bare ``--manifest`` is ``<DIR>/ingest.yml``)."""
+    path = Path(manifest_arg)
+    return path if path.is_absolute() else root / path
+
+
+def _run_album_pipelines(
+    outcomes: list[AlbumOutcome],
+    captioner: Captioner,
+    *,
+    force: bool,
+) -> tuple[list[str], list[tuple[str, str | None]]]:
+    """Run the pipeline once per successfully-ingested album, isolating a per-album
+    pipeline failure exactly as the ingest fan-out does. Returns the slugs that
+    produced a book and the ``(album path, reason)`` of every failure (ingest *or*
+    pipeline)."""
+    books: list[str] = []
+    failures: list[tuple[str, str | None]] = []
+    for outcome in outcomes:
+        if outcome.slug is None:
+            failures.append((outcome.spec.path, outcome.error))
+            continue
+        try:
+            pipeline(album_slug=outcome.slug, captioner=captioner, force=force)
+            books.append(outcome.slug)
+        except (FileNotFoundError, ValueError) as exc:  # keep real bugs surfacing
+            failures.append((outcome.spec.path, str(exc)))
+    return books, failures
+
+
+def _report_manifest_run(books: list[str], failures: list[tuple[str, str | None]]) -> None:
+    """Print the combined multi-album summary — the user-facing contract for a
+    multi-GB run — and exit non-zero only if *no* book was produced."""
+    for slug in books:
+        print(f"Book written to {_book_path(slug)}")
+    for path, reason in failures:
+        print(f"album {path!r} failed: {reason}", file=sys.stderr)
+    print(f"{len(books)} book(s) written, {len(failures)} album(s) failed.")
+    if not books:  # every album failed
+        sys.exit(1)
 
 
 def _run(args: argparse.Namespace) -> None:

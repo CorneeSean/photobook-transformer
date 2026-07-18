@@ -139,6 +139,12 @@ Each step follows the standard workflow (branch off `main` → test-first → `p
 green → sub-agent review → squash → fast-forward merge → push) and updates
 [progress.md](/build/progress.md) + [log.md](/log.md) on its branch before merging.
 
+**Status: steps 32–34 built and merged** — the manifest loader, folder-derived
+segments, and the `generate --manifest` fan-out are in place; only step 35 (the
+cross-cutting user docs + end-to-end genericity gate) remains. As-built deviations
+across 32–34 are recorded per-step in [log.md](/log.md); step 35 folds the
+consolidated "As-built" note in here.
+
 ## What "one command" still does not remove
 
 Same caveat as the single-command playbook: the local stack must be up (`poe up`;
