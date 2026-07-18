@@ -4,6 +4,30 @@ Cross-commit narrative and decisions. Per-diff mechanics live in the commit
 bodies this log cites; keep entries tight (see
 [working-agreement · Be concise](/process/working-agreement.md#be-concise)).
 
+## 2026-07-19
+
+* **Step 32 — ingest manifest schema + loader** (`445357f`;
+  [step-32-manifest-schema.md](/build/step-32-manifest-schema.md)). New pure
+  `src/album/manifest.py`: `Manifest`/`AlbumSpec`/`SegmentSpec` (`extra="forbid"`) +
+  `load_manifest()`, parsing a root `ingest.yml` into validated album/segment boundary
+  declarations. All shape/relationship validation, no filesystem or Immich I/O — the
+  same posture as `AlbumDefinition` (validate shape) vs `ingest._collect_images` (touch
+  disk), so path existence and image presence are deferred to steps 33/34. `SegmentSpec`
+  is deliberately *not* `SegmentYAML`: it declares only which folder is a segment; the
+  `[start_at, end_at]` window is derived from photo timestamps at ingest time. **One
+  design choice beyond the plan:** `slugify`/`titleize` were hoisted out of `ingest.py`
+  into a shared `src/album/text.py` (re-imported under the same private names) rather
+  than importing `ingest._slugify` from `manifest.py` — that import would have become an
+  `ingest ↔ manifest` cycle in step 33. 3-agent review (2× correctness, 1× style/reuse):
+  both adversarial passes confirmed the sort-then-check-adjacent segment-nesting proof
+  and full rule coverage, no defects; the style pass caught that the module's own
+  docstrings/examples used the `trip`/`day` tokens the step-35 genericity guard must be
+  able to grep-ban, so those were neutralized (`src/album/*.py` is now free of
+  `trip`/`day`/`itinerary`, verified by grep). As-built tightening: `_is_unsafe_path`
+  rejects *any* `..` component (stricter than the plan's "no escape after
+  normalization", never less safe). `poe check` green (370 passed, 6 skipped); live
+  multi-album ingest still deferred to the standing no-reachable-Immich gap.
+
 ## 2026-07-18
 
 * **Plans — folder-structure-driven ingestion (steps 32–35)** (planning only, no code).

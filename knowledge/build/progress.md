@@ -31,7 +31,6 @@ on missing code (see [Notes / blockers](#notes--blockers)).
 | # | Step | Playbook | Status | Branch | Notes |
 |---|------|----------|--------|--------|-------|
 | 23 | DB-backed flow smoke test (optional) | testcontainers | todo | — | largely subsumed by step 25's `test_flow_integration.py`; revisit only if a gap remains |
-| 32 | Ingest manifest schema + loader | [folder-structure-ingestion](/build/folder-structure-ingestion.md) · [step-32](/build/step-32-manifest-schema.md) | todo | — | pure `manifest.py`; foundational, no deps |
 | 33 | Folder-derived segments in `ingest.py` | [step-33](/build/step-33-folder-segments.md) | todo | — | **after 32**; segment-source seam; edits `ingest.py` |
 | 34 | Fan-out orchestration + `generate --manifest` | [step-34](/build/step-34-fanout-cli.md) | todo | — | **after 33**; shares `ingest.py` with 33 (no parallel) |
 | 35 | Docs + end-to-end genericity verification | [step-35](/build/step-35-docs-verify.md) | todo | — | **after 34**; README + reference docs + e2e/genericity gate |
@@ -115,6 +114,12 @@ Audit trail — one line per step; see the commit and [log.md](/log.md) for deta
 | # | Step | Branch | Commit | Notes |
 |---|------|--------|--------|-------|
 | 31 | Wire the real LAION/open_clip aesthetic scorer | step-31-laion-aesthetic-scorer | 2446901 | closes the step-6/14 deferral: `ClipAestheticModel` (ViT-L/14 CLIP + LAION head) behind the existing `AestheticScorer`/`Embedder` seam; `scoring` extra (torch out of base deps); capability-gated with graceful fallback to the NULL-scoring placeholder; one shared model backs both protocols with a one-entry feature memo; no migration (`clip_embedding` already `Vector(768)`). Offline monotonicity verified via `poe test-scoring`; live within-scene curation spot-check deferred (no reachable Immich) |
+
+### Folder-structure-driven ingestion playbook (see [folder-structure-ingestion.md](/build/folder-structure-ingestion.md))
+
+| # | Step | Branch | Commit | Notes |
+|---|------|--------|--------|-------|
+| 32 | Ingest manifest schema + loader | step-32-manifest-schema | 445357f | pure `src/album/manifest.py` — `Manifest`/`AlbumSpec`/`SegmentSpec` (`extra="forbid"`) + `load_manifest()`; relationship validation (path escape, dup paths, resolved-slug collision, component-prefix segment non-nesting, `segments` XOR `source_document`), path existence deferred to ingest. `slugify`/`titleize` hoisted to shared `src/album/text.py` to break the step-33 `ingest↔manifest` cycle. 3-agent review (2× correctness, style): no defects; applied token-cleanup (no trip/day/itinerary in src) + `a/../b` as-built tightening. `poe check` green (370/6) |
 
 ## Notes / blockers
 
