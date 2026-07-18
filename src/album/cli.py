@@ -23,7 +23,7 @@ from pathlib import Path
 from album.analysis.captioner import Captioner, build_captioner, captioner_names
 from album.config import get_settings
 from album.flow import pipeline
-from album.ingest import _ALBUMS_DIR, IngestError, ingest_directory
+from album.ingest import _ALBUMS_DIR, IngestError, ingest_directory, patch_lead_faces
 
 
 def main() -> None:
@@ -74,6 +74,7 @@ def _add_generate_parser(subparsers: argparse._SubParsersAction[argparse.Argumen
         help="Re-run the pipeline for an already-imported slug (album.yml left untouched)",
     )
     _add_captioner_arg(parser)
+    _add_lead_face_arg(parser)
     parser.set_defaults(func=_generate)
 
 
@@ -91,6 +92,7 @@ def _add_run_parser(subparsers: argparse._SubParsersAction[argparse.ArgumentPars
         help="Re-process an already-run album (e.g. to A/B a different --captioner)",
     )
     _add_captioner_arg(parser)
+    _add_lead_face_arg(parser)
     parser.set_defaults(func=_run)
 
 
@@ -102,6 +104,25 @@ def _add_captioner_arg(parser: argparse.ArgumentParser) -> None:
         choices=captioner_names(),
         help="Caption source (default: the CAPTIONER env var, else 'template')",
     )
+
+
+def _add_lead_face_arg(parser: argparse.ArgumentParser) -> None:
+    """The shared repeatable ``--lead-face`` selector (both subcommands). Each
+    occurrence names one priority subject by a local reference photo; they are
+    written to the album's ``lead_faces.reference_images`` block. Repeatable
+    rather than comma-separated so filenames/paths with commas are unambiguous."""
+    parser.add_argument(
+        "--lead-face",
+        dest="lead_faces",
+        metavar="IMAGE",
+        action="append",
+        help="A local photo naming a priority subject (repeatable for multiple people)",
+    )
+
+
+def _lead_face_images(args: argparse.Namespace) -> list[Path] | None:
+    """The ``--lead-face`` photos as ``Path``s, or ``None`` when the flag is absent."""
+    return [Path(image) for image in args.lead_faces] if args.lead_faces else None
 
 
 def _resolve_captioner(name: str | None) -> Captioner:
@@ -120,6 +141,7 @@ def _generate(args: argparse.Namespace) -> None:
             timezone=args.timezone,
             source_document=Path(args.source_document) if args.source_document else None,
             force=args.force,
+            lead_face_images=_lead_face_images(args),
         )
         pipeline(album_slug=slug, captioner=_resolve_captioner(args.captioner), force=args.force)
     except (FileNotFoundError, ValueError, IngestError) as exc:
@@ -135,14 +157,20 @@ def _generate(args: argparse.Namespace) -> None:
 
 def _run(args: argparse.Namespace) -> None:
     try:
+        lead_face_images = _lead_face_images(args)
+        if lead_face_images is not None:
+            # Patch the leads onto the existing album.yml before running, so
+            # `run --lead-face` names priority subjects without hand-editing YAML.
+            patch_lead_faces(_ALBUMS_DIR / args.album / "album.yml", lead_face_images)
         pipeline(
             album_slug=args.album,
             captioner=_resolve_captioner(args.captioner),
             force=args.force,
         )
-    except (FileNotFoundError, ValueError) as exc:
-        # Expected, user-fixable errors (no album.yml, unknown album id, etc.) —
-        # a clean one-line message, not a full traceback through Prefect's
-        # flow-run machinery. Anything else is a real bug and surfaces in full.
+    except (FileNotFoundError, ValueError, IngestError) as exc:
+        # Expected, user-fixable errors (no album.yml, unknown album id, a
+        # --lead-face patch onto a missing album, etc.) — a clean one-line
+        # message, not a full traceback through Prefect's flow-run machinery.
+        # Anything else is a real bug and surfaces in full.
         print(f"photobook-generator run --album {args.album}: {exc}", file=sys.stderr)
         sys.exit(1)

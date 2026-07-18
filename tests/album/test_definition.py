@@ -96,22 +96,35 @@ class TestLeadFacesDefinition:
         lead = LeadFacesDefinition().load(self._write(tmp_path, block))
         assert lead is not None
         assert lead.person_ids == ["p-alex", "p-sam"]
-        assert lead.reference_image is None
+        assert lead.reference_images is None
 
-    def test_reference_image_form(self, tmp_path: Path) -> None:
-        block = "lead_faces:\n  reference_image: leads.jpg\n"
+    def test_reference_images_form(self, tmp_path: Path) -> None:
+        block = "lead_faces:\n  reference_images: [alex.jpg, sam.jpg]\n"
         lead = LeadFacesDefinition().load(self._write(tmp_path, block))
         assert lead is not None
-        assert lead.reference_image == "leads.jpg"
+        assert lead.reference_images == ["alex.jpg", "sam.jpg"]
+        assert lead.reference_asset_ids is None
 
-    def test_reference_asset_id_form(self, tmp_path: Path) -> None:
-        block = "lead_faces:\n  reference_asset_id: asset-42\n"
+    def test_single_reference_image_is_just_a_one_element_list(self, tmp_path: Path) -> None:
+        # Naming one lead is the one-element case — no separate single-item form.
+        block = "lead_faces:\n  reference_images: [leads.jpg]\n"
         lead = LeadFacesDefinition().load(self._write(tmp_path, block))
         assert lead is not None
-        assert lead.reference_asset_id == "asset-42"
+        assert lead.reference_images == ["leads.jpg"]
+
+    def test_reference_asset_ids_form(self, tmp_path: Path) -> None:
+        block = "lead_faces:\n  reference_asset_ids: [asset-42, asset-7]\n"
+        lead = LeadFacesDefinition().load(self._write(tmp_path, block))
+        assert lead is not None
+        assert lead.reference_asset_ids == ["asset-42", "asset-7"]
 
     def test_more_than_one_input_raises(self, tmp_path: Path) -> None:
-        block = "lead_faces:\n  reference_image: leads.jpg\n  person_ids: [p-alex]\n"
+        block = "lead_faces:\n  reference_images: [leads.jpg]\n  person_ids: [p-alex]\n"
+        with pytest.raises(ValidationError, match="exactly one"):
+            LeadFacesDefinition().load(self._write(tmp_path, block))
+
+    def test_reference_images_plus_asset_ids_raises(self, tmp_path: Path) -> None:
+        block = "lead_faces:\n  reference_images: [alex.jpg]\n  reference_asset_ids: [asset-1]\n"
         with pytest.raises(ValidationError, match="exactly one"):
             LeadFacesDefinition().load(self._write(tmp_path, block))
 

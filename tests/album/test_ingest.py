@@ -18,9 +18,9 @@ import yaml
 from pydantic_ai.messages import ModelMessage, ModelResponse, TextPart
 from pydantic_ai.models.function import AgentInfo, FunctionModel
 
-from album.definition import AlbumDefinition
+from album.definition import AlbumDefinition, LeadFacesDefinition
 from album.immich.client import ImmichAsset, ImmichJobCounts
-from album.ingest import DirectoryIngestor, IngestError
+from album.ingest import DirectoryIngestor, IngestError, patch_lead_faces
 
 
 def _busy(active: int = 0, waiting: int = 0) -> dict[str, ImmichJobCounts]:
@@ -204,6 +204,33 @@ class TestDirectoryIngest:
 
         assert "timezone" not in yaml.safe_load((albums_dir / "trip" / "album.yml").read_text())
 
+    def test_lead_face_images_written_as_absolute_reference_images(self, tmp_path: Path) -> None:
+        directory = self._photos_dir(tmp_path, "trip", ["a.jpg"])
+        albums_dir = tmp_path / "albums"
+        alex = tmp_path / "alex.jpg"
+        alex.write_bytes(b"\xff\xd8\xff")
+        sam = tmp_path / "sam.jpg"
+        sam.write_bytes(b"\xff\xd8\xff")
+
+        self._ingestor(FakeIngestClient(), albums_dir).ingest(
+            directory,
+            lead_face_images=[alex, sam],
+        )
+
+        album_yml = albums_dir / "trip" / "album.yml"
+        # Absolute paths so they resolve regardless of album.yml's directory.
+        lead = LeadFacesDefinition().load(album_yml)
+        assert lead is not None
+        assert lead.reference_images == [str(alex.resolve()), str(sam.resolve())]
+
+    def test_lead_faces_omitted_when_absent(self, tmp_path: Path) -> None:
+        directory = self._photos_dir(tmp_path, "trip", ["a.jpg"])
+        albums_dir = tmp_path / "albums"
+
+        self._ingestor(FakeIngestClient(), albums_dir).ingest(directory)
+
+        assert "lead_faces" not in yaml.safe_load((albums_dir / "trip" / "album.yml").read_text())
+
 
 class TestReRunGuard:
     """The load-once re-run guard: refuse an existing slug unless ``force``."""
@@ -256,6 +283,80 @@ class TestReRunGuard:
 
         # A forced re-run leaves the file untouched — it does not clobber edits.
         assert "hand-authored" in album_yml.read_text()
+
+
+class TestLeadFacePatch:
+    """`patch_lead_faces` and the ``--force --lead-face`` reuse path."""
+
+    def _prepare(self, tmp_path: Path) -> tuple[FakeIngestClient, Path, Path]:
+        directory = tmp_path / "trip"
+        directory.mkdir()
+        (directory / "a.jpg").write_bytes(b"\xff\xd8\xff")
+        return FakeIngestClient(), directory, tmp_path / "albums"
+
+    def _ingestor(self, client: FakeIngestClient, albums_dir: Path) -> DirectoryIngestor:
+        return DirectoryIngestor(
+            client,
+            albums_dir=albums_dir,
+            poll_timeout_s=1.0,
+            sleep=lambda _s: None,
+        )
+
+    def test_force_with_lead_faces_patches_existing_album_yml(self, tmp_path: Path) -> None:
+        client, directory, albums_dir = self._prepare(tmp_path)
+        self._ingestor(client, albums_dir).ingest(directory)  # first import, no leads
+        album_yml = albums_dir / "trip" / "album.yml"
+        assert "lead_faces" not in yaml.safe_load(album_yml.read_text())
+        client.uploaded.clear()  # isolate the forced re-run's uploads
+        lead = tmp_path / "lead.jpg"
+        lead.write_bytes(b"\xff\xd8\xff")
+
+        slug = self._ingestor(client, albums_dir).ingest(
+            directory,
+            force=True,
+            lead_face_images=[lead],
+        )
+
+        # --force + --lead-face patches leads onto the existing album without a
+        # re-upload/new Immich album; other keys (slug/title) are preserved.
+        assert slug == "trip"
+        assert client.uploaded == []
+        data = yaml.safe_load(album_yml.read_text())
+        assert data["slug"] == "trip"
+        assert data["lead_faces"] == {"reference_images": [str(lead.resolve())]}
+
+    def test_patch_lead_faces_replaces_an_existing_block(self, tmp_path: Path) -> None:
+        album_yml = tmp_path / "album.yml"
+        album_yml.write_text(
+            "slug: s\ntitle: T\nlead_faces:\n  person_ids: [p-old]\n",
+        )
+        new_lead = tmp_path / "new.jpg"
+        new_lead.write_bytes(b"\xff\xd8\xff")
+
+        patch_lead_faces(album_yml, [new_lead])
+
+        data = yaml.safe_load(album_yml.read_text())
+        # The old block is replaced wholesale, not merged.
+        assert data["lead_faces"] == {"reference_images": [str(new_lead.resolve())]}
+        assert (data["slug"], data["title"]) == ("s", "T")
+
+    def test_patch_lead_faces_missing_album_yml_raises(self, tmp_path: Path) -> None:
+        lead = tmp_path / "lead.jpg"
+        lead.write_bytes(b"\xff\xd8\xff")
+
+        with pytest.raises(IngestError, match="no album.yml"):
+            patch_lead_faces(tmp_path / "nope" / "album.yml", [lead])
+
+    def test_patch_lead_faces_empty_album_yml_raises(self, tmp_path: Path) -> None:
+        # A present-but-empty file must not be silently turned into a leads-only
+        # album.yml (which would strip slug/title and fail the loader cryptically).
+        album_yml = tmp_path / "album.yml"
+        album_yml.write_text("")
+        lead = tmp_path / "lead.jpg"
+        lead.write_bytes(b"\xff\xd8\xff")
+
+        with pytest.raises(IngestError, match="empty or malformed"):
+            patch_lead_faces(album_yml, [lead])
 
 
 class TestReadinessPoll:

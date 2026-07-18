@@ -37,7 +37,7 @@ downstream reads our Postgres DB, never Immich. Immich fills **two roles** acros
 | 2 | **EXIF** — capture time, IANA timezone, GPS, camera make/model | `exifInfo` on assets | Storage |
 | 3 | **Thumbnail** serving — downscaled JPEGs for AI analysis | `GET /assets/{id}/thumbnail` | Storage |
 | 4 | **Original** serving — full-res pixels for [`render`](/stages/render.md) (darktable) | `GET /assets/{id}/original` | Storage |
-| 5 | **Upload + content-dedup** — for `lead_faces.reference_image` | `POST /assets` | Storage |
+| 5 | **Upload + content-dedup** — for `lead_faces.reference_images` | `POST /assets` | Storage |
 | 6 | **Duplicate detection** — ML-derived perceptual dup groups | `GET /duplicates`, `duplicateId` | **ML** |
 | 7 | **Faces + people/recognition** — clusters library faces into named `Person`s | `GET /faces?id=`, `GET /people` | **ML** |
 
@@ -59,7 +59,7 @@ already run OpenCLIP and pgvector ourselves.
 | EXIF (2) | `exiftool` / `Pillow` / `exifread` (Immich itself just shells to exiftool); the UTC/timezone logic in [`sync`](/stages/sync.md) is already ours | Trivial |
 | Thumbnails (3) | `pyvips` / `Pillow`, cached to disk | Trivial |
 | Originals (4) | Read the file | Trivial |
-| Upload/dedup-on-import (5) | sha1 the file (only used for the lead-face reference image) | Trivial |
+| Upload/dedup-on-import (5) | sha1 the file (only used for lead-face reference images) | Trivial |
 | Duplicate detection (6) | `imagededup`/`imagehash` (pHash/dHash) — **or reuse the CLIP embeddings + pgvector cosine we already store** for `select`/`cluster`, deriving dup groups from the same vectors and deleting the need entirely | Easy |
 | **Faces + recognition + people (7)** | **InsightFace** (`buffalo_l`: RetinaFace detector + ResNet50/ArcFace embeddings) + DBSCAN/HDBSCAN over the embeddings to reconstruct the `Person` concept | Moderate — the only real work |
 
@@ -138,7 +138,7 @@ downstream stage changes** (everything reads the DB behind the `AssetSource` /
   `Person`s exactly as `sync._sync_faces` does — failure-isolated + idempotent. Record the
   [InsightFace non-commercial licence](#the-one-legal-footgun-insightface-model-licensing)
   as conscious acceptance.
-- **L4. Lead faces without upload.** Embed `reference_image` with the same model, match by
+- **L4. Lead faces without upload.** Embed `reference_images` with the same model, match by
   cosine against clustered `Person`s — no `POST /assets`, no async poll.
 - **L5. Config switch + end-to-end.** A `source: immich | local` setting picks which the
   flow injects (the only line it touches); A/B recognition + curation against an Immich run

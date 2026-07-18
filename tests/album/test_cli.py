@@ -97,6 +97,63 @@ class TestCli:
 
         assert exc_info.value.code == 2  # argparse's usage-error exit code
 
+    def test_run_lead_face_patches_album_yml_before_pipeline(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        order: list[str] = []
+        patch_calls: list[tuple[Path, list[Path]]] = []
+
+        def _patch(album_yml: Path, images: list[Path]) -> None:
+            patch_calls.append((album_yml, images))
+            order.append("patch")
+
+        monkeypatch.setattr("album.cli.patch_lead_faces", _patch)
+        monkeypatch.setattr("album.cli.pipeline", lambda **kwargs: order.append("pipeline"))
+        monkeypatch.setattr(
+            sys,
+            "argv",
+            ["photobook-generator", "run", "--album", "trip", "--lead-face", "alex.jpg"],
+        )
+
+        main()
+
+        # Leads are patched onto the existing album.yml *before* the pipeline runs.
+        assert order == ["patch", "pipeline"]
+        assert patch_calls == [(Path("data/albums/trip/album.yml"), [Path("alex.jpg")])]
+
+    def test_run_without_lead_face_does_not_patch(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        patched = []
+        monkeypatch.setattr("album.cli.patch_lead_faces", lambda *a: patched.append(a))
+        monkeypatch.setattr("album.cli.pipeline", lambda **kwargs: None)
+        monkeypatch.setattr(sys, "argv", ["photobook-generator", "run", "--album", "trip"])
+
+        main()
+
+        assert patched == []
+
+    def test_run_lead_face_patch_error_is_clean_and_exits(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        capsys: pytest.CaptureFixture[str],
+    ) -> None:
+        def _raise(album_yml: Path, images: list[Path]) -> None:
+            raise IngestError("no album.yml at data/albums/trip/album.yml — run `generate` first")
+
+        monkeypatch.setattr("album.cli.patch_lead_faces", _raise)
+        monkeypatch.setattr("album.cli.pipeline", lambda **kwargs: None)
+        monkeypatch.setattr(
+            sys,
+            "argv",
+            ["photobook-generator", "run", "--album", "trip", "--lead-face", "alex.jpg"],
+        )
+
+        with pytest.raises(SystemExit) as exc_info:
+            main()
+
+        assert exc_info.value.code == 1
+        assert "no album.yml" in capsys.readouterr().err
+
 
 class TestCaptionerSelection:
     """Step 29: ``--captioner`` (per-run) overrides the ``CAPTIONER`` env default,
@@ -221,7 +278,42 @@ class TestGenerate:
             "timezone": "Europe/Warsaw",
             "source_document": Path("schedule.pdf"),
             "force": True,
+            "lead_face_images": None,
         }
+
+    def test_lead_face_flag_is_repeatable_and_threaded_into_ingest(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        ingest_calls = self._stub_ingest(monkeypatch)
+        monkeypatch.setattr("album.cli.pipeline", lambda **kwargs: None)
+        monkeypatch.setattr(
+            sys,
+            "argv",
+            [
+                "photobook-generator",
+                "generate",
+                "./photos",
+                "--lead-face",
+                "alex.jpg",
+                "--lead-face",
+                "sam.jpg",
+            ],
+        )
+
+        main()
+
+        # Repeated --lead-face accumulates into a list of Paths.
+        assert ingest_calls[0][1]["lead_face_images"] == [Path("alex.jpg"), Path("sam.jpg")]
+
+    def test_no_lead_face_flag_passes_none(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        ingest_calls = self._stub_ingest(monkeypatch)
+        monkeypatch.setattr("album.cli.pipeline", lambda **kwargs: None)
+        monkeypatch.setattr(sys, "argv", ["photobook-generator", "generate", "./photos"])
+
+        main()
+
+        assert ingest_calls[0][1]["lead_face_images"] is None
 
     @pytest.mark.parametrize(
         "error",

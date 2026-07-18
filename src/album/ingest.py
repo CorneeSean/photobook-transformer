@@ -113,21 +113,30 @@ class DirectoryIngestor:
         timezone: str | None = None,
         source_document: Path | None = None,
         force: bool = False,
+        lead_face_images: list[Path] | None = None,
     ) -> str:
         """Ingest ``directory`` and return the album slug to run the pipeline on.
 
         ``slug``/``title`` override the directory-name defaults; ``timezone`` (an
         IANA name) is written through for undated photos. ``source_document`` (a
         PDF) fills the album's ``segments`` via the segments agent (Feature B),
-        grounded on the photos' capture range. If the slug was already imported,
+        grounded on the photos' capture range. ``lead_face_images`` (from the
+        ``--lead-face`` CLI flag) names the album's priority subjects — written as
+        the ``lead_faces.reference_images`` block. If the slug was already imported,
         refuse unless ``force`` — which re-runs the existing album *as is* (see
-        :meth:`_reuse_existing`); ``source_document`` is ignored on that path.
+        :meth:`_reuse_existing`), except that ``--lead-face`` still patches leads
+        onto it; ``source_document`` is ignored on that path.
         """
         directory = directory.resolve()  # so "." picks up the real directory name
         slug = slug or _slugify(directory.name)
         album_yml = self._albums_dir / slug / "album.yml"
         if album_yml.exists():
-            return self._reuse_existing(album_yml, slug, force=force)
+            return self._reuse_existing(
+                album_yml,
+                slug,
+                force=force,
+                lead_face_images=lead_face_images,
+            )
 
         image_paths = self._collect_images(directory)
         asset_ids = [self._client.upload_asset(path) for path in image_paths]
@@ -142,7 +151,15 @@ class DirectoryIngestor:
         self._wait_for_readiness()
         doc_title, segments = self._extract_segments(immich_album_id, source_document, timezone)
         final_title = self._resolve_title(title, directory, slug, doc_title=doc_title)
-        self._materialize(album_yml, slug, final_title, immich_album_id, timezone, segments)
+        self._materialize(
+            album_yml,
+            slug,
+            final_title,
+            immich_album_id,
+            timezone,
+            segments,
+            lead_face_images,
+        )
         if segments:
             self._validate_materialized(album_yml)
         _log.info(
@@ -195,23 +212,38 @@ class DirectoryIngestor:
             ) from exc
 
     @staticmethod
-    def _reuse_existing(album_yml: Path, slug: str, *, force: bool) -> str:
+    def _reuse_existing(
+        album_yml: Path,
+        slug: str,
+        *,
+        force: bool,
+        lead_face_images: list[Path] | None = None,
+    ) -> str:
         """Handle an already-imported slug: refuse unless ``force``.
 
         Without ``force`` this is a clear error — the pipeline is load-once per
         slug, so silently re-importing would either strand a duplicate Immich
         album or leave a regenerated ``album.yml`` ignored. **With** ``force`` we
-        re-run the *existing* ``album.yml`` untouched (no re-upload, no duplicate
-        Immich album, and — importantly — any hand-authored ``segments`` /
-        ``lead_faces`` are preserved). Re-importing genuinely new photos is out of
-        scope; use ``--slug NAME`` for a distinct album.
+        re-run the *existing* ``album.yml`` (no re-upload, no duplicate Immich
+        album) — leaving any hand-authored ``segments`` / ``lead_faces`` intact,
+        *except* that ``--lead-face`` explicitly patches the ``lead_faces`` block
+        (so ``generate --force --lead-face`` adds/replaces leads without
+        hand-editing YAML, mirroring ``run --lead-face``). Re-importing genuinely
+        new photos is out of scope; use ``--slug NAME`` for a distinct album.
         """
         if not force:
             raise IngestError(
                 f"album {slug!r} already exists at {album_yml}; pass --force to "
                 "re-run it as is, or --slug NAME to import a distinct album",
             )
-        _log.info("album %r already imported; --force re-runs it (album.yml left untouched)", slug)
+        if lead_face_images:
+            patch_lead_faces(album_yml, lead_face_images)
+            _log.info("album %r already imported; --force re-runs it, --lead-face patched", slug)
+        else:
+            _log.info(
+                "album %r already imported; --force re-runs it (album.yml left untouched)",
+                slug,
+            )
         return slug
 
     @staticmethod
@@ -277,12 +309,15 @@ class DirectoryIngestor:
         immich_album_id: str,
         timezone: str | None,
         segments: list[SegmentYAML] | None = None,
+        lead_face_images: list[Path] | None = None,
     ) -> None:
         """Write a minimal ``album.yml`` (the normal load path reads it next).
 
         ``segments`` (from :func:`~album.agents.segments.extract_segments_from_pdf`)
         are written as ISO timestamps; the loader (``AlbumYAML``) normalizes them
-        to UTC and enforces ordering/non-overlap when it reads the file back."""
+        to UTC and enforces ordering/non-overlap when it reads the file back.
+        ``lead_face_images`` (from ``--lead-face``) are written as the
+        ``lead_faces.reference_images`` block."""
         album_yml.parent.mkdir(parents=True, exist_ok=True)
         data: dict[str, object] = {
             "slug": slug,
@@ -295,10 +330,41 @@ class DirectoryIngestor:
             # mode="json" gives ISO-string timestamps; exclude_none drops an absent
             # `place` — a plain, YAML-friendly dict the loader reads straight back.
             data["segments"] = [s.model_dump(mode="json", exclude_none=True) for s in segments]
-        _ = album_yml.write_text(
-            yaml.safe_dump(data, sort_keys=False, allow_unicode=True),
-            encoding="utf-8",
-        )
+        if lead_face_images:
+            data["lead_faces"] = _lead_faces_block(lead_face_images)
+        _write_album_yml(album_yml, data)
+
+
+def _write_album_yml(album_yml: Path, data: dict[str, object]) -> None:
+    """Serialize ``data`` to ``album_yml`` — the one place the YAML dump options
+    (unsorted keys so the shape reads top-down, unicode preserved) are set."""
+    _ = album_yml.write_text(
+        yaml.safe_dump(data, sort_keys=False, allow_unicode=True),
+        encoding="utf-8",
+    )
+
+
+def _lead_faces_block(images: list[Path]) -> dict[str, object]:
+    """The ``lead_faces`` YAML for CLI-supplied reference photos. Absolute paths so
+    they resolve correctly regardless of the album.yml's directory (``reference_dir``
+    in the resolver): ``pathlib``'s ``/`` discards the left operand when the right
+    is absolute."""
+    return {"reference_images": [str(path.resolve()) for path in images]}
+
+
+def patch_lead_faces(album_yml: Path, images: list[Path]) -> None:
+    """Overwrite an existing ``album.yml``'s ``lead_faces`` block in place — used by
+    ``run --lead-face`` and ``generate --force --lead-face`` to add/replace leads
+    without hand-editing YAML. Replaces the whole block (does not merge)."""
+    if not album_yml.is_file():
+        raise IngestError(f"no album.yml at {album_yml} — run `generate` first")
+    data = yaml.safe_load(album_yml.read_text())
+    if not isinstance(data, dict):
+        # A present-but-empty (or non-mapping) album.yml — patching it would strip
+        # slug/title and yield a file the loader rejects with a cryptic error.
+        raise IngestError(f"album.yml at {album_yml} is empty or malformed — run `generate` first")
+    data["lead_faces"] = _lead_faces_block(images)
+    _write_album_yml(album_yml, data)
 
 
 def _capture_range(assets: list[ImmichAsset]) -> tuple[datetime, datetime] | None:
@@ -350,6 +416,7 @@ def ingest_directory(
     timezone: str | None = None,
     source_document: Path | None = None,
     force: bool = False,
+    lead_face_images: list[Path] | None = None,
 ) -> str:
     """Ingest ``directory`` with the real Immich client and return the slug the
     pipeline should run — the production entry point the CLI calls.
@@ -367,4 +434,5 @@ def ingest_directory(
             timezone=timezone,
             source_document=source_document,
             force=force,
+            lead_face_images=lead_face_images,
         )

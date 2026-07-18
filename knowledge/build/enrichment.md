@@ -55,12 +55,16 @@ The user supplies a **reference picture of the key people** (the couple, the bab
 - **Instead, let Immich's recognition match.** Immich already clusters library faces
   into `Person` entities. The reference picture just *names which people are leads*:
   `reference picture → GET /faces?id={reference_asset_id} → [person_id, …]`.
-- **Three `album.yml` inputs:** `reference_image` (local photo — PRIMARY; uploaded via
-  `POST /assets`, then poll until Immich's async face-detection job runs, then read
-  faces), `reference_asset_id` (asset already in Immich, no upload), or `person_ids`
-  (name the people directly). Upload is idempotent (dedupe on Immich sha1 / cache the
-  resolved `reference_asset_id`); the resolver tolerates the async gap and errors
-  clearly if detection never completes. A lead face *unassigned* in Immich is
+- **Three `album.yml` inputs, each a list** (single lead = one-element list):
+  `reference_images` (local photos — PRIMARY; each uploaded via `POST /assets`, then
+  poll until Immich's async face-detection job runs, then read + union faces),
+  `reference_asset_ids` (assets already in Immich, no upload), or `person_ids`
+  (name the people directly). The repeatable `--lead-face IMAGE` CLI flag writes the
+  `reference_images` block (see [album definition](/reference/album-definition.md)).
+  Uploads are re-run every time and idempotent via Immich's content-dedup (identical
+  bytes → the existing asset id; a *changed* reference → a new one, so swapping a lead
+  takes effect) — no DB cache; the resolver tolerates the async detection gap and
+  errors clearly if detection never completes. A lead face *unassigned* in Immich is
   surfaced as a warning (Immich needs it confirmed once before cross-album matching).
 - **How `select` prioritizes** (boost, not filter — a book of *only* leads is worse
   than one that leads with them): guaranteed per-scene coverage (a lead is never
@@ -89,7 +93,8 @@ Each followed the [implementation workflow](/process/implementation-workflow.md)
 - **17b. Lead-face resolution.** `lead_faces` in `album.yml` resolved to lead person
   IDs (`Person.is_lead=True`); client `upload_asset` (`POST /assets`); resolver
   uploads once (idempotent), waits out async detection (retry/backoff + timeout),
-  reads faces; `reference_asset_id`/`person_ids` skip upload; unassigned face → warning.
+  reads faces; `reference_asset_ids`/`person_ids` skip upload; unassigned face →
+  warning. Step 30 generalized the single reference to a list + the `--lead-face` CLI flag.
 - **18. People-aware + lead-aware `select`.** Coverage admits a missing person's best
   shot; near-tie prefers group shots; leads get guaranteed per-scene coverage and
   outrank the tie-break, never dropped as a near-dup of a non-lead; boost is

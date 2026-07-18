@@ -32,20 +32,25 @@ class SegmentYAML(BaseModel):
 class LeadFacesYAML(BaseModel):
     """The optional ``lead_faces`` block — who the priority subjects are.
 
-    Exactly one input identifies the leads (see knowledge/build/enrichment.md):
+    Exactly one input identifies the leads (see knowledge/build/enrichment.md).
+    Every input is a *list*, so naming one lead is just the one-element case of
+    naming several — there is no separate single-item form:
 
-    - ``reference_image`` — a local photo of the leads, resolved next to
-      ``album.yml``, uploaded to Immich so its detected faces name the people;
-    - ``reference_asset_id`` — an asset already in Immich (no upload);
+    - ``reference_images`` — local photos of the leads (one or more, e.g. one per
+      subject), each resolved next to ``album.yml`` and uploaded to Immich so its
+      detected faces name the people; their faces are unioned. The ``--lead-face``
+      CLI flag writes this form (see step 30);
+    - ``reference_asset_ids`` — assets already in Immich (no upload); their faces
+      are unioned;
     - ``person_ids`` — the Immich people named directly (no photo).
 
     Resolution to Immich person IDs (and the upload/async-detection wait for
-    ``reference_image``) happens later, in ``stages/lead_faces.py`` — this model
+    ``reference_images``) happens later, in ``stages/lead_faces.py`` — this model
     only parses and validates the shape.
     """
 
-    reference_image: str | None = None
-    reference_asset_id: str | None = None
+    reference_images: list[str] | None = None
+    reference_asset_ids: list[str] | None = None
     person_ids: list[str] | None = None
 
     @model_validator(mode="after")
@@ -53,16 +58,16 @@ class LeadFacesYAML(BaseModel):
         provided = self._provided_fields()
         if len(provided) != 1:
             raise ValueError(
-                "lead_faces must set exactly one of reference_image, "
-                f"reference_asset_id, person_ids (got: {provided or 'none'})",
+                "lead_faces must set exactly one of reference_images, "
+                f"reference_asset_ids, person_ids (got: {provided or 'none'})",
             )
         return self
 
     def _provided_fields(self) -> list[str]:
         """Names of the lead-identifying fields that were actually set."""
         candidates = (
-            ("reference_image", self.reference_image),
-            ("reference_asset_id", self.reference_asset_id),
+            ("reference_images", self.reference_images),
+            ("reference_asset_ids", self.reference_asset_ids),
             ("person_ids", self.person_ids),
         )
         return [name for name, value in candidates if value]

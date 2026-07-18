@@ -71,10 +71,11 @@ class TestMigratedSchema:
             ),
         ).all()
         columns = {(row[0], row[1]) for row in rows}
-        # Step 17 (faces) + 17b (lead reference) additions, on the real schema.
+        # Step 17 (faces) additions, on the real schema. (Step 30 dropped the
+        # albums.lead_reference_asset_id cache — leads now rely on Immich dedup.)
         assert ("photos", "person_ids") in columns
         assert ("photos", "face_count") in columns
-        assert ("albums", "lead_reference_asset_id") in columns
+        assert ("albums", "lead_reference_asset_id") not in columns
         assert any(table == "people" for table, _ in columns)
 
     def test_no_model_migration_drift(self, migrated_session: Session) -> None:

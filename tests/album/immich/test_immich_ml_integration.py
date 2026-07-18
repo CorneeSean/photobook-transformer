@@ -13,7 +13,7 @@ from the internet at test time:
   the ``?id=`` contract that was only ever exercised against fixtures.
 - **Real lead resolution** (step 17b): run the real
   :class:`~album.flow.stages.lead_faces.LeadFaceResolver` through the
-  ``reference_image`` path — a genuine ``POST /assets`` upload followed by polling
+  ``reference_images`` path — a genuine ``POST /assets`` upload followed by polling
   real async detection, the exact timing that was deferred — and confirm the
   resolved reference face is machine-learning-sourced.
 - **CLIP offline** (open Q1 / quality embeddings): smart search returns the
@@ -151,7 +151,7 @@ class TestImmichMlIntegration:
         resolver = LeadFaceResolver(
             provider=immich_client,
             album_id=album_id,
-            config=LeadFacesYAML(reference_image="lead.jpg"),
+            config=LeadFacesYAML(reference_images=["lead.jpg"]),
             reference_dir=reference_dir,
             session_factory=sqlite_session_factory,
             poll_timeout_s=300.0,
@@ -163,12 +163,10 @@ class TestImmichMlIntegration:
         assert result.lead_person_ids or result.unassigned_reference_faces >= 1, (
             "resolver saw no faces on the reference — real async detection did not complete"
         )
-        # And it was machine-learning-detected, not an EXIF/manual face.
-        with sqlite_session_factory() as check:
-            album = check.get(Album, album_id)
-            assert album is not None
-            reference_asset_id = album.lead_reference_asset_id
-        assert reference_asset_id is not None, "resolver did not cache the reference asset id"
+        # And it was machine-learning-detected, not an EXIF/manual face. The
+        # resolver no longer caches the asset id (step 30 relies on Immich dedup),
+        # so re-upload the same bytes — Immich returns the existing asset id.
+        reference_asset_id = immich_client.upload_asset(reference_dir / "lead.jpg")
         reference_faces = immich_client.get_faces(reference_asset_id)
         assert any(face.source_type == "machine-learning" for face in reference_faces), (
             "the resolved reference face was not machine-learning-detected"

@@ -186,7 +186,7 @@ class ImmichClient:
     def upload_asset(self, path: Path) -> str:
         """Upload a local file to Immich via ``POST /assets``; return its asset id.
 
-        Used for ``lead_faces.reference_image`` — a photo of the priority
+        Used for ``lead_faces.reference_images`` — photos of the priority
         subjects whose Immich-detected faces name the leads (see
         knowledge/build/enrichment.md). Immich dedupes by content: re-uploading
         identical bytes returns ``status="duplicate"`` with the *existing*

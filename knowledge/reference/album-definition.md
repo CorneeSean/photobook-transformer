@@ -60,20 +60,27 @@ segments:
 
 An optional `lead_faces` block names the key people — the couple, the baby, the
 guest of honour — so [`select`](/stages/select.md) prioritizes photos of them.
-Set **exactly one** of three inputs (see [Immich enrichment](/build/enrichment.md)):
+Set **exactly one** of three inputs (see [Immich enrichment](/build/enrichment.md)).
+Every input is a *list*, so naming one lead is just the one-element case:
 
 ```yaml
 lead_faces:
-  reference_image: leads.jpg          # PRIMARY — a local photo of the leads,
-                                      # resolved next to album.yml, uploaded to
-                                      # Immich, then its detected faces name them.
-  # reference_asset_id: 3fa85f64-...  # or an asset already in Immich (no upload)
-  # person_ids: [3fa85f64-..., ...]   # or the Immich people, named directly
+  reference_images: [alex.jpg, sam.jpg]  # PRIMARY — local photos of the leads
+                                          # (one or more), resolved next to
+                                          # album.yml, uploaded to Immich; their
+                                          # detected faces are unioned to name them.
+  # reference_asset_ids: [3fa85f64-...]   # or assets already in Immich (no upload)
+  # person_ids: [3fa85f64-..., ...]       # or the Immich people, named directly
 ```
 
+Instead of hand-authoring this block, pass `--lead-face IMAGE` to `generate`/`run`
+(repeat it per person, e.g. `--lead-face alex.jpg --lead-face sam.jpg`) — the CLI
+writes the `reference_images` block for you (absolute paths). On `run` and
+`generate --force` it patches the block onto the existing `album.yml`.
+
 We never run our own face model — Immich already recognizes library faces into
-`Person`s; the reference just *names* which are leads.
-[`flow/stages/lead_faces.py`](/stages/index.md) resolves it (upload → wait out async
+`Person`s; the references just *name* which are leads.
+[`flow/stages/lead_faces.py`](/stages/index.md) resolves them (upload → wait out async
 detection → read faces) and marks matching `Person` rows `is_lead=True`. Omit the block
 for an album with no priority subjects (every stage then behaves as before). A reference
 face Immich hasn't assigned to a named person surfaces a warning (confirm the person

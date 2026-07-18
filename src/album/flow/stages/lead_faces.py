@@ -7,15 +7,16 @@ they used into a set of Immich person IDs and marks the matching
 (step 18) can prioritize photos of them.
 
 **No local face model.** Immich already recognizes every library face into a
-``Person``; a ``reference_image``/``reference_asset_id`` is just a way to *name*
+``Person``; ``reference_images``/``reference_asset_ids`` are just ways to *name*
 which people are the leads — we read Immich's own recognition, never run our own
 (face embeddings aren't exposed over the API, exactly like CLIP embeddings; see
-knowledge/reference/immich-api.md and knowledge/build/enrichment.md). The three inputs:
+knowledge/reference/immich-api.md and knowledge/build/enrichment.md). Every input
+is a list (naming one lead is the one-element case). The three inputs:
 
 - ``person_ids`` — the Immich people, named directly. No Immich call.
-- ``reference_asset_id`` — an asset already in Immich; read its faces.
-- ``reference_image`` — a local photo; upload it (Immich runs face detection on
-  import, *asynchronously*), wait out that detection, then read its faces.
+- ``reference_asset_ids`` — assets already in Immich; read their faces.
+- ``reference_images`` — local photos; upload each (Immich runs face detection on
+  import, *asynchronously*), wait out that detection, then union their faces.
 
 :class:`LeadFaceResolver` stays Prefect-free logic (folder-structure.md rule) — so
 it's unit-testable without an orchestrator via ``run``. It is **not** a
@@ -40,7 +41,7 @@ from typing import ClassVar, Protocol
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from album.db.models import Album, Person
+from album.db.models import Person
 from album.db.session import SessionFactory
 from album.definition import LeadFacesYAML
 from album.flow.stages.base import TaskUnit
@@ -117,9 +118,10 @@ class LeadFaceResolver(TaskUnit[LeadResult]):
     def run(self) -> LeadResult:
         """Open a session, resolve leads, commit. No ``lead_faces`` configured ⇒ no-op.
 
-        ``reference_dir`` is the directory ``album.yml`` lives in, used to resolve a
-        relative ``reference_image``. Idempotent: an uploaded reference is cached on
-        ``Album.lead_reference_asset_id`` and reused on re-run.
+        ``reference_dir`` is the directory ``album.yml`` lives in, used to resolve
+        relative ``reference_images``. Idempotent: reference photos are re-uploaded
+        each run and Immich content-dedupes them, so a re-run is a no-op unless a
+        reference photo actually changed (then the new lead takes effect).
         """
         with self._session_factory() as session:
             result = self._resolve(session)
@@ -159,44 +161,64 @@ class LeadFaceResolver(TaskUnit[LeadResult]):
         session: Session,
         result: LeadResult,
     ) -> list[str]:
-        if config.person_ids is not None:
+        # Dispatch on truthiness (matching LeadFacesYAML's exactly-one validation,
+        # which also treats an empty list as "not provided") so an explicit `[]`
+        # can't shadow the real input.
+        if config.person_ids:
             # Named directly — no Immich round-trip, just de-dupe (order-preserving).
             return list(dict.fromkeys(config.person_ids))
 
-        if config.reference_asset_id is not None:
-            faces = self._provider.get_faces(config.reference_asset_id)
-            return self._person_ids_from_faces(faces, result)
+        if config.reference_asset_ids:
+            # Already in Immich: read each asset's faces (no upload), union them.
+            return self._person_ids_from_assets(
+                config.reference_asset_ids,
+                result,
+                fetch=self._provider.get_faces,
+            )
 
-        # reference_image: upload (once) then wait out Immich's async detection.
-        asset_id = self._reference_asset_id(album_id, config, reference_dir, session, result)
-        faces = self._await_faces(asset_id)
+        # reference_images: upload each then wait out Immich's async detection per
+        # asset, unioning the faces across every reference photo.
+        assert config.reference_images  # guaranteed by the caller's dispatch
+        asset_ids = self._upload_references(config.reference_images, reference_dir, result)
+        return self._person_ids_from_assets(asset_ids, result, fetch=self._await_faces)
+
+    def _person_ids_from_assets(
+        self,
+        asset_ids: list[str],
+        result: LeadResult,
+        *,
+        fetch: Callable[[str], list[ImmichFace]],
+    ) -> list[str]:
+        """Union the faces across ``asset_ids`` (``fetch`` reads one asset's faces —
+        an immediate ``get_faces`` for already-in-Immich assets, or the async-detection
+        poll for freshly uploaded ones) and reduce them to assigned person IDs."""
+        faces = [face for asset_id in asset_ids for face in fetch(asset_id)]
         return self._person_ids_from_faces(faces, result)
 
-    def _reference_asset_id(
+    def _upload_references(
         self,
-        album_id: int,
-        config: LeadFacesYAML,
+        images: list[str],
         reference_dir: Path,
-        session: Session,
         result: LeadResult,
-    ) -> str:
-        album = session.get(Album, album_id)
-        if album is None:
-            raise ValueError(f"no album with id {album_id}")
-        if album.lead_reference_asset_id is not None:
-            return album.lead_reference_asset_id  # cached from a previous run — don't re-upload
+    ) -> list[str]:
+        """Upload each reference photo, returning the Immich asset ids in order.
 
-        assert config.reference_image is not None  # guaranteed by the caller's dispatch
-        path = reference_dir / config.reference_image
-        if not path.is_file():
-            raise LeadFaceResolutionError(
-                f"lead_faces.reference_image {config.reference_image!r} not found at {path}",
-            )
-        asset_id = self._provider.upload_asset(path)
-        album.lead_reference_asset_id = asset_id
-        session.flush()
+        Uploaded on **every** run — Immich content-dedupes, so identical bytes
+        return the existing asset id (no storage churn) and a *changed* reference
+        photo returns a new id, which is what makes swapping a lead via
+        ``--lead-face`` actually take effect (no stale local cache to invalidate).
+        Raises :class:`LeadFaceResolutionError` naming the first missing file — an
+        absolute entry (as the ``--lead-face`` CLI writes) ignores ``reference_dir``."""
+        asset_ids: list[str] = []
+        for image in images:
+            path = reference_dir / image
+            if not path.is_file():
+                raise LeadFaceResolutionError(
+                    f"lead_faces reference image {image!r} not found at {path}",
+                )
+            asset_ids.append(self._provider.upload_asset(path))
         result.uploaded_reference = True
-        return asset_id
+        return asset_ids
 
     def _await_faces(self, asset_id: str) -> list[ImmichFace]:
         """Poll ``get_faces`` until Immich's async detection produces faces.

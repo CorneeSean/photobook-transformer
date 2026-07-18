@@ -53,10 +53,9 @@ class Album(Base):
     # e.g. {"occasion": "honeymoon", "names": ["Alex", "Sam"]}
     meta: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
 
-    # Immich asset id of an uploaded `lead_faces.reference_image`, cached so
-    # re-running lead resolution reuses it rather than re-uploading. NULL until a
-    # reference image has been uploaded (or if leads are named another way).
-    lead_reference_asset_id: Mapped[str | None]
+    # (No lead-reference cache column: lead-face resolution re-uploads the
+    # `lead_faces.reference_images` photos each run and relies on Immich's
+    # content-dedup for idempotency — see stages/lead_faces.py, step 30.)
 
     photos: Mapped[list["Photo"]] = relationship(back_populates="album")
     segments: Mapped[list["Segment"]] = relationship(
