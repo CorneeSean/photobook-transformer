@@ -44,6 +44,41 @@ yourself and run `uv run photobook-generator run --album <slug>` — see
 [Album definition](./knowledge/reference/album-definition.md) and
 [Single-command ingestion](./knowledge/build/single-command-ingestion.md).
 
+### Multiple albums from one folder tree
+
+Point `generate` at a directory that holds several albums and add `--manifest` to
+fan it into **N independent books** in one run — one Immich album, one `album.yml`,
+one pipeline run, one book per declared album:
+
+```sh
+uv run photobook-generator generate ./photos-root --manifest   # default: ./photos-root/ingest.yml
+```
+
+A root `ingest.yml` declares which subfolders are album boundaries and which are
+segment boundaries, by relative path:
+
+```yaml
+albums:
+  - path: lisbon-2026            # → its own Immich album + album.yml + run + book
+    title: Lisbon 2026           # optional; else the folder name, titleized
+    timezone: Europe/Podgorica  # optional; else the --timezone default
+    segments:                   # optional; each subfolder → one Segment,
+      - path: day-1-harbour     #   its time window = [min, max] of that
+      - path: day-2/old-town    #   subfolder's photo capture timestamps
+        place: Old Town         # optional (no geocoding)
+  - path: wedding
+    source_document: runsheet.pdf   # PDF-derived segments instead of folders
+```
+
+Fan-out is **opt-in** (a stray `ingest.yml` never changes plain `generate <dir>`),
+and per-album fields live in the manifest — `--slug`/`--title`/`--source-document`/
+`--lead-face` are rejected in manifest mode (`--timezone`/`--captioner`/`--force`
+still apply to every album). A bad album (empty folder, undated photos, a broken
+derived `album.yml`) is isolated and skipped; the run continues and prints a combined
+books-written / albums-failed summary. Same caveat as above: the stack must be up and
+`IMMICH__API_KEY` set. See
+[folder-structure-driven ingestion](./knowledge/build/folder-structure-ingestion.md).
+
 ## Architecture
 
 Batch pipeline over Immich + Postgres, orchestrated by Prefect, PydanticAI for

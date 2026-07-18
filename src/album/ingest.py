@@ -10,7 +10,7 @@ knowledge/build/single-command-ingestion.md. It runs **before** ``sync`` and is
 ``album.yml`` stays the **single source of truth**: this materializes one, then
 the normal load path (``get_or_create_album`` → ``AlbumDefinition``) takes over,
 so the generated file is inspectable/editable and there is still exactly one way
-the pipeline defines an album. It introduces no occasion-specific concept — it
+the pipeline defines an album. It introduces no album-type-specific concept — it
 deals only in "a directory of images" and "an Immich album" — so the
 [genericity rule](../../knowledge/reference/folder-structure.md) is unaffected.
 """

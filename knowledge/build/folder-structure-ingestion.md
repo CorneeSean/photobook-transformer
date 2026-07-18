@@ -139,11 +139,35 @@ Each step follows the standard workflow (branch off `main` → test-first → `p
 green → sub-agent review → squash → fast-forward merge → push) and updates
 [progress.md](/build/progress.md) + [log.md](/log.md) on its branch before merging.
 
-**Status: steps 32–34 built and merged** — the manifest loader, folder-derived
-segments, and the `generate --manifest` fan-out are in place; only step 35 (the
-cross-cutting user docs + end-to-end genericity gate) remains. As-built deviations
-across 32–34 are recorded per-step in [log.md](/log.md); step 35 folds the
-consolidated "As-built" note in here.
+## As-built (steps 32–35, all merged)
+
+The feature shipped as planned; the deviations worth knowing:
+
+- **A shared `src/album/text.py`** holds `slugify`/`titleize` (step 32). Importing
+  `ingest._slugify` from `manifest.py` would have become an `ingest ↔ manifest` cycle in
+  step 33, so the helpers were hoisted to a leaf module both import.
+- **The manifest rejects `.` (and any `..` component)** as an album/segment path — a hair
+  stricter than "no escape after normalization", and it keeps an album's `effective_slug`
+  well-defined (`.` would slugify an empty name). Surfaced by review.
+- **The segment-source seam returns `(title_suggestion, segments)`**, not the plan's
+  `list[SegmentYAML] | None` (step 33). The PDF path already produced a doc-title
+  *alongside* its segments from one parse; the tuple keeps that single-parse title flowing
+  through the shared `_ingest` spine without a second channel. `_validate_materialized`'s
+  message was generalized to be source-agnostic (it now serves the folder path too).
+- **The CLI resolves the captioner up front, inside the error guard** (step 34), so a
+  misconfigured `CAPTIONER` fails fast with a clean message *before* any upload. The
+  per-album pipeline catch is deliberately narrow (`FileNotFoundError, ValueError`) — an
+  *unexpected* error still aborts the batch, matching `_generate_single`'s "surface real
+  bugs" convention.
+- **The genericity gate is a scoped token guard** (`manifest.py`/`text.py`/`ingest.py`)
+  plus the fixture-tree end-to-end test (step 35), not a whole-`src/` grep — the rest of
+  `src/` legitimately *discusses* occasions ("nothing here knows the occasion") and uses
+  "round-trip". `ingest.py`'s module docstring dropped its one "occasion" mention so the
+  three folder-ingestion modules stay token-clean.
+
+Live multi-album fan-out against a real Immich is still folded into the standing
+first-live-run gap ([progress.md Notes](/build/progress.md#notes--blockers)); the
+fixture-tree end-to-end test (`test_genericity.py`) is the offline stand-in.
 
 ## What "one command" still does not remove
 

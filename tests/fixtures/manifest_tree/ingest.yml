@@ -1,0 +1,12 @@
+# A two-album manifest fixture for the end-to-end fan-out / genericity test.
+# Two deliberately different album *shapes* prove the fan-out (and the whole
+# manifest path) needs no per-album-type code — the same point smith-wedding
+# makes for a single album:
+#   * coastal-walk — folder-derived segments (two subfolders → two Segments)
+#   * garden-party — a flat album (no segment subfolders → zero Segments)
+albums:
+  - path: coastal-walk
+    segments:
+      - path: morning-harbour
+      - path: old-town
+  - path: garden-party

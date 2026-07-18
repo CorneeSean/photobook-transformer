@@ -56,6 +56,14 @@ segments:
 
 **Adding an album requires: this YAML file + an Immich album. Nothing else.**
 
+**`segments` have three authoring *sources*, one on-disk shape.** You can write them
+by hand (above), extract them from a `--source-document` PDF, or derive them from
+subfolders via a manifest (`generate <root> --manifest` — each subfolder's window is
+`[min, max]` of its photos' capture timestamps; see
+[folder-structure-driven ingestion](/build/folder-structure-ingestion.md)). All three
+produce the identical `segments` block this file documents, validated by the same
+loader — the source differs, the shape does not.
+
 ## Lead faces (optional priority subjects)
 
 An optional `lead_faces` block names the key people — the couple, the baby, the

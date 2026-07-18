@@ -9,12 +9,16 @@ between ``test_quality.py`` and the flow concurrency test.
 
 from __future__ import annotations
 
+from datetime import datetime
+from pathlib import Path
+
 from pydantic_ai.messages import ModelMessage, ModelResponse, TextPart, UserPromptPart
 from pydantic_ai.models.function import AgentInfo, FunctionModel
 from pydantic_ai.models.test import TestModel
 
 from album.analysis.context import PhotoContext
 from album.analysis.tone import ToneParams
+from album.immich.client import ImmichAsset, ImmichJobCounts
 
 
 class FakeThumbnails:
@@ -120,3 +124,37 @@ def capturing_caption_model(
         return ModelResponse(parts=[TextPart(content=caption)])
 
     return FunctionModel(handler), prompts
+
+
+class DatingIngestClient:
+    """A fake :class:`~album.ingest.IngestClient` that dates each uploaded photo by
+    filename, so folder-derived segment windows are deterministic.
+    ``get_album_assets`` echoes the uploaded photos with their local capture time
+    (``None`` for a filename not in ``times`` → an undated photo). Shared by
+    ``test_ingest.py`` (the folder-segment + fan-out tests) and ``test_genericity.py``
+    (the end-to-end fan-out), so it lives here per quality-practices.md §2.4."""
+
+    def __init__(self, times: dict[str, datetime]) -> None:
+        self._times = times
+        self.uploaded_ids: dict[Path, str] = {}
+
+    def upload_asset(self, path: Path) -> str:
+        asset_id = f"asset-{len(self.uploaded_ids) + 1}"
+        self.uploaded_ids[path] = asset_id
+        return asset_id
+
+    def create_album(self, name: str, asset_ids: list[str]) -> str:
+        return "immich-new-1"
+
+    def get_jobs(self) -> dict[str, ImmichJobCounts]:
+        return {}
+
+    def get_album_assets(self, immich_album_id: str) -> list[ImmichAsset]:
+        return [
+            ImmichAsset(
+                id=asset_id,
+                originalFileName=path.name,
+                localDateTime=self._times.get(path.name),
+            )
+            for path, asset_id in self.uploaded_ids.items()
+        ]

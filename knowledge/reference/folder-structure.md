@@ -29,7 +29,7 @@ photo-album-pipeline/
 │   ├── definition.py         # loads/validates album.yml → Album + Segments
 │   ├── manifest.py           # parses a root ingest.yml into album/segment declarations (generate --manifest)
 │   ├── text.py               # slugify/titleize a folder name (shared by ingest.py + manifest.py)
-│   ├── ingest.py             # DirectoryIngestor: dir → upload → Immich album → album.yml (generate path)
+│   ├── ingest.py             # DirectoryIngestor: dir → upload → Immich album → album.yml; ingest_manifest fans a tree into N albums
 │   │
 │   ├── flow/                 # orchestration package
 │   │   ├── _flow.py          # aggregator: Pipeline class + Pipeline.flow() @flow; composes the DAG

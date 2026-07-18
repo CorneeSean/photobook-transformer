@@ -32,6 +32,7 @@ from album.ingest import (
     patch_lead_faces,
 )
 from album.manifest import AlbumSpec, Manifest, SegmentSpec
+from tests.doubles import DatingIngestClient
 
 
 def _busy(active: int = 0, waiting: int = 0) -> dict[str, ImmichJobCounts]:
@@ -530,38 +531,6 @@ class TestSourceDocument:
             ingestor.ingest(directory, source_document=self._pdf(tmp_path))
         # The file is left on disk so the user can fix it and re-run with --force.
         assert (albums_dir / "raw-dump" / "album.yml").exists()
-
-
-class DatingIngestClient:
-    """Fake :class:`~album.ingest.IngestClient` that dates each uploaded photo by
-    filename, so folder-derived segment windows are deterministic.
-    ``get_album_assets`` echoes the uploaded photos with their local capture time
-    (``None`` for a filename not in ``times`` → an undated photo)."""
-
-    def __init__(self, times: dict[str, datetime]) -> None:
-        self._times = times
-        self.uploaded_ids: dict[Path, str] = {}
-
-    def upload_asset(self, path: Path) -> str:
-        asset_id = f"asset-{len(self.uploaded_ids) + 1}"
-        self.uploaded_ids[path] = asset_id
-        return asset_id
-
-    def create_album(self, name: str, asset_ids: list[str]) -> str:
-        return "immich-new-1"
-
-    def get_jobs(self) -> dict[str, ImmichJobCounts]:
-        return {}
-
-    def get_album_assets(self, immich_album_id: str) -> list[ImmichAsset]:
-        return [
-            ImmichAsset(
-                id=asset_id,
-                originalFileName=path.name,
-                localDateTime=self._times.get(path.name),
-            )
-            for path, asset_id in self.uploaded_ids.items()
-        ]
 
 
 class TestIngestAlbum:
