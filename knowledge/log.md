@@ -6,6 +6,35 @@ bodies this log cites; keep entries tight (see
 
 ## 2026-07-19
 
+* **Step 37 — external-library ingest: the `AssetRegistrar` seam** (`749a57e`;
+  [external-library-ingestion.md](/build/external-library-ingestion.md)).
+  Wires the mode swap the step-36 plumbing set up, still **opt-in** (default unchanged). The one
+  line `_ingest` used to run inline — `{path: upload_asset(path)}` — is now an injected
+  `AssetRegistrar.register(directory, image_paths) -> {host path → asset id}`; everything downstream
+  (`create_album`, segments, materialization, the pipeline) reads only that map, so the whole
+  feature lives behind the seam. Two implementations: `UploadRegistrar` (today's per-file upload,
+  extracted verbatim, the default) and `ExternalLibraryRegistrar` (ensure one shared library reused
+  by import path → scan → wait the `library` queue out → map each host photo to its scanned asset id
+  by matching Immich's container-side `originalPath` back through `PathMapping`, filtering the
+  tree-wide library down to this album's photos, failing fast and naming any photo the scan didn't
+  return). The readiness poll was generalized to a shared `_wait_for_queues(get_jobs, queues, …)` so
+  each strategy declares the queues it waits on — the ingestor's EXIF wait and the registrar's scan
+  wait now share one poll. `build_registrar` maps the `ingest_mode` string → registrar (validation
+  kept out of `config.py`, mirroring `build_captioner`); `ingest_directory`/`ingest_manifest` build
+  it from settings. **Live-verify caveat:** the scan is async, so the `library`-queue poll's initial
+  idle check could race a not-yet-enqueued scan job on a real Immich — folded into the standing
+  live-integration gap alongside the step-36 `/libraries` shape check. `poe check` green (434 passed,
+  6 skipped, incl. the pgvector testcontainer now that Docker is up). Inline review across the
+  correctness/reuse/simplification/altitude angles: no defects; only stale "upload" doc comments
+  refreshed to "register". Complexity gate caught `_map_assets` at rank B (three comprehensions) →
+  split the `originalPath` index + the missing-photos error into module helpers.
+
+* **Docker re-verify (step 36 close-out).** With the Docker daemon back up, the container-backed
+  suite that step 36 had to merge without (`test_pgvector_integration.py`/`test_similarity.py`,
+  plus the flow integration test) now passes — 44 in the targeted run; tracker note updated. The
+  earlier `poe check` failure was a stale testcontainers-ryuk container name conflict (a leftover
+  from a manual run), cleared with `docker rm -f`, not a code issue.
+
 * **Step 36 — external-library (scan-in-place) ingest: plumbing** (`2279207`;
   [external-library-ingestion.md](/build/external-library-ingestion.md)). Foundation for a
   new **opt-in** ingest mode that references photos on disk instead of copying them into
