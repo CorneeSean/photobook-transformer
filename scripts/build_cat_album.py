@@ -6,7 +6,7 @@ time/place ``Segment``s + 30 ``Photo`` rows from
 ``photos/``), then runs the actual [`cluster`](../src/album/flow/stages/cluster.py)
 and [`assemble`](../src/album/flow/stages/assemble.py) stages and the default
 [`HtmlPrinter`](../src/album/printers/html.py) — the same code a live
-``photobook-generator run`` uses. The front-half stages that need external services (``sync``
+``photobook-generator build`` uses. The front-half stages that need external services (``sync``
 from Immich, ``quality``'s scorer, ``enhance``/``render`` via darktable,
 ``caption`` via Claude) are stood in for by the manifest: every photo arrives
 pre-``rendered_path``'d at its on-disk file and pre-captioned, and all are marked
@@ -30,6 +30,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import Session
 
 from album.db.models import Album, Base, Photo, Segment
+from album.db.session import reuse
 from album.flow.stages.assemble import AssembleStage
 from album.flow.stages.cluster import ClusterStage
 from album.printers.html import HtmlPrinter
@@ -79,15 +80,29 @@ def _seed(session: Session, manifest: dict[str, object]) -> int:
     return album.id
 
 
-def main() -> None:
+def build_cat_album(output_dir: Path = _DATA.parent) -> Path:
+    """Seed the committed cat fixture into an ephemeral DB, run the real ``cluster``
+    + ``assemble`` stages and the default ``HtmlPrinter``, and return the path to the
+    written ``index.html``. ``output_dir`` mirrors ``assemble``/``HtmlPrinter``: the
+    book lands at ``<output_dir>/<slug>/book/index.html`` (default writes it beside the
+    fixture; a test can point it at a tmp dir). Progress is printed for the CLI demo.
+    """
     manifest = json.loads((_DATA / "manifest.json").read_text())
 
     engine = create_engine("sqlite://")
+    # An ephemeral, in-memory, single-run demo DB — `create_all` is fine here.
+    # Non-negotiable rule #8 ("migrations, always; never create_all") governs the
+    # real *resumable* pipeline DB, not this throwaway showcase.
     Base.metadata.create_all(engine)
     with Session(engine) as session:
         album_id = _seed(session, manifest)
+        # Each stage opens its own session from the factory; `reuse` hands them all
+        # the one in-memory session (a fresh `sqlite://` connection would be a
+        # separate empty DB). Stages are constructed with `(album_id, factory)` and
+        # a no-arg `run()` (rule #3 — see flow/stages/base.py).
+        factory = reuse(session)
 
-        cluster_result = ClusterStage().run(album_id, session)
+        cluster_result = ClusterStage(album_id, factory).run()
         session.commit()
         print(
             f"cluster: {cluster_result.segments_assigned} photos into segments, "
@@ -98,7 +113,7 @@ def main() -> None:
 
         # assemble writes <output_dir>/<slug>/assembled.pdf and sets page_number;
         # HtmlPrinter writes <output_dir>/<slug>/book/index.html.
-        assemble_result = AssembleStage(_DATA.parent).run(album_id, session)
+        assemble_result = AssembleStage(output_dir, album_id, factory).run()
         session.commit()
         print(
             f"assemble: {assemble_result.photos_placed} photos on "
@@ -107,8 +122,13 @@ def main() -> None:
 
         album = session.get(Album, album_id)
         assert album is not None
-        print_result = HtmlPrinter(output_dir=_DATA.parent).print(album, session)
+        print_result = HtmlPrinter(output_dir=output_dir).print(album, session)
         print(f"book:   {print_result.output_ref}  ({print_result.detail})")
+        return Path(print_result.output_ref)
+
+
+def main() -> None:
+    build_cat_album()
 
 
 if __name__ == "__main__":

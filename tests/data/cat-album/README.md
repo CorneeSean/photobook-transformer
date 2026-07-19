@@ -8,7 +8,7 @@ book through the pipeline's back half, offline, with no Immich/Claude/darktable/
 - `manifest.json` — the album title, the 5 `Segment`s (label + place + UTC
   time window), and per-photo `timestamp` / `caption` / `lat` / `lon`. Each
   photo's `segment_hint` is for humans only: the real
-  [`cluster`](../../../src/album/stages/cluster.py) stage re-derives the segment
+  [`cluster`](../../../src/album/flow/stages/cluster.py) stage re-derives the segment
   from the photo's timestamp.
 
 The 5 segments (a cat's day, `2026-06-21`):
