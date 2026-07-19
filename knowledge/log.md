@@ -6,6 +6,36 @@ bodies this log cites; keep entries tight (see
 
 ## 2026-07-19
 
+* **Housekeeping — cat-album demo un-rotted and brought under the gate**
+  (`390b757`, `692dbb8`). While auditing `scripts/`, found `build_cat_album.py`
+  silently broken: it still called the old `ClusterStage().run(album_id, session)`,
+  but stages are now `Stage(album_id, session_factory).run()` (rule #3) — it had
+  rotted undetected because `scripts/` sat outside the type/xenon gate (it broke once
+  before on the `flow/` move, see below). Repointed to the current API via
+  `reuse(session)`, extracted a testable `build_cat_album(output_dir)`, and added
+  `tests/album/test_demo_cat_album.py` — a smoke test that drives the demo end to end
+  over the committed fixture and asserts a complete book (segment header + all 30
+  photos). Then added `scripts` to the [basedpyright](/reference/tech-stack.md) include,
+  so the demo is now guarded by all three layers (ruff + types + a runtime test) and
+  the next break fails `poe check` instead of rotting. Also fixed stale `run`→`build`
+  references and a fixture-README path; documented the in-memory `create_all` as an
+  intentional rule-#8 exception. `poe check` green (441/6).
+
+* **Docs cleanup — `progress.md` restructured; process/deferral notes moved to their
+  canonical homes** (`e80fa94`). With the build complete, `progress.md` had become a
+  frozen audit trail wrapped in live-tracker scaffolding. Collapsed *Outstanding* to a
+  one-paragraph summary (the "step 23 subsumed"/completion story had been repeated four
+  ways) and trimmed *Current status* to operational facts. Made the **live-integration
+  gap the single canonical deferral list** — folded in [open-questions](/build/open-questions.md)
+  #2/#3 and the LAION within-scene live check, which now point back to it. Relocated
+  process conventions *out* of the tracker: the **human-review waiver** is now canonical
+  in [implementation-workflow.md](/process/implementation-workflow.md) (it had lived only
+  in the tracker, which the workflow doc silently contradicted); the ruff-`py314`
+  `except` landmine moved to the [working agreement](/process/working-agreement.md);
+  panel-of-4 / `main`-protected / the parallel-build precedent / resolved landmines were
+  dropped as duplicates of homes they already had here or in the workflow doc. Also fixed
+  `build-order.md` step 14's dead `run` verb (→ `build`, step 39). Docs-only.
+
 * **Step 23 closed as subsumed + completed-playbook docs archived.** Analyzed whether
   the optional **step 23** (DB-backed flow smoke test) was still worth building: its
   stated goal — the whole Prefect flow over a real Postgres container with
