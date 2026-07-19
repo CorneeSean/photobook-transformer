@@ -31,7 +31,6 @@ on missing code (see [Notes / blockers](#notes--blockers)).
 | # | Step | Playbook | Status | Branch | Notes |
 |---|------|----------|--------|--------|-------|
 | 23 | DB-backed flow smoke test (optional) | testcontainers | todo | — | largely subsumed by step 25's `test_flow_integration.py`; revisit only if a gap remains |
-| 39↩ | CLI package split (step-39 follow-up): `cli.py` → `album/cli/` package + `BuildRunner` | [step-39-cli-package-split](/build/step-39-cli-package-split.md) | planned | — | pure structural refactor, **no behaviour change**; plan saved, not yet executed |
 
 The folder-structure-driven ingestion playbook (steps 32–35) is **complete** — see
 [Completed](#folder-structure-driven-ingestion-playbook-see-folder-structure-ingestionmd).
@@ -41,10 +40,11 @@ mode; upload stays the default) is **complete** — all three steps (plumbing, t
 [Completed](#external-library-ingestion-playbook-complete-see-external-library-ingestionmd)).
 The
 [decisions](/build/external-library-ingestion.md#decisions-confirmed-with-the-user-2026-07-19-before-step-36)
-were confirmed with the user 2026-07-19. Outstanding: the optional **step 23**, plus
-a queued **step-39 follow-up** — splitting `cli.py` into an `album/cli/` package
-(plan saved at [step-39-cli-package-split.md](/build/step-39-cli-package-split.md),
-awaiting execution).
+were confirmed with the user 2026-07-19. The **step-39 follow-up** — splitting
+`cli.py` into an `album/cli/` package
+([plan](/build/step-39-cli-package-split.md)) — is **done** (`ae40daa`, a pure
+structural refactor with no behaviour change). Outstanding: only the optional
+**step 23**.
 
 ## Completed (DONE)
 
@@ -142,7 +142,7 @@ Audit trail — one line per step; see the commit and [log.md](/log.md) for deta
 
 | # | Step | Branch | Commit | Notes |
 |---|------|--------|--------|-------|
-| 39 | Fold `generate`+`run` into one strategy-based `build` command | step-39-unify-cli-build | 22acb9c | User-requested cleanup: one `photobook-generator build` with two switchable phases decided once args are parsed into an `AlbumSource` strategy (ABC). `build <dir>` = `DirectoryIngestSource` (ingest one + run); `--manifest` = `ManifestIngestSource` (fan-out); `--no-ingest --album <slug>` = `NoIngestSource` (skip ingest, run existing `album.yml` — the old `run`). `_select_source` picks the strategy; a single `_run_pipelines`+`_report` driver runs the pipeline over each `PreparedAlbum` and prints one combined summary — replacing the scattered `_generate*`/`_run` handlers. **Surface decisions (confirmed with user):** new verb `build`; `--no-ingest` (explicit) to skip; **clean break, no `generate`/`run` aliases**. Argument misuse (missing `DIR`, `--album` sans `--no-ingest`, per-album flags in fan-out, ingest options with `--no-ingest`) is now a uniform argparse usage error (exit 2, was 1 for per-album). `test_cli.py` rewritten; `test_genericity.py` retargeted to `_run_pipelines`/`_prepared_from_outcome`; poe `run`/`generate` tasks → `build`; docs (README.md/.html, AGENTS, working-agreement, folder-structure, ingest stage, external-library playbook) updated. Inline review (correctness/reuse/simplification/altitude): no defects; `_select_source` split (rank B → A). `poe check` green (440/6) |
+| 39 | Fold `generate`+`run` into one strategy-based `build` command | step-39-unify-cli-build | 22acb9c | User-requested cleanup: one `photobook-generator build` with two switchable phases decided once args are parsed into an `AlbumSource` strategy (ABC). `build <dir>` = `DirectoryIngestSource` (ingest one + run); `--manifest` = `ManifestIngestSource` (fan-out); `--no-ingest --album <slug>` = `NoIngestSource` (skip ingest, run existing `album.yml` — the old `run`). `_select_source` picks the strategy; a single `_run_pipelines`+`_report` driver runs the pipeline over each `PreparedAlbum` and prints one combined summary — replacing the scattered `_generate*`/`_run` handlers. **Surface decisions (confirmed with user):** new verb `build`; `--no-ingest` (explicit) to skip; **clean break, no `generate`/`run` aliases**. Argument misuse (missing `DIR`, `--album` sans `--no-ingest`, per-album flags in fan-out, ingest options with `--no-ingest`) is now a uniform argparse usage error (exit 2, was 1 for per-album). `test_cli.py` rewritten; `test_genericity.py` retargeted to `_run_pipelines`/`_prepared_from_outcome`; poe `run`/`generate` tasks → `build`; docs (README.md/.html, AGENTS, working-agreement, folder-structure, ingest stage, external-library playbook) updated. Inline review (correctness/reuse/simplification/altitude): no defects; `_select_source` split (rank B → A). `poe check` green (440/6). **Follow-up (`ae40daa`):** split the single `cli.py` into an `album/cli/` package — `parser.py` (argparse), `sources.py` (`AlbumSource` strategies + `select_source`), `runner.py` (`BuildRunner` + `run_pipelines`), `__init__.py` (public `main`). Pure structural move, no behaviour change; bodies verbatim, tests retargeted patch-at-use-site, `poe check` still 440/6 |
 
 ## Notes / blockers
 

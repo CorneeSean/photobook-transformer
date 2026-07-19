@@ -6,6 +6,25 @@ bodies this log cites; keep entries tight (see
 
 ## 2026-07-19
 
+* **Step 39 (follow-up) — split `cli.py` into an `album/cli/` package** (`ae40daa`;
+  [plan](/build/step-39-cli-package-split.md)). The step-39 `build` command worked and
+  was `poe check`-green, but lived in a single ~370-line `cli.py` mixing four
+  responsibilities. Split into a package with one job per module: `parser.py` (argparse
+  only), `sources.py` (the `AlbumSource` strategies + `select_source`), `runner.py`
+  (`BuildRunner` + the pure `run_pipelines` transform), and `__init__.py` (the public
+  `main` entrypoint). A **pure structural refactor — no CLI behaviour change** (same
+  `build` surface, flags, exit codes, output): function bodies moved verbatim, three
+  test-driven names went public (`select_source`/`prepared_from_outcome`/`run_pipelines`),
+  and `_build`/`_report` became `BuildRunner`. The parser drops the now-single-command
+  `func` dispatch default but keeps `set_defaults(parser=…)`, so usage errors still exit
+  2 against the build subparser; entry point `album.cli:main` resolves unchanged. Tests
+  retargeted patch-at-use-site (`pipeline`/`get_settings` → `album.cli.runner`, the
+  `ingest_*`/`load_manifest`/`patch_lead_faces` → `album.cli.sources`). Two adversarial
+  sub-agent reviews (correctness; style/reuse) found no defects — bodies verified
+  byte-for-byte identical. Living docs (folder-structure tree, architecture note) point
+  at the `cli/` package. `poe check` green (440 passed, 6 skipped). Logged as a step-39
+  follow-up (not a new step number), per the user's framing.
+
 * **Step 39 — unify the CLI into one `build` command** (`22acb9c`). User-requested cleanup of a
   CLI that had grown verbose and scattered across `generate`/`run` subcommands with parallel
   `_generate_single`/`_generate_manifest`/`_run` handlers. Now a single `photobook-generator build`
