@@ -59,7 +59,7 @@ one `@flow` taking `album_slug`. A local Prefect server is enough — no cloud, 
 deployments.
 
 > Note: in Prefect 3, run a parameterized flow by importing and calling it
-> (`pipeline(album_slug="honeymoon-2026")`), typically from `cli.py`. There is no
+> (`pipeline(album_slug="honeymoon-2026")`), typically from the `cli/` package. There is no
 > `prefect run --param`; that's Prefect 1 syntax.
 
 ## LLM integration — PydanticAI, not the raw Anthropic SDK

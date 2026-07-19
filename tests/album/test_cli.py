@@ -3,7 +3,7 @@
 
 ``pipeline()``, ``ingest_directory()`` and ``ingest_manifest()`` are exercised in
 their own modules — this file only checks that ``main()`` picks the right
-:class:`~album.cli.AlbumSource` strategy from the parsed args, threads options
+:class:`~album.cli.sources.AlbumSource` strategy from the parsed args, threads options
 through, turns expected user-fixable errors (``FileNotFoundError``/``ValueError``/
 ``IngestError``) into a clean message + exit 1 (letting anything else propagate),
 and rejects argument misuse with argparse's exit-2 usage error.
@@ -27,7 +27,9 @@ from album.manifest import AlbumSpec, Manifest
 def _default_captioner_env(monkeypatch: pytest.MonkeyPatch) -> None:
     """Stub ``get_settings`` so ``--captioner``-less runs resolve the default without
     needing a real ``.env`` (``DATABASE_URL`` etc.). Individual tests override it."""
-    monkeypatch.setattr("album.cli.get_settings", lambda: SimpleNamespace(captioner="template"))
+    monkeypatch.setattr(
+        "album.cli.runner.get_settings", lambda: SimpleNamespace(captioner="template")
+    )
 
 
 def _argv(monkeypatch: pytest.MonkeyPatch, *args: str) -> None:
@@ -36,7 +38,7 @@ def _argv(monkeypatch: pytest.MonkeyPatch, *args: str) -> None:
 
 def _stub_pipeline(monkeypatch: pytest.MonkeyPatch) -> list[dict[str, object]]:
     calls: list[dict[str, object]] = []
-    monkeypatch.setattr("album.cli.pipeline", lambda **kwargs: calls.append(kwargs))
+    monkeypatch.setattr("album.cli.runner.pipeline", lambda **kwargs: calls.append(kwargs))
     return calls
 
 
@@ -52,7 +54,7 @@ class TestBuildSingle:
             calls.append((args, kwargs))
             return returns
 
-        monkeypatch.setattr("album.cli.ingest_directory", _ingest)
+        monkeypatch.setattr("album.cli.sources.ingest_directory", _ingest)
         return calls
 
     def test_ingests_then_runs_pipeline_and_prints_book_path(
@@ -135,7 +137,7 @@ class TestBuildSingle:
         def _raise(*args: object, **kwargs: object) -> str:
             raise error
 
-        monkeypatch.setattr("album.cli.ingest_directory", _raise)
+        monkeypatch.setattr("album.cli.sources.ingest_directory", _raise)
         _stub_pipeline(monkeypatch)
         _argv(monkeypatch, "./photos")
 
@@ -149,7 +151,7 @@ class TestBuildSingle:
         def _raise(*args: object, **kwargs: object) -> str:
             raise RuntimeError("something genuinely unexpected")
 
-        monkeypatch.setattr("album.cli.ingest_directory", _raise)
+        monkeypatch.setattr("album.cli.sources.ingest_directory", _raise)
         _argv(monkeypatch, "./photos")
 
         with pytest.raises(RuntimeError, match="something genuinely unexpected"):
@@ -180,8 +182,8 @@ class TestBuildNoIngest:
             patch_calls.append((album_yml, images))
             order.append("patch")
 
-        monkeypatch.setattr("album.cli.patch_lead_faces", _patch)
-        monkeypatch.setattr("album.cli.pipeline", lambda **k: order.append("pipeline"))
+        monkeypatch.setattr("album.cli.sources.patch_lead_faces", _patch)
+        monkeypatch.setattr("album.cli.runner.pipeline", lambda **k: order.append("pipeline"))
         _argv(monkeypatch, "--no-ingest", "--album", "trip", "--lead-face", "alex.jpg")
 
         main()
@@ -191,8 +193,8 @@ class TestBuildNoIngest:
 
     def test_without_lead_face_does_not_patch(self, monkeypatch: pytest.MonkeyPatch) -> None:
         patched: list[object] = []
-        monkeypatch.setattr("album.cli.patch_lead_faces", lambda *a: patched.append(a))
-        monkeypatch.setattr("album.cli.pipeline", lambda **k: None)
+        monkeypatch.setattr("album.cli.sources.patch_lead_faces", lambda *a: patched.append(a))
+        monkeypatch.setattr("album.cli.runner.pipeline", lambda **k: None)
         _argv(monkeypatch, "--no-ingest", "--album", "trip")
 
         main()
@@ -205,8 +207,8 @@ class TestBuildNoIngest:
         def _raise(album_yml: Path, images: list[Path]) -> None:
             raise IngestError("no album.yml at data/albums/trip/album.yml — run build first")
 
-        monkeypatch.setattr("album.cli.patch_lead_faces", _raise)
-        monkeypatch.setattr("album.cli.pipeline", lambda **k: None)
+        monkeypatch.setattr("album.cli.sources.patch_lead_faces", _raise)
+        monkeypatch.setattr("album.cli.runner.pipeline", lambda **k: None)
         _argv(monkeypatch, "--no-ingest", "--album", "trip", "--lead-face", "alex.jpg")
 
         with pytest.raises(SystemExit) as exc_info:
@@ -280,9 +282,9 @@ class TestBuildManifest:
     ) -> None:
         """Patch load_manifest + ingest_manifest so no disk/Immich is touched."""
         monkeypatch.setattr(
-            "album.cli.load_manifest", lambda _p: Manifest(albums=[AlbumSpec(path="a")])
+            "album.cli.sources.load_manifest", lambda _p: Manifest(albums=[AlbumSpec(path="a")])
         )
-        monkeypatch.setattr("album.cli.ingest_manifest", lambda *a, **k: outcomes)
+        monkeypatch.setattr("album.cli.sources.ingest_manifest", lambda *a, **k: outcomes)
 
     @pytest.mark.parametrize(
         "flag",
@@ -298,7 +300,9 @@ class TestBuildManifest:
         self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str], flag: list[str]
     ) -> None:
         called: list[int] = []
-        monkeypatch.setattr("album.cli.ingest_manifest", lambda *a, **k: called.append(1) or [])
+        monkeypatch.setattr(
+            "album.cli.sources.ingest_manifest", lambda *a, **k: called.append(1) or []
+        )
         _argv(monkeypatch, "./photos", "--manifest", *flag)
 
         with pytest.raises(SystemExit) as exc_info:
@@ -313,13 +317,13 @@ class TestBuildManifest:
     ) -> None:
         captured: dict[str, object] = {}
         monkeypatch.setattr(
-            "album.cli.load_manifest", lambda _p: Manifest(albums=[AlbumSpec(path="a")])
+            "album.cli.sources.load_manifest", lambda _p: Manifest(albums=[AlbumSpec(path="a")])
         )
         monkeypatch.setattr(
-            "album.cli.ingest_manifest",
+            "album.cli.sources.ingest_manifest",
             lambda *a, **k: captured.update(k) or [self._outcome("a", "a")],
         )
-        monkeypatch.setattr("album.cli.pipeline", lambda **k: None)
+        monkeypatch.setattr("album.cli.runner.pipeline", lambda **k: None)
         _argv(monkeypatch, "./photos", "--manifest", "--ingest-mode", "external")
 
         main()
@@ -344,9 +348,11 @@ class TestBuildManifest:
             captured["path"] = path
             return Manifest(albums=[AlbumSpec(path="a")])
 
-        monkeypatch.setattr("album.cli.load_manifest", _load)
-        monkeypatch.setattr("album.cli.ingest_manifest", lambda *a, **k: [self._outcome("a", "a")])
-        monkeypatch.setattr("album.cli.pipeline", lambda **k: None)
+        monkeypatch.setattr("album.cli.sources.load_manifest", _load)
+        monkeypatch.setattr(
+            "album.cli.sources.ingest_manifest", lambda *a, **k: [self._outcome("a", "a")]
+        )
+        monkeypatch.setattr("album.cli.runner.pipeline", lambda **k: None)
         _argv(monkeypatch, "./photos", "--manifest", *manifest_args)
 
         main()
@@ -360,7 +366,7 @@ class TestBuildManifest:
             monkeypatch, [self._outcome("a", "lisbon-2026"), self._outcome("b", "wedding")]
         )
         slugs: list[str] = []
-        monkeypatch.setattr("album.cli.pipeline", lambda **k: slugs.append(k["album_slug"]))
+        monkeypatch.setattr("album.cli.runner.pipeline", lambda **k: slugs.append(k["album_slug"]))
         _argv(monkeypatch, "./photos", "--manifest")
 
         main()
@@ -377,7 +383,7 @@ class TestBuildManifest:
             monkeypatch,
             [self._outcome("a", "good"), self._outcome("bad-dir", None, "no images found")],
         )
-        monkeypatch.setattr("album.cli.pipeline", lambda **k: None)
+        monkeypatch.setattr("album.cli.runner.pipeline", lambda **k: None)
         _argv(monkeypatch, "./photos", "--manifest")
 
         main()  # partial success → no SystemExit
@@ -395,7 +401,7 @@ class TestBuildManifest:
             if kwargs["album_slug"] == "boom":
                 raise ValueError("pipeline blew up")
 
-        monkeypatch.setattr("album.cli.pipeline", _pipeline)
+        monkeypatch.setattr("album.cli.runner.pipeline", _pipeline)
         _argv(monkeypatch, "./photos", "--manifest")
 
         main()  # one book still produced → exit zero
@@ -414,7 +420,7 @@ class TestBuildManifest:
                 self._outcome("b", None, "no images found"),
             ],
         )
-        monkeypatch.setattr("album.cli.pipeline", lambda **k: None)
+        monkeypatch.setattr("album.cli.runner.pipeline", lambda **k: None)
         _argv(monkeypatch, "./photos", "--manifest")
 
         with pytest.raises(SystemExit) as exc_info:
@@ -429,7 +435,7 @@ class TestBuildManifest:
         def _raise(_path: Path) -> Manifest:
             raise ValueError("bad manifest")
 
-        monkeypatch.setattr("album.cli.load_manifest", _raise)
+        monkeypatch.setattr("album.cli.sources.load_manifest", _raise)
         _argv(monkeypatch, "./photos", "--manifest")
 
         with pytest.raises(SystemExit) as exc_info:
@@ -443,10 +449,14 @@ class TestBuildManifest:
     ) -> None:
         # A misconfigured CAPTIONER env must fail cleanly *before* any album is
         # uploaded — the captioner is resolved up front, inside the error guard.
-        monkeypatch.setattr("album.cli.get_settings", lambda: SimpleNamespace(captioner="nonsense"))
+        monkeypatch.setattr(
+            "album.cli.runner.get_settings", lambda: SimpleNamespace(captioner="nonsense")
+        )
         reached: list[str] = []
-        monkeypatch.setattr("album.cli.load_manifest", lambda _p: reached.append("load"))
-        monkeypatch.setattr("album.cli.ingest_manifest", lambda *a, **k: reached.append("ingest"))
+        monkeypatch.setattr("album.cli.sources.load_manifest", lambda _p: reached.append("load"))
+        monkeypatch.setattr(
+            "album.cli.sources.ingest_manifest", lambda *a, **k: reached.append("ingest")
+        )
         _argv(monkeypatch, "./photos", "--manifest")
 
         with pytest.raises(SystemExit) as exc_info:
@@ -462,7 +472,7 @@ class TestCaptionerSelection:
 
     def _capture_pipeline(self, monkeypatch: pytest.MonkeyPatch) -> dict[str, object]:
         captured: dict[str, object] = {}
-        monkeypatch.setattr("album.cli.pipeline", lambda **kwargs: captured.update(kwargs))
+        monkeypatch.setattr("album.cli.runner.pipeline", lambda **kwargs: captured.update(kwargs))
         return captured
 
     @pytest.mark.parametrize("no_ingest", [False, True], ids=["ingest", "no-ingest"])
@@ -470,7 +480,7 @@ class TestCaptionerSelection:
         self, monkeypatch: pytest.MonkeyPatch, no_ingest: bool
     ) -> None:
         captured = self._capture_pipeline(monkeypatch)
-        monkeypatch.setattr("album.cli.ingest_directory", lambda *a, **k: "slug")
+        monkeypatch.setattr("album.cli.sources.ingest_directory", lambda *a, **k: "slug")
         args = (
             ["--no-ingest", "--album", "a", "--captioner", "claude", "--force"]
             if no_ingest
@@ -484,7 +494,9 @@ class TestCaptionerSelection:
         assert captured["force"] is True
 
     def test_flag_overrides_env_default(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.setattr("album.cli.get_settings", lambda: SimpleNamespace(captioner="template"))
+        monkeypatch.setattr(
+            "album.cli.runner.get_settings", lambda: SimpleNamespace(captioner="template")
+        )
         captured = self._capture_pipeline(monkeypatch)
         _argv(monkeypatch, "--no-ingest", "--album", "a", "--captioner", "claude")
 
@@ -494,7 +506,9 @@ class TestCaptionerSelection:
         assert captured["force"] is False
 
     def test_env_default_used_without_flag(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.setattr("album.cli.get_settings", lambda: SimpleNamespace(captioner="template"))
+        monkeypatch.setattr(
+            "album.cli.runner.get_settings", lambda: SimpleNamespace(captioner="template")
+        )
         captured = self._capture_pipeline(monkeypatch)
         _argv(monkeypatch, "--no-ingest", "--album", "a")
 
