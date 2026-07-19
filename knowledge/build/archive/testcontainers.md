@@ -88,7 +88,7 @@ internet, so a hermetic test needs a pre-baked model-cache image." We now build
 exactly that, **locally** — and after a one-time setup the test fetches **no ML
 model** (ever) and **no images** from the internet.
 
-- **The bake** ([`ml-baked.Dockerfile`](../../tests/fixtures/immich/ml-baked.Dockerfile)):
+- **The bake** ([`ml-baked.Dockerfile`](../../../tests/fixtures/immich/ml-baked.Dockerfile)):
   `FROM immich-machine-learning:<pinned>` + a build-time `snapshot_download` that
   **mirrors `ModelBase._download`** (same repo, on-disk layout, CPU `.onnx` variants
   only — ~0.77 GB of models; ~3.1 GB image, base-ML-dominated). Runs with
@@ -97,7 +97,7 @@ model** (ever) and **no images** from the internet.
 - **One-time setup, then offline.** `poe bake-immich-ml` bakes that image **and**
   pre-pulls the server/db/redis images, so it is the *only* internet-touching step;
   `compose up` at test time then finds every image present and pulls nothing.
-- **The stack** ([`docker-compose.integration.yml`](../../tests/fixtures/immich/docker-compose.integration.yml)):
+- **The stack** ([`docker-compose.integration.yml`](../../../tests/fixtures/immich/docker-compose.integration.yml)):
   server + the baked ML image + the (digest-pinned) vectorchord Postgres + valkey,
   pinned to a concrete `IMMICH_VERSION`, ephemeral, on an ephemeral host port, with
   reverse-geocoding disabled (a second startup internet hit — out of scope). It is
@@ -105,7 +105,7 @@ model** (ever) and **no images** from the internet.
   port resolution — no hand-rolled subprocess/cleanup), the same testcontainers
   dependency the pgvector tests already use.
 - **The test**
-  ([`test_immich_ml_integration.py`](../../tests/album/immich/test_immich_ml_integration.py)):
+  ([`test_immich_ml_integration.py`](../../../tests/album/immich/test_immich_ml_integration.py)):
   bootstraps an admin + API key over Immich's auth API, uploads
   `skimage.data.astronaut()` (a public-domain NASA face — no personal photo
   committed) through the real `ImmichClient`, waits out the async job cascade, and

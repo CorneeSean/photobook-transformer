@@ -145,7 +145,7 @@ Steps **17+** (adopting Immich API surface that didn't exist at steps 4–5 —
 faces/people, lead-face prioritization, rating/OCR/geocoding) are broken out into
 their own playbook: [Immich enrichment](/build/archive/enrichment.md). Steps **21+**
 (TestContainers integration testing) are broken out into their own playbook:
-[TestContainers](/build/testcontainers.md).
+[TestContainers](/build/archive/testcontainers.md).
 
 ---
 

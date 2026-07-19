@@ -108,6 +108,31 @@ If a step cannot be completed cleanly, **stop and surface the problem** (mark it
 `blocked` in the tracker with a note) rather than committing partial work or
 moving on.
 
+## Archiving a completed playbook doc
+
+When the **last** step of a build playbook merges (the whole playbook is done — or
+a doc is closed as subsumed), move its doc from `knowledge/build/` into
+`knowledge/build/archive/`. This is a standing convention, not a judgement call —
+do it the same way every time so it never has to be re-derived:
+
+1. **`git mv`** the doc into `build/archive/` (keeps history).
+2. **Deepen the doc's own relative links.** It now sits one directory lower, so
+   every `](../…)` link in it gains one more `../` (e.g. a `](../../tests/…)` becomes
+   `](../../../tests/…)`). Absolute bundle links (`/build/…`, `/stages/…`, `/log.md`)
+   are unaffected.
+3. **Rewrite every cross-bundle reference to `/build/archive/<name>.md`.** Grep the
+   whole bundle (`grep -rn "build/<name>.md" knowledge`) and fix **all** hits —
+   including historical [`log.md`](/log.md) entries and stage/reference docs. The
+   already-archived docs (e.g. [`enrichment.md`](/build/archive/enrichment.md)) are
+   linked this way; match them.
+4. **Move its `index.md` entry** out of *Execution* into the *Archive* section, with
+   a description that reflects the finished state.
+
+**Stays in `build/`:** living docs ([`build-order.md`](/build/build-order.md),
+[`progress.md`](/build/progress.md), [`open-questions.md`](/build/open-questions.md))
+and forward-looking / not-yet-built briefs (analysis notes, feature briefs). Only
+*completed* playbooks and step notes are archived.
+
 ## Context to load before starting a step
 
 For step N, read, in this order:

@@ -25,12 +25,11 @@ accurate — it is part of the workflow, not optional tidiness.
 
 ## Outstanding (TODO)
 
-Take the **lowest-numbered** step. The rest is optional/deferred — nothing is blocked
-on missing code (see [Notes / blockers](#notes--blockers)).
-
-| # | Step | Playbook | Status | Branch | Notes |
-|---|------|----------|--------|--------|-------|
-| 23 | DB-backed flow smoke test (optional) | testcontainers | todo | — | largely subsumed by step 25's `test_flow_integration.py`; revisit only if a gap remains |
+**Nothing outstanding.** Every build-order and follow-on playbook step is done and
+merged. The optional **step 23** was closed as subsumed (2026-07-19) — see
+[Completed](#testcontainers-playbook-see-testcontainersmd). All remaining deferrals
+are live-integration only (no reachable Immich / `ANTHROPIC_API_KEY` / `darktable-cli`
+/ Lulu creds in this sandbox), not missing code — see [Notes / blockers](#notes--blockers).
 
 The folder-structure-driven ingestion playbook (steps 32–35) is **complete** — see
 [Completed](#folder-structure-driven-ingestion-playbook-see-folder-structure-ingestionmd).
@@ -39,12 +38,12 @@ mode; upload stays the default) is **complete** — all three steps (plumbing, t
 `AssetRegistrar` seam, the `--ingest-mode` flag + docs) are done and merged (see
 [Completed](#external-library-ingestion-playbook-complete-see-external-library-ingestionmd)).
 The
-[decisions](/build/external-library-ingestion.md#decisions-confirmed-with-the-user-2026-07-19-before-step-36)
+[decisions](/build/archive/external-library-ingestion.md#decisions-confirmed-with-the-user-2026-07-19-before-step-36)
 were confirmed with the user 2026-07-19. The **step-39 follow-up** — splitting
 `cli.py` into an `album/cli/` package
-([plan](/build/step-39-cli-package-split.md)) — is **done** (`ae40daa`, a pure
-structural refactor with no behaviour change). Outstanding: only the optional
-**step 23**.
+([plan](/build/archive/step-39-cli-package-split.md)) — is **done** (`ae40daa`, a pure
+structural refactor with no behaviour change). **Nothing is outstanding** — the
+optional **step 23** was closed as subsumed (2026-07-19).
 
 ## Completed (DONE)
 
@@ -84,16 +83,17 @@ Audit trail — one line per step; see the commit and [log.md](/log.md) for deta
 
 *(Enrichment playbook complete.)*
 
-### TestContainers playbook (see [testcontainers.md](/build/testcontainers.md))
+### TestContainers playbook (see [testcontainers.md](/build/archive/testcontainers.md))
 
 | # | Step | Branch | Commit | Notes |
 |---|------|--------|--------|-------|
 | 21 | pgvector schema + integration harness | step-21-pgvector-integration | ac2cd14 | alembic-migrated pgvector container; `select` over the real query; no drift; +`poe test-fast` |
 | 22 | darktable-cli render integration | step-22-darktable-render | 8aac81b | real render in the app image, visibly brighter; validated the darktable XMP history-stack format; closes step 11's manual check |
+| 23 | DB-backed flow smoke test (optional) | — | — (subsumed) | **Closed as subsumed, 2026-07-19** — not implemented separately. Its stated goal (real Postgres container, whole Prefect flow, Immich/Claude/Lulu doubled, cross-stage data flow + real per-stage commits) is already met by step 25's `tests/album/flow/test_flow_integration.py` (real `pipeline()` end-to-end on the pgvector container, all external boundaries doubled, asserts every stage's columns via `expire_all()` read-after-write) plus step 21's `test_pgvector_integration.py` (real `select`/`cluster` query + near-dup guard). Tracker's "revisit only if a gap remains" condition not met; a standalone test would be a near-duplicate |
 | 24 | Immich ML integration (offline baked image) | step-24-immich-ml-integration | ad86550 | out of order (23 still todo); pre-baked CLIP+`buffalo_l` ONNX image; real 4-service stack; closes the faces+CLIP live half; opt-in, skipped in `poe check` |
 | 25 | Parallelize the flow (fan-out groups) | step-25-parallelize-flow | 036fcc2 | fan-out DAG per `pipeline-execution.md`; fixed the `enhance`‖`caption` idempotency race (join `enhance` first); real-concurrency integration test |
 
-*(Step 23 is outstanding — see [Outstanding (TODO)](#outstanding-todo).)*
+*(Playbook complete — step 23 closed as subsumed, 2026-07-19.)*
 
 ### Single-command ingestion playbook (see [single-command-ingestion.md](/build/archive/single-command-ingestion.md))
 
@@ -130,7 +130,7 @@ Audit trail — one line per step; see the commit and [log.md](/log.md) for deta
 | 34 | Fan-out orchestration + `generate --manifest` | step-34-fanout-cli | 0e67990 | `ingest_manifest`/`_ingest_all` + `AlbumOutcome`: ingest N albums under ONE shared `ImmichClient` with per-album isolation (ingest.py stays pipeline-free). CLI `generate --manifest [FILE]` (opt-in) fans the tree into N books, rejecting per-album flags, threading globals, running the pipeline per album with isolation, and printing a combined summary (exit non-zero only if every album failed). 4-agent review (2× correctness, style/reuse, architecture): no correctness defects; applied captioner fail-fast (inside the guard, before uploads) + `_book_path` DRY helper. As-built: narrow pipeline catch surfaces unexpected errors (deliberate). `poe check` green (404/6); live fan-out deferred |
 | 35 | Docs + end-to-end genericity verification | step-35-docs-verify | 38a3aee | Closes the playbook. User docs (README multi-album section, `album-definition.md`/`folder-structure.md` cross-refs, umbrella "As-built" preamble). Verification gate: a scoped token guard (`manifest.py`/`text.py`/`ingest.py` carry no trip/day/itinerary/occasion vocabulary — whole-`src/` grep infeasible) + an end-to-end test over a committed two-album fixture tree (`tests/fixtures/manifest_tree`) driving real `load_manifest`+`_ingest_all`+materialization+patched pipeline (N albums → N `album.yml`, one folder-windowed + one zero-segment → N pipeline runs). `DatingIngestClient` hoisted to `tests/doubles.py`. 2-agent review (adversarial + style/docs): caught a stray `open-questions.md` frontmatter corruption (reverted); gate sound. `poe check` green (408/6); live fan-out deferred |
 
-### External-library ingestion playbook (complete) (see [external-library-ingestion.md](/build/external-library-ingestion.md))
+### External-library ingestion playbook (complete) (see [external-library-ingestion.md](/build/archive/external-library-ingestion.md))
 
 | # | Step | Branch | Commit | Notes |
 |---|------|--------|--------|-------|
@@ -151,8 +151,9 @@ Audit trail — one line per step; see the commit and [log.md](/log.md) for deta
 follow-on (**step 30**), the real LAION aesthetic scorer (**step 31**), the **complete
 external-library ingestion playbook** (**steps 36–38**: plumbing + the `AssetRegistrar` seam +
 the `--ingest-mode` flag), and the **CLI unification** (**step 39**: one `build` command). The
-only outstanding step is the optional **step 23** (largely subsumed by step 25's
-`test_flow_integration.py`). The pipeline is **fully offline by default**
+optional **step 23** was closed as subsumed on 2026-07-19 (its cross-stage DB coverage is met by
+step 25's `test_flow_integration.py` + step 21's `test_pgvector_integration.py`) — **nothing is
+outstanding**. The pipeline is **fully offline by default**
 (classical tone + template caption, no API/key); Claude is opt-in per run (`--captioner claude`,
 `--force` for A/B). Under `--force`, `enhance` and `caption` each re-run the shared analysis for a
 clustered photo — an accepted ~2× cost on paid Claude A/B; prefer a fresh slug for a large online run.

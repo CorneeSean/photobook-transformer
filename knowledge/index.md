@@ -29,7 +29,6 @@ manual work. This bundle is the project's source of truth.
 * [Implementation workflow](/process/implementation-workflow.md) - The per-step handoff loop: branch, TDD, sub-agent review, user review, squash, merge.
 * [Build order](/build/build-order.md) - The ordered, one-step-at-a-time plan.
 * [Immich dependency decision](/build/immich-dependency-decision.md) - Keep-or-replace analysis for the Immich stack: what we actually consume, the open-source substitutes (InsightFace, pgvector dedup), and why replaceability is preserved rather than acted on.
-* [TestContainers integration](/build/testcontainers.md) - Follow-on steps (21+) promoting the highest-value boundaries (pgvector, darktable-cli) to real containerized integration tests; Immich ML deferred optional (step 23 outstanding).
 * [User-directed curation](/build/user-directed-curation.md) - Forward-looking, not-yet-planned feature brief: put the user in the loop over curation via an editable album document + `regenerate`.
 * [Progress tracker](/build/progress.md) - Living per-step status.
 * [Open questions](/build/open-questions.md) - Unresolved questions to settle early.
@@ -48,6 +47,9 @@ below are done and merged — see the [progress tracker](/build/progress.md) and
 * [AI-pass cost estimate](/build/archive/ai-cost-estimate.md) - What the full Claude vision pass costs per album (answer to open question 5).
 * [CLI lead-face flag](/build/archive/step-30-cli-lead-faces.md) - Step 30: repeatable `--lead-face` flag on `generate`/`run`.
 * [LAION aesthetic scorer](/build/archive/step-31-laion-aesthetic-scorer.md) - Step 31: wired the real ViT-L/14 CLIP + LAION aesthetic head.
+* [TestContainers integration](/build/archive/testcontainers.md) - Steps 21–25: promoted the highest-value boundaries (pgvector, darktable-cli, Immich ML) to real containerized integration tests; step 23 closed as subsumed.
+* [External-library ingestion](/build/archive/external-library-ingestion.md) - Steps 36–38: opt-in scan-in-place ingest (plumbing + `AssetRegistrar` seam + `--ingest-mode` flag); upload stays the default.
+* [CLI package split](/build/archive/step-39-cli-package-split.md) - Step 39 follow-up: split `cli.py` into an `album/cli/` package (pure structural refactor).
 
 ## Log
 

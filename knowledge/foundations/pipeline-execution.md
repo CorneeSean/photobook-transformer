@@ -133,4 +133,4 @@ The invariants (why the fences are placed as they are):
 | **Join `enhance` before render/caption submit** | Keeps them strictly after `enhance`'s commit — a real `enhance` failure surfaces its own error, not a masked `UpstreamTaskError`, and avoids the `PhotoAnalyzer.ensure` idempotency race a fully-concurrent `enhance`‖`caption` had. |
 | **Failure isolation** | Each task's own `with session_factory()` rolls back independently; `.result()` re-raises and aborts before the join. |
 | **Connection pool** | Concurrency peaks at 3 (group 1); default `QueuePool` (5 + 10 overflow) suffices. Size `pool_size` only if a stage's *internal* per-photo loop later becomes Prefect-level fan-out. |
-| **Tests** | The in-memory SQLite test session isn't thread-shareable; unit tests inject a `session_factory` of independent doubles. Real concurrency is covered by the [pgvector TestContainers suite](/build/testcontainers.md). |
+| **Tests** | The in-memory SQLite test session isn't thread-shareable; unit tests inject a `session_factory` of independent doubles. Real concurrency is covered by the [pgvector TestContainers suite](/build/archive/testcontainers.md). |

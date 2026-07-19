@@ -18,7 +18,7 @@ In practice the `photobook-generator build` CLI automates this
 **uploads** a copy of each photo into a new Immich album; `--ingest-mode external`
 instead registers the folder as a read-only Immich **external library** scanned in
 place — no second copy, at the cost of keeping the originals mounted for the life of
-the album ([external-library ingestion](../build/external-library-ingestion.md)).
+the album ([external-library ingestion](../build/archive/external-library-ingestion.md)).
 Either way the result is the same: a dedicated Immich album the pipeline reads.
 
 Downstream, [`sync`](./sync.md) is the boundary that pulls this into our DB.

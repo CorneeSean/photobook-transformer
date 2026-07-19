@@ -6,8 +6,24 @@ bodies this log cites; keep entries tight (see
 
 ## 2026-07-19
 
+* **Step 23 closed as subsumed + completed-playbook docs archived.** Analyzed whether
+  the optional **step 23** (DB-backed flow smoke test) was still worth building: its
+  stated goal — the whole Prefect flow over a real Postgres container with
+  Immich/Claude/Lulu doubled, asserting cross-stage data flow + real per-stage commits —
+  is already met by step 25's `tests/album/flow/test_flow_integration.py` (real
+  `pipeline()` end-to-end on the pgvector container, every boundary doubled, all stage
+  columns asserted via `expire_all()` read-after-write) plus step 21's
+  `test_pgvector_integration.py`. The tracker's "revisit only if a gap remains" condition
+  isn't met, so **closed it as subsumed** (no code) rather than write a near-duplicate.
+  Moved the three now-complete playbook docs into `build/archive/`
+  (`testcontainers.md`, `external-library-ingestion.md`, `step-39-cli-package-split.md`),
+  rewriting every cross-bundle link to `/build/archive/…` and reshuffling the `index.md`
+  entries into the Archive section. Encoded the archiving mechanics as a standing
+  convention in [implementation-workflow.md](/process/implementation-workflow.md) so it
+  isn't re-derived next time. Docs-only; no `src/`/test changes.
+
 * **Step 39 (follow-up) — split `cli.py` into an `album/cli/` package** (`ae40daa`;
-  [plan](/build/step-39-cli-package-split.md)). The step-39 `build` command worked and
+  [plan](/build/archive/step-39-cli-package-split.md)). The step-39 `build` command worked and
   was `poe check`-green, but lived in a single ~370-line `cli.py` mixing four
   responsibilities. Split into a package with one job per module: `parser.py` (argparse
   only), `sources.py` (the `AlbumSource` strategies + `select_source`), `runner.py`
@@ -49,7 +65,7 @@ bodies this log cites; keep entries tight (see
   at the user's request.
 
 * **Step 38 — external-library ingest: the `--ingest-mode` flag (closes the playbook)** (`f356c2b`;
-  [external-library-ingestion.md](/build/external-library-ingestion.md)). Exposes the step-37
+  [external-library-ingestion.md](/build/archive/external-library-ingestion.md)). Exposes the step-37
   `AssetRegistrar` seam on the CLI: `generate --ingest-mode {upload,external}`, with precedence
   flag > `IMMICH__INGEST_MODE` env > `upload` default (the `--captioner` pattern). It is a
   **run-level** mode — how bytes reach Immich — so it applies to every album including the
@@ -69,7 +85,7 @@ bodies this log cites; keep entries tight (see
   the build order.
 
 * **Step 37 — external-library ingest: the `AssetRegistrar` seam** (`749a57e`;
-  [external-library-ingestion.md](/build/external-library-ingestion.md)).
+  [external-library-ingestion.md](/build/archive/external-library-ingestion.md)).
   Wires the mode swap the step-36 plumbing set up, still **opt-in** (default unchanged). The one
   line `_ingest` used to run inline — `{path: upload_asset(path)}` — is now an injected
   `AssetRegistrar.register(directory, image_paths) -> {host path → asset id}`; everything downstream
@@ -98,7 +114,7 @@ bodies this log cites; keep entries tight (see
   from a manual run), cleared with `docker rm -f`, not a code issue.
 
 * **Step 36 — external-library (scan-in-place) ingest: plumbing** (`2279207`;
-  [external-library-ingestion.md](/build/external-library-ingestion.md)). Foundation for a
+  [external-library-ingestion.md](/build/archive/external-library-ingestion.md)). Foundation for a
   new **opt-in** ingest mode that references photos on disk instead of copying them into
   Immich — no behavior wired yet. Adds: `ImmichSettings.ingest_mode`/`external_host_root`/
   `external_container_root`; a pure `PathMapping` (`immich/paths.py`) translating a host
@@ -346,7 +362,7 @@ bodies this log cites; keep entries tight (see
   below Sonnet's cache floor). Metered re-check deferred to the first live run.
 
 * **TestContainers step 24 — offline Immich ML integration** (`ad86550`;
-  [testcontainers.md](/build/testcontainers.md)). Verifies Immich's ML paths (faces,
+  [testcontainers.md](/build/archive/testcontainers.md)). Verifies Immich's ML paths (faces,
   smart search) against a real 4-service stack with **no model fetched from the
   internet at test time**: a build-time `snapshot_download` bakes CPU `.onnx` models
   into an image (`poe bake-immich-ml`, the one internet-touching step), driven via
@@ -509,7 +525,7 @@ bodies this log cites; keep entries tight (see
   (Reference only then; implemented as step 25.)
 
 * **TestContainers step 21 — pgvector integration suite** (`ac2cd14`). First step of
-  the [playbook](/build/testcontainers.md): promotes the DB boundary from in-memory
+  the [playbook](/build/archive/testcontainers.md): promotes the DB boundary from in-memory
   SQLite + a numpy stub to a **real Postgres+pgvector migrated with alembic**. Covers
   migrations-reach-head + **no model↔migration drift** (`compare_metadata == []`,
   automating the by-hand autogenerate check), `select` over the real cosine query

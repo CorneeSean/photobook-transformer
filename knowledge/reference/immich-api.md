@@ -75,7 +75,7 @@ NULL). Open question #3's remaining risk — an album that spans zones *mid-segm
 
 ## External libraries (scan-in-place ingest, build steps 36–38)
 
-Added while building [external-library ingestion](/build/external-library-ingestion.md).
+Added while building [external-library ingestion](/build/archive/external-library-ingestion.md).
 An **External Library** points Immich at a directory that is bind-mounted into the
 server; Immich scans the files **in place** and creates assets that reference the
 on-disk originals — no copy into the upload store. The client surface (`client.py`):
@@ -108,6 +108,6 @@ These notes + the client's fixtures (`tests/fixtures/immich/`) derive from the O
 **contract**, not a live capture (deferred when steps 4–5 were built without a reachable
 stack). **Partly closed by step 24's offline ML stack:** the faces path and CLIP smart
 search are now exercised against a real, pre-baked Immich instance
-([testcontainers.md](/build/testcontainers.md) step 24 / `poe test-immich-ml`). Still
+([testcontainers.md](/build/archive/testcontainers.md) step 24 / `poe test-immich-ml`). Still
 contract-only, re-verify on first live `sync`: album pagination, EXIF/`rating`/place on
 real photos, and duplicate detection.
