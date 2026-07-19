@@ -6,6 +6,26 @@ bodies this log cites; keep entries tight (see
 
 ## 2026-07-19
 
+* **Step 36 — external-library (scan-in-place) ingest: plumbing** (`2279207`;
+  [external-library-ingestion.md](/build/external-library-ingestion.md)). Foundation for a
+  new **opt-in** ingest mode that references photos on disk instead of copying them into
+  Immich — no behavior wired yet. Adds: `ImmichSettings.ingest_mode`/`external_host_root`/
+  `external_container_root`; a pure `PathMapping` (`immich/paths.py`) translating a host
+  path ↔ the container `originalPath` (fails fast outside the mount root); the
+  `ImmichClient` External-Library surface (`get_current_user_id`/`get_libraries`/
+  `create_library`/`scan_library`/`get_library_assets`) + `originalPath` on `ImmichAsset`,
+  with `get_album_assets`/`get_library_assets` sharing a new `_search_metadata` helper; and
+  an **opt-in, commented** `${PHOTOS_LOCATION}:/external:ro` mount + `.env.example` block so
+  default `poe up` is unchanged. Decisions confirmed with the user (upload stays default;
+  one shared reused library; originals must stay mounted — the accepted cost of not
+  copying; no content-dedupe). `/libraries` methods are modelled on the documented API and
+  respx-tested only — exact shape flagged for live verification (standing live-integration
+  gap). `_wait_for_readiness` scan-queue extension deferred to step 37. Static gate + all
+  non-container tests green; container tests blocked by an unresponsive Docker daemon
+  (env, not code). Two review sub-agents (adversarial correctness + style/reuse): no
+  blockers/majors; nits applied (empty-scan-body assertion, machine-independent
+  `from_settings` test, docstring closings, doc/anchor fixes).
+
 * **Step 35 — folder-structure-driven ingestion docs + genericity gate** (`38a3aee`;
   [step-35-docs-verify.md](/build/archive/step-35-docs-verify.md)). Closes the
   [folder-structure-driven ingestion playbook](/build/archive/folder-structure-ingestion.md)
