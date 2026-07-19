@@ -1,3 +1,11 @@
+# Two tiers. Fast static hooks (ruff, basedpyright, xenon) and the
+# `no-commit-to-branch` guard run per commit; the heavy `poe check` (full pytest)
+# runs per push. `default_stages: [pre-commit]` scopes every hook to commit-time
+# UNLESS it opts into another stage — without it, installing the pre-push hook type
+# would also fire `no-commit-to-branch` at push and block pushing `main` (its own
+# published branch).
+default_stages: [pre-commit]
+
 repos:
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v5.0.0
