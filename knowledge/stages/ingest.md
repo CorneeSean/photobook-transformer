@@ -13,7 +13,7 @@ Import the album's photos into a dedicated Immich album. Immich extracts EXIF
 **GPS is optional, never assumed** — the honeymoon album lacks it; other albums
 may have it.
 
-In practice the `photobook-generator generate` CLI automates this
+In practice the `photobook-generator build` CLI automates this
 ([single-command ingestion](../build/single-command-ingestion.md)). By default it
 **uploads** a copy of each photo into a new Immich album; `--ingest-mode external`
 instead registers the folder as a read-only Immich **external library** scanned in

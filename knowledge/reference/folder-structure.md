@@ -25,7 +25,7 @@ photo-album-pipeline/
 │
 ├── src/album/
 │   ├── config.py             # pydantic-settings, the ONLY reader of .env
-│   ├── cli.py                # `photobook-generator` (generate <dir> | run --album <slug>)
+│   ├── cli.py                # `photobook-generator build <dir>` (+ --manifest | --no-ingest --album <slug>)
 │   ├── definition.py         # loads/validates album.yml → Album + Segments
 │   ├── manifest.py           # parses a root ingest.yml into album/segment declarations (generate --manifest)
 │   ├── text.py               # slugify/titleize a folder name (shared by ingest.py + manifest.py)

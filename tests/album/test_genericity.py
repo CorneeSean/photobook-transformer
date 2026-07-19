@@ -26,7 +26,7 @@ import pytest
 from sqlalchemy.orm import Session
 
 from album.analysis.captioner import build_captioner
-from album.cli import _run_album_pipelines
+from album.cli import _prepared_from_outcome, _run_pipelines
 from album.db.models import Album, Segment
 from album.definition import AlbumDefinition
 from album.flow import get_or_create_album
@@ -136,11 +136,12 @@ class TestManifestFanOutEndToEnd:
         garden = AlbumDefinition().load(tmp_path / "garden-party" / "album.yml")
         assert garden.segments == []
 
-        # The CLI runs the pipeline exactly once per ingested slug.
+        # The CLI runs the pipeline exactly once per ingested slug (the fan-out
+        # outcomes are handed to the shared pipeline driver as prepared albums).
         ran: list[str] = []
         monkeypatch.setattr("album.cli.pipeline", lambda **k: ran.append(k["album_slug"]))
-        books, failures = _run_album_pipelines(
-            outcomes,
+        books, failures = _run_pipelines(
+            [_prepared_from_outcome(outcome) for outcome in outcomes],
             build_captioner("template"),
             force=False,
         )

@@ -28,11 +28,11 @@ at the on-disk originals — no copy into its upload store.
 
 ```sh
 # today (unchanged default): upload a copy into Immich
-photobook-generator generate <dir>
+photobook-generator build <dir>
 
 # new: reference the files on disk, no copy
-photobook-generator generate <dir> --ingest-mode external
-IMMICH__INGEST_MODE=external photobook-generator generate <root> --manifest
+photobook-generator build <dir> --ingest-mode external
+IMMICH__INGEST_MODE=external photobook-generator build <root> --manifest
 ```
 
 The switch works for **both** the flat and the `--manifest` fan-out paths, because it

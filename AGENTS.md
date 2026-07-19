@@ -76,9 +76,10 @@ any change re-runs what precedes it. In short:
 The canonical `poe` task table lives in
 [`working-agreement.md`](./knowledge/process/working-agreement.md#local-workflow-commands).
 The commit gate is **`uv run poe check`** (ruff + `ruff format --check` +
-basedpyright + xenon complexity + pytest). The pipeline is a console entry point:
-`uv run photobook-generator generate <dir>` (one-command path) or
-`run --album <slug>` (hand-authored `album.yml`).
+basedpyright + xenon complexity + pytest). The pipeline is a console entry point,
+one command: `uv run photobook-generator build <dir>` (ingest + run; add
+`--manifest` to fan a tree into N books) or `build --no-ingest --album <slug>`
+(skip ingest, run a hand-authored `album.yml`).
 
 ## Non-negotiable rules
 

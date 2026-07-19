@@ -159,12 +159,12 @@ without memorizing raw invocations. At minimum:
 | `uv run poe up` / `uv run poe down` | `docker compose up` / `down` (full local stack) |
 | `uv run poe migrate` | `alembic upgrade head` |
 | `uv run poe makemigration -- -m "..."` | `alembic revision --autogenerate` |
-| `uv run poe run -- --album honeymoon-2026` | run the pipeline flow for one album |
-| `uv run poe generate -- ./photos` | one-shot ingest: folder → Immich album → `album.yml` → run |
+| `uv run poe build -- ./photos` | one-shot: folder → Immich album → `album.yml` → run (add `--manifest` to fan a tree into N books) |
+| `uv run poe build -- --no-ingest --album honeymoon-2026` | skip ingest; run the pipeline flow for one existing album |
 
 The pipeline is also exposed as a console entry point via `[project.scripts]`
-(`photobook-generator = "album.cli:main"`), so `uv run photobook-generator run
---album honeymoon-2026` works directly; `poe run` is the same thing wrapped for
-symmetry with the other tasks.
+(`photobook-generator = "album.cli:main"`), so `uv run photobook-generator build
+--no-ingest --album honeymoon-2026` works directly; `poe build` is the same thing
+wrapped for symmetry with the other tasks.
 This is the canonical command table — the README only links here rather than
 duplicating it, so there's nothing else to keep in sync.

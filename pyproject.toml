@@ -144,8 +144,7 @@ up = "docker compose up --build"
 down = "docker compose down"
 migrate = "alembic upgrade head"
 makemigration = "alembic revision --autogenerate"
-run = "photobook-generator run"
-generate = "photobook-generator generate"
+build = "photobook-generator build"
 # One-time, internet-touching setup for the offline Immich ML test: bake the ML
 # model image + pre-pull the other stack images. Delegates to the test harness so
 # the command + version pin live in exactly one place.

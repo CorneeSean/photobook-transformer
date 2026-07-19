@@ -230,19 +230,19 @@ uv run poe migrate</code></pre>
     <div class="qs-step">
       <div class="qs-num">3</div>
       <div class="qs-body">
-        <h3>Generate the album</h3>
+        <h3>Build the book</h3>
         <p>Point one command at a <b>directory of photos</b> — it uploads them, creates the Immich album, derives <span class="mono">album.yml</span>, and runs every stage.</p>
-        <pre><code>uv run photobook-generator generate ./path/to/photos</code></pre>
-        <span class="tip">Options: <span class="mono">--slug --title --timezone --force</span>, and <span class="mono">--source-document schedule.pdf</span> to extract chapters from an itinerary/run-sheet.</span>
+        <pre><code>uv run photobook-generator build ./path/to/photos</code></pre>
+        <span class="tip">Options: <span class="mono">--slug --title --timezone --force</span>, <span class="mono">--source-document schedule.pdf</span> to extract chapters from an itinerary/run-sheet, and <span class="mono">--ingest-mode external</span> to scan a bind mount in place instead of copying.</span>
         <p style="margin-top:12px">Point it at a <b>tree of albums</b> and add <span class="mono">--manifest</span> to fan the folder into <b>N independent books</b> in one run — a root <span class="mono">ingest.yml</span> declares which subfolders are album vs. segment boundaries.</p>
-        <pre><code>uv run photobook-generator generate ./photos-root --manifest <span class="c"># default: ./photos-root/ingest.yml</span></code></pre>
-        <span class="tip">Fan-out is <b>opt-in</b> (a stray <span class="mono">ingest.yml</span> never changes plain <span class="mono">generate &lt;dir&gt;</span>); per-album fields live in the manifest, so <span class="mono">--slug/--title/--source-document/--lead-face</span> are rejected in this mode. A bad album is skipped and the run continues.</span>
+        <pre><code>uv run photobook-generator build ./photos-root --manifest <span class="c"># default: ./photos-root/ingest.yml</span></code></pre>
+        <span class="tip">Fan-out is <b>opt-in</b> (a stray <span class="mono">ingest.yml</span> never changes plain <span class="mono">build &lt;dir&gt;</span>); per-album fields live in the manifest, so <span class="mono">--slug/--title/--source-document/--lead-face</span> are rejected in this mode. A bad album is skipped and the run continues.</span>
       </div>
     </div>
 
     <div class="result-line">
       <b class="mono">→</b>
-      <span>Book lands at <b class="mono">data/albums/&lt;slug&gt;/book/index.html</b> — open it in any browser. Prefer hand-authoring <span class="mono">segments</span>/<span class="mono">lead_faces</span>? Write <span class="mono">album.yml</span> yourself and run <span class="mono">photobook-generator run --album &lt;slug&gt;</span> instead. Watch either path live in Prefect at <span class="mono">http://localhost:4200</span>.</span>
+      <span>Book lands at <b class="mono">data/albums/&lt;slug&gt;/book/index.html</b> — open it in any browser. Prefer hand-authoring <span class="mono">segments</span>/<span class="mono">lead_faces</span>? Write <span class="mono">album.yml</span> yourself and run <span class="mono">photobook-generator build --no-ingest --album &lt;slug&gt;</span> instead. Watch either path live in Prefect at <span class="mono">http://localhost:4200</span>.</span>
     </div>
 
     </div>
@@ -412,7 +412,7 @@ uv run poe migrate</code></pre>
           </tbody>
         </table>
       </div>
-      <p class="body" style="margin-top:14px">Also a console entry point: <code>uv run photobook-generator run --album &lt;slug&gt;</code> / <code>generate &lt;dir&gt;</code> — <code>poe run</code>/<code>poe generate</code> just wrap it for symmetry with the other tasks.</p>
+      <p class="body" style="margin-top:14px">Also a console entry point: <code>uv run photobook-generator build &lt;dir&gt;</code> (add <code>--no-ingest --album &lt;slug&gt;</code> to run an existing album) — <code>poe build</code> just wraps it for symmetry with the other tasks.</p>
 
       <div class="note">
         <span class="badge">Note</span>

@@ -30,30 +30,31 @@ grab an API key (*Account Settings → API Keys → New*) and put it in `.env` a
 `IMMICH__API_KEY`.
 
 ```sh
-# 2. Generate the album — point it at a directory of photos; one command does
+# 2. Build the book — point it at a directory of photos; one command does
 #    upload, Immich album creation, album.yml, and the full pipeline run
-uv run photobook-generator generate ./path/to/photos
+uv run photobook-generator build ./path/to/photos
 ```
 
 Your book lands at `data/albums/<slug>/book/index.html` — open it in any
 browser. `ANTHROPIC_API_KEY` is optional (only for the opt-in `--captioner
-claude` upgrade); the default run is fully offline. `generate` also takes
+claude` upgrade); the default run is fully offline. `build` also takes
 `--slug`, `--title`, `--timezone`, `--force`, `--source-document schedule.pdf`
 (extracts `segments` from a trip itinerary / run-sheet / line-up), and
 `--ingest-mode` (see [Scan photos in place](#scan-photos-in-place-no-second-copy)).
 To hand-author `segments`/`lead_faces` instead, write `data/albums/<slug>/album.yml`
-yourself and run `uv run photobook-generator run --album <slug>` — see
+yourself and run `uv run photobook-generator build --no-ingest --album <slug>`
+(skips the ingest phase and just runs the pipeline) — see
 [Album definition](./knowledge/reference/album-definition.md) and
 [Single-command ingestion](./knowledge/build/single-command-ingestion.md).
 
 ### Multiple albums from one folder tree
 
-Point `generate` at a directory that holds several albums and add `--manifest` to
+Point `build` at a directory that holds several albums and add `--manifest` to
 fan it into **N independent books** in one run — one Immich album, one `album.yml`,
 one pipeline run, one book per declared album:
 
 ```sh
-uv run photobook-generator generate ./photos-root --manifest   # default: ./photos-root/ingest.yml
+uv run photobook-generator build ./photos-root --manifest   # default: ./photos-root/ingest.yml
 ```
 
 A root `ingest.yml` declares which subfolders are album boundaries and which are
@@ -72,7 +73,7 @@ albums:
     source_document: runsheet.pdf   # PDF-derived segments instead of folders
 ```
 
-Fan-out is **opt-in** (a stray `ingest.yml` never changes plain `generate <dir>`),
+Fan-out is **opt-in** (a stray `ingest.yml` never changes plain `build <dir>`),
 and per-album fields live in the manifest — `--slug`/`--title`/`--source-document`/
 `--lead-face` are rejected in manifest mode (`--timezone`/`--captioner`/`--force`
 still apply to every album). A bad album (empty folder, undated photos, a broken
@@ -83,13 +84,13 @@ books-written / albums-failed summary. Same caveat as above: the stack must be u
 
 ### Scan photos in place (no second copy)
 
-By default `generate` **uploads** a copy of every photo into Immich, so a 10 GB
+By default `build` **uploads** a copy of every photo into Immich, so a 10 GB
 folder costs ~10 GB again in Immich's store. `--ingest-mode external` instead
 registers the folder as an Immich **external library** — a read-only bind mount
 Immich scans *in place*, no copy:
 
 ```sh
-uv run photobook-generator generate ./photos --ingest-mode external
+uv run photobook-generator build ./photos --ingest-mode external
 ```
 
 It is **opt-in** (upload stays the default) and a run-level mode — it applies to
