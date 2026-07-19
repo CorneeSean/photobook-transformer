@@ -31,6 +31,7 @@ on missing code (see [Notes / blockers](#notes--blockers)).
 | # | Step | Playbook | Status | Branch | Notes |
 |---|------|----------|--------|--------|-------|
 | 23 | DB-backed flow smoke test (optional) | testcontainers | todo | — | largely subsumed by step 25's `test_flow_integration.py`; revisit only if a gap remains |
+| 39↩ | CLI package split (step-39 follow-up): `cli.py` → `album/cli/` package + `BuildRunner` | [step-39-cli-package-split](/build/step-39-cli-package-split.md) | planned | — | pure structural refactor, **no behaviour change**; plan saved, not yet executed |
 
 The folder-structure-driven ingestion playbook (steps 32–35) is **complete** — see
 [Completed](#folder-structure-driven-ingestion-playbook-see-folder-structure-ingestionmd).
@@ -40,8 +41,10 @@ mode; upload stays the default) is **complete** — all three steps (plumbing, t
 [Completed](#external-library-ingestion-playbook-complete-see-external-library-ingestionmd)).
 The
 [decisions](/build/external-library-ingestion.md#decisions-confirmed-with-the-user-2026-07-19-before-step-36)
-were confirmed with the user 2026-07-19. **Step 23 is the only outstanding step,
-and it is optional** — nothing else remains on the build order.
+were confirmed with the user 2026-07-19. Outstanding: the optional **step 23**, plus
+a queued **step-39 follow-up** — splitting `cli.py` into an `album/cli/` package
+(plan saved at [step-39-cli-package-split.md](/build/step-39-cli-package-split.md),
+awaiting execution).
 
 ## Completed (DONE)
 
