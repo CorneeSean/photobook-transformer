@@ -212,3 +212,20 @@ class TestBuildRegistrar:
     def test_unknown_mode_is_a_clean_error(self) -> None:
         with pytest.raises(IngestError, match="unknown ingest mode"):
             _ = build_registrar(self._CLIENT, _immich(ingest_mode="sideways"))
+
+    def test_flag_override_wins_over_the_env_mode(self) -> None:
+        # The --ingest-mode flag (external) beats the IMMICH__INGEST_MODE env (upload).
+        registrar = build_registrar(
+            self._CLIENT,
+            _immich(ingest_mode="upload", external_host_root="/photos"),
+            ingest_mode="external",
+        )
+        assert isinstance(registrar, ExternalLibraryRegistrar)
+
+    def test_absent_flag_falls_back_to_the_env_mode(self) -> None:
+        registrar = build_registrar(
+            self._CLIENT,
+            _immich(ingest_mode="external", external_host_root="/photos"),
+            ingest_mode=None,
+        )
+        assert isinstance(registrar, ExternalLibraryRegistrar)

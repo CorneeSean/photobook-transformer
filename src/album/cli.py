@@ -25,6 +25,7 @@ from album.config import get_settings
 from album.flow import pipeline
 from album.ingest import (
     _ALBUMS_DIR,
+    INGEST_MODES,
     AlbumOutcome,
     IngestError,
     ingest_directory,
@@ -92,6 +93,17 @@ def _add_generate_parser(subparsers: argparse._SubParsersAction[argparse.Argumen
         "--force",
         action="store_true",
         help="Re-run the pipeline for an already-imported slug (album.yml left untouched)",
+    )
+    parser.add_argument(
+        "--ingest-mode",
+        choices=INGEST_MODES,
+        dest="ingest_mode",
+        help=(
+            "How photos reach Immich (default: the IMMICH__INGEST_MODE env, else "
+            "'upload'). 'upload' copies each file in; 'external' scans a read-only "
+            "bind mount in place (no copy) — needs IMMICH__EXTERNAL_HOST_ROOT set. "
+            "A run-level mode: applies to every album, including --manifest fan-out."
+        ),
     )
     _add_captioner_arg(parser)
     _add_lead_face_arg(parser)
@@ -180,6 +192,7 @@ def _generate_single(args: argparse.Namespace) -> None:
             source_document=Path(args.source_document) if args.source_document else None,
             force=args.force,
             lead_face_images=_lead_face_images(args),
+            ingest_mode=args.ingest_mode,
         )
         pipeline(album_slug=slug, captioner=_resolve_captioner(args.captioner), force=args.force)
     except (FileNotFoundError, ValueError, IngestError) as exc:
@@ -205,7 +218,13 @@ def _generate_manifest(args: argparse.Namespace) -> None:
         # with a raw traceback after N albums are already in Immich.
         captioner = _resolve_captioner(args.captioner)
         manifest = load_manifest(_resolve_manifest_path(root, args.manifest))
-        outcomes = ingest_manifest(root, manifest, timezone=args.timezone, force=args.force)
+        outcomes = ingest_manifest(
+            root,
+            manifest,
+            timezone=args.timezone,
+            force=args.force,
+            ingest_mode=args.ingest_mode,
+        )
     except (FileNotFoundError, ValueError, IngestError) as exc:
         print(f"photobook-generator generate --manifest: {exc}", file=sys.stderr)
         sys.exit(1)

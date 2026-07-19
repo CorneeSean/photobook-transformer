@@ -280,7 +280,23 @@ class TestGenerate:
             "source_document": Path("schedule.pdf"),
             "force": True,
             "lead_face_images": None,
+            "ingest_mode": None,  # flag absent ⇒ fall back to the env in build_registrar
         }
+
+    def test_ingest_mode_flag_is_threaded_into_ingest(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        ingest_calls = self._stub_ingest(monkeypatch)
+        monkeypatch.setattr("album.cli.pipeline", lambda **kwargs: None)
+        monkeypatch.setattr(
+            sys,
+            "argv",
+            ["photobook-generator", "generate", ".", "--ingest-mode", "external"],
+        )
+
+        main()
+
+        assert ingest_calls[0][1]["ingest_mode"] == "external"
 
     def test_lead_face_flag_is_repeatable_and_threaded_into_ingest(
         self,
@@ -417,6 +433,37 @@ class TestGenerateManifest:
         assert exc_info.value.code == 1
         assert "per-album" in capsys.readouterr().err
         assert called == []  # rejected before the fan-out ran
+
+    def test_ingest_mode_is_run_level_and_threaded_into_the_fan_out(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # --ingest-mode is a run-level global (not per-album), so it is accepted in
+        # manifest mode and reaches the shared fan-out registrar.
+        captured: dict[str, object] = {}
+        monkeypatch.setattr(
+            "album.cli.load_manifest", lambda _p: Manifest(albums=[AlbumSpec(path="a")])
+        )
+        monkeypatch.setattr(
+            "album.cli.ingest_manifest",
+            lambda *a, **k: captured.update(k) or [self._outcome("a", "a")],
+        )
+        monkeypatch.setattr("album.cli.pipeline", lambda **kwargs: None)
+        monkeypatch.setattr(
+            sys,
+            "argv",
+            [
+                "photobook-generator",
+                "generate",
+                "./photos",
+                "--manifest",
+                "--ingest-mode",
+                "external",
+            ],
+        )
+
+        main()
+
+        assert captured["ingest_mode"] == "external"
 
     @pytest.mark.parametrize(
         ("manifest_args", "expected"),

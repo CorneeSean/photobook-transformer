@@ -38,8 +38,9 @@ uv run photobook-generator generate ./path/to/photos
 Your book lands at `data/albums/<slug>/book/index.html` — open it in any
 browser. `ANTHROPIC_API_KEY` is optional (only for the opt-in `--captioner
 claude` upgrade); the default run is fully offline. `generate` also takes
-`--slug`, `--title`, `--timezone`, `--force`, and `--source-document
-schedule.pdf` (extracts `segments` from a trip itinerary / run-sheet / line-up).
+`--slug`, `--title`, `--timezone`, `--force`, `--source-document schedule.pdf`
+(extracts `segments` from a trip itinerary / run-sheet / line-up), and
+`--ingest-mode` (see [Scan photos in place](#scan-photos-in-place-no-second-copy)).
 To hand-author `segments`/`lead_faces` instead, write `data/albums/<slug>/album.yml`
 yourself and run `uv run photobook-generator run --album <slug>` — see
 [Album definition](./knowledge/reference/album-definition.md) and
@@ -79,6 +80,32 @@ derived `album.yml`) is isolated and skipped; the run continues and prints a com
 books-written / albums-failed summary. Same caveat as above: the stack must be up and
 `IMMICH__API_KEY` set. See
 [folder-structure-driven ingestion](./knowledge/build/folder-structure-ingestion.md).
+
+### Scan photos in place (no second copy)
+
+By default `generate` **uploads** a copy of every photo into Immich, so a 10 GB
+folder costs ~10 GB again in Immich's store. `--ingest-mode external` instead
+registers the folder as an Immich **external library** — a read-only bind mount
+Immich scans *in place*, no copy:
+
+```sh
+uv run photobook-generator generate ./photos --ingest-mode external
+```
+
+It is **opt-in** (upload stays the default) and a run-level mode — it applies to
+every album, including `--manifest` fan-out. Setup, in `.env`:
+
+- Uncomment the `${PHOTOS_LOCATION}:/external:ro` mount in
+  `docker-compose.immich.yml` and set `PHOTOS_LOCATION` to your host photo root.
+- Set `IMMICH__EXTERNAL_HOST_ROOT` to that same host root and (if you changed the
+  mount target) `IMMICH__EXTERNAL_CONTAINER_ROOT` (default `/external`).
+- `IMMICH__API_KEY` must be the **admin's** key (external libraries are admin-owned).
+- The default can also be set once via `IMMICH__INGEST_MODE=external`; the flag wins.
+
+The trade-off: the originals must **stay mounted** for the life of the album —
+if the mount goes away Immich marks the assets offline and later stages that read
+originals (thumbnails, scoring, faces, render) break. See
+[external-library ingestion](./knowledge/build/external-library-ingestion.md).
 
 ## Architecture
 

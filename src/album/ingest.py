@@ -74,6 +74,9 @@ _LIBRARY_QUEUE = ("library",)
 # One shared external library reused across runs and a manifest's N albums
 # (external-library-ingestion.md decision 2) — matched/created by import path.
 _DEFAULT_LIBRARY_NAME = "photobook-external"
+# Valid `--ingest-mode`/`IMMICH__INGEST_MODE` values — the single source the CLI's
+# flag choices and `build_registrar`'s dispatch both read (mirrors captioner_names).
+INGEST_MODES = ("upload", "external")
 
 
 class IngestError(RuntimeError):
@@ -299,15 +302,19 @@ def build_registrar(
     client: ImmichClient,
     immich: ImmichSettings,
     *,
+    ingest_mode: str | None = None,
     poll_interval_s: float = _DEFAULT_POLL_INTERVAL_S,
     poll_timeout_s: float = _DEFAULT_POLL_TIMEOUT_S,
     sleep: Callable[[float], None] = time.sleep,
 ) -> AssetRegistrar:
-    """The ``ingest_mode`` string → :class:`AssetRegistrar` mapping, kept out of
-    ``config.py`` (mirrors ``build_captioner``/the scorer builder). ``upload`` is the
-    default; ``external`` additionally requires ``external_host_root`` set to the
-    host prefix of the bind-mounted tree — else a clean :class:`IngestError`."""
-    mode = immich.ingest_mode
+    """The ingest-mode string → :class:`AssetRegistrar` mapping, kept out of
+    ``config.py`` (mirrors ``build_captioner``/the scorer builder). ``ingest_mode``
+    is the ``--ingest-mode`` flag override; when ``None`` it falls back to the
+    ``IMMICH__INGEST_MODE`` env (``immich.ingest_mode``, itself defaulting to
+    ``upload``) — flag > env, like ``--captioner``. ``external`` additionally
+    requires ``external_host_root`` set to the host prefix of the bind-mounted tree
+    — else a clean :class:`IngestError`."""
+    mode = ingest_mode or immich.ingest_mode
     if mode == "upload":
         return UploadRegistrar(client)
     if mode == "external":
@@ -326,7 +333,7 @@ def build_registrar(
             poll_timeout_s=poll_timeout_s,
             sleep=sleep,
         )
-    raise IngestError(f"unknown ingest mode {mode!r}; expected 'upload' or 'external'")
+    raise IngestError(f"unknown ingest mode {mode!r}; expected one of {', '.join(INGEST_MODES)}")
 
 
 class DirectoryIngestor:
@@ -830,6 +837,7 @@ def ingest_directory(
     source_document: Path | None = None,
     force: bool = False,
     lead_face_images: list[Path] | None = None,
+    ingest_mode: str | None = None,
 ) -> str:
     """Ingest ``directory`` with the real Immich client and return the slug the
     pipeline should run — the production entry point the CLI calls.
@@ -837,11 +845,13 @@ def ingest_directory(
     Builds :class:`~album.immich.client.ImmichClient` from settings (closing it
     afterward); the class-based :class:`DirectoryIngestor` is what tests exercise
     with a fake client. The segments agent uses real Claude here (no ``model``
-    injected).
+    injected). ``ingest_mode`` is the ``--ingest-mode`` flag override (flag > the
+    ``IMMICH__INGEST_MODE`` env), passed straight to :func:`build_registrar`.
     """
     immich = get_settings().immich
     with ImmichClient.from_settings() as client:
-        ingestor = DirectoryIngestor(client, registrar=build_registrar(client, immich))
+        registrar = build_registrar(client, immich, ingest_mode=ingest_mode)
+        ingestor = DirectoryIngestor(client, registrar=registrar)
         return ingestor.ingest(
             directory,
             slug=slug,
@@ -895,6 +905,7 @@ def ingest_manifest(
     *,
     timezone: str | None = None,
     force: bool = False,
+    ingest_mode: str | None = None,
     poll_interval_s: float = _DEFAULT_POLL_INTERVAL_S,
     poll_timeout_s: float = _DEFAULT_POLL_TIMEOUT_S,
     sleep: Callable[[float], None] = time.sleep,
@@ -905,8 +916,9 @@ def ingest_manifest(
     fan-out entry point the CLI calls. The loop logic lives in :func:`_ingest_all`
     (exercised with a fake client in tests); this wrapper only owns acquiring the
     real client, exactly as :func:`ingest_directory` does for the single-album path.
-    The poll/sleep/model knobs thread through to the one shared
-    :class:`DirectoryIngestor`."""
+    ``ingest_mode`` (the ``--ingest-mode`` flag) selects the shared registrar for the
+    whole fan-out — it is a run-level mode, not per-album. The poll/sleep/model knobs
+    thread through to the one shared :class:`DirectoryIngestor`."""
     immich = get_settings().immich
     with ImmichClient.from_settings() as client:
         ingestor = DirectoryIngestor(
@@ -914,6 +926,7 @@ def ingest_manifest(
             registrar=build_registrar(
                 client,
                 immich,
+                ingest_mode=ingest_mode,
                 poll_interval_s=poll_interval_s,
                 poll_timeout_s=poll_timeout_s,
                 sleep=sleep,
