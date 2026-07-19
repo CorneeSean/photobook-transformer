@@ -103,10 +103,138 @@ every album, including `--manifest` fan-out. Setup, in `.env`:
 - `IMMICH__API_KEY` must be the **admin's** key (external libraries are admin-owned).
 - The default can also be set once via `IMMICH__INGEST_MODE=external`; the flag wins.
 
+**You still pass `<dir>` — it's the album, not the mount.** These two paths do
+different jobs. `PHOTOS_LOCATION` / `IMMICH__EXTERNAL_HOST_ROOT` is *deployment*
+config: the whole tree Immich mounts and scans, served by **one shared library
+reused across every run**. `build <dir>` is a *per-run* choice — **which** photos
+under that root make up this album (collected from `<dir>`, then matched against
+the scanned library by path). `<dir>` must sit **under** the mount root. If it
+equals the root, your whole folder is one album; point it at a subfolder (or use
+`--manifest`) to carve the tree into several. The `<dir>` argument means the exact
+same thing in upload mode — external mode only changes *how* those photos reach
+Immich, never *which* photos are the album.
+
 The trade-off: the originals must **stay mounted** for the life of the album —
 if the mount goes away Immich marks the assets offline and later stages that read
 originals (thumbnails, scoring, faces, render) break. See
 [external-library ingestion](./knowledge/build/external-library-ingestion.md).
+
+## Examples
+
+Once the stack is up and `IMMICH__API_KEY` is set (see
+[Quick start path](#quick-start-path) for that one-time setup), a single `build`
+connects a directory to Immich — creating the album and uploading (or scanning)
+its photos — and then runs the full pipeline to generate the book.
+
+### One folder → one book
+
+The base case: point `build` at a directory. It uploads a copy of each photo
+into a new Immich album, then runs every stage.
+
+```sh
+uv run photobook-generator build ./honeymoon
+```
+
+### Name the album and set a timezone
+
+Override the derived slug/title, and give undated photos an IANA timezone so
+they sort correctly.
+
+```sh
+uv run photobook-generator build ./honeymoon \
+  --slug honeymoon-2026 --title "Honeymoon 2026" --timezone Europe/Podgorica
+```
+
+### Derive chapters from a schedule
+
+Extract the album's `segments` (chapters) from an itinerary, run-sheet, or
+line-up PDF instead of hand-authoring them.
+
+```sh
+uv run photobook-generator build ./wedding --source-document runsheet.pdf
+```
+
+### AI-written captions
+
+Swap the default offline template captions for Claude-generated ones. Needs
+`ANTHROPIC_API_KEY` in `.env`.
+
+```sh
+uv run photobook-generator build ./honeymoon --captioner claude
+```
+
+### Scan photos in place (no second copy)
+
+Register the folder as a read-only Immich external library instead of copying
+every file in — see [Scan photos in place](#scan-photos-in-place-no-second-copy)
+for the required mount setup.
+
+```sh
+uv run photobook-generator build ./photos --ingest-mode external
+```
+
+### A tree of albums → N books
+
+Fan a directory that holds several albums into N independent books in one run,
+driven by a root `ingest.yml` manifest.
+
+```sh
+uv run photobook-generator build ./photos-root --manifest
+```
+
+### Re-run an existing album
+
+Skip the ingest phase entirely and (re)run the pipeline on an album that already
+has an `album.yml` — handy for A/B-ing a different `--captioner`.
+
+```sh
+uv run photobook-generator build --no-ingest --album honeymoon-2026
+```
+
+## Run in Docker
+
+The `app` image bundles the native tools the pipeline shells out to — notably
+`darktable-cli` for [`render`](./knowledge/stages/render.md) — so running inside
+it needs nothing installed on your host. This is the intended way to run the full
+pipeline, and the only option if your OS can't install darktable. Bring the stack
+up first:
+
+```sh
+uv run poe up
+```
+
+Then run `build` in a one-off `app` container. The one required override is
+`IMMICH__BASE_URL`: inside the container `localhost` is the container itself, so
+point it at Immich's network name (`DATABASE_URL` / `PREFECT_API_URL` are already
+overridden for you in `docker-compose.yml`).
+
+**Resume or re-run an already-ingested album** — no photo mount needed, since
+`render` fetches originals from Immich:
+
+```sh
+docker compose run --rm \
+  -e IMMICH__BASE_URL=http://immich-server:2283/api \
+  app build --no-ingest --album <slug>
+```
+
+**Fresh run from a directory** (ingest + generate) — ingest reads the folder, so
+mount it into the container at the *same* host path:
+
+```sh
+docker compose run --rm \
+  -e IMMICH__BASE_URL=http://immich-server:2283/api \
+  -v /path/to/photos:/path/to/photos:ro \
+  app build /path/to/photos --ingest-mode external
+```
+
+`--rm` discards the one-off container; everything after `app` is passed to the
+`photobook-generator` entry point. The book lands at
+`data/albums/<slug>/book/index.html` on your host (`./data/albums` is
+bind-mounted into the container).
+
+> **Note:** the image ships the **offline** pipeline — aesthetic scoring falls
+> back to NULL (degraded curation), since the heavy `scoring` extra
+> (`torch` + `open_clip`) is deliberately left out to keep the image lean.
 
 ## Architecture
 

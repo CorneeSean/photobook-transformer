@@ -23,6 +23,10 @@ RUN apt-get update \
 WORKDIR /app
 COPY --from=builder /app/.venv /app/.venv
 COPY --from=builder /app/src /app/src
+# Jinja page/book templates are loaded from /app/templates at runtime
+# (printers/html.py + flow/stages/assemble.py resolve it relative to the tree);
+# they live outside src/, so copy them explicitly or assemble/fulfill can't render.
+COPY templates/ templates/
 COPY pyproject.toml uv.lock ./
 ENV PATH="/app/.venv/bin:$PATH"
 

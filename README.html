@@ -248,6 +248,132 @@ uv run poe migrate</code></pre>
     </div>
   </details>
 
+  <!-- EXAMPLES -->
+  <details class="card">
+    <summary>
+      <div class="s-left">
+        <span class="acc-eyebrow">Examples</span>
+        <span class="acc-title">Common <span class="mono">build</span> recipes — folder → Immich album → book</span>
+      </div>
+      <svg class="chev" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M9 6l6 6-6 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    </summary>
+    <div class="acc-body">
+      <p class="body">Once the stack is up and <code>IMMICH__API_KEY</code> is set (the one-time setup lives in <b>Quick start</b> above), a single <code>build</code> connects a directory to Immich — creating the album and uploading (or scanning) its photos — then runs the full pipeline to generate the book.</p>
+
+      <div class="qs-step">
+        <div class="qs-num">›</div>
+        <div class="qs-body">
+          <h3>One folder → one book</h3>
+          <p>The base case: point <span class="mono">build</span> at a directory. It uploads a copy of each photo into a new Immich album, then runs every stage.</p>
+          <pre><code>uv run photobook-generator build ./honeymoon</code></pre>
+        </div>
+      </div>
+
+      <div class="qs-step">
+        <div class="qs-num">›</div>
+        <div class="qs-body">
+          <h3>Name the album and set a timezone</h3>
+          <p>Override the derived slug/title, and give undated photos an IANA timezone so they sort correctly.</p>
+          <pre><code>uv run photobook-generator build ./honeymoon \
+  --slug honeymoon-2026 --title "Honeymoon 2026" --timezone Europe/Podgorica</code></pre>
+        </div>
+      </div>
+
+      <div class="qs-step">
+        <div class="qs-num">›</div>
+        <div class="qs-body">
+          <h3>Derive chapters from a schedule</h3>
+          <p>Extract the album's <span class="mono">segments</span> (chapters) from an itinerary, run-sheet, or line-up PDF instead of hand-authoring them.</p>
+          <pre><code>uv run photobook-generator build ./wedding --source-document runsheet.pdf</code></pre>
+        </div>
+      </div>
+
+      <div class="qs-step">
+        <div class="qs-num">›</div>
+        <div class="qs-body">
+          <h3>AI-written captions</h3>
+          <p>Swap the default offline template captions for Claude-generated ones. Needs <span class="mono">ANTHROPIC_API_KEY</span> in <span class="mono">.env</span>.</p>
+          <pre><code>uv run photobook-generator build ./honeymoon --captioner claude</code></pre>
+        </div>
+      </div>
+
+      <div class="qs-step">
+        <div class="qs-num">›</div>
+        <div class="qs-body">
+          <h3>Scan photos in place (no second copy)</h3>
+          <p>Register the folder as a read-only Immich external library instead of copying every file in. Needs a one-time bind-mount setup — uncomment the <span class="mono">${PHOTOS_LOCATION}:/external:ro</span> mount in <span class="mono">docker-compose.immich.yml</span> and set the <span class="mono">PHOTOS_LOCATION</span> / <span class="mono">IMMICH__EXTERNAL_*</span> vars in <span class="mono">.env</span> (both documented in <span class="mono">.env.example</span>; full playbook in <span class="mono">knowledge/build/archive/external-library-ingestion.md</span>).</p>
+          <pre><code>uv run photobook-generator build ./photos --ingest-mode external</code></pre>
+          <span class="tip"><b>You still pass <span class="mono">&lt;dir&gt;</span> — it's the album, not the mount.</b> <span class="mono">PHOTOS_LOCATION</span>/<span class="mono">IMMICH__EXTERNAL_HOST_ROOT</span> is deployment config (the whole tree Immich mounts, served by one shared library reused across runs); <span class="mono">build &lt;dir&gt;</span> is the per-run choice of <i>which</i> photos under that root are this album. <span class="mono">&lt;dir&gt;</span> must sit under the mount root — equal to it means your whole folder is one album; a subfolder (or <span class="mono">--manifest</span>) carves the tree into several. It means the same thing in upload mode; external only changes <i>how</i> the photos reach Immich.</span>
+        </div>
+      </div>
+
+      <div class="qs-step">
+        <div class="qs-num">›</div>
+        <div class="qs-body">
+          <h3>A tree of albums → N books</h3>
+          <p>Fan a directory that holds several albums into N independent books in one run, driven by a root <span class="mono">ingest.yml</span> manifest.</p>
+          <pre><code>uv run photobook-generator build ./photos-root --manifest</code></pre>
+        </div>
+      </div>
+
+      <div class="qs-step">
+        <div class="qs-num">›</div>
+        <div class="qs-body">
+          <h3>Re-run an existing album</h3>
+          <p>Skip the ingest phase entirely and (re)run the pipeline on an album that already has an <span class="mono">album.yml</span> — handy for A/B-ing a different <span class="mono">--captioner</span>.</p>
+          <pre><code>uv run photobook-generator build --no-ingest --album honeymoon-2026</code></pre>
+        </div>
+      </div>
+
+    </div>
+  </details>
+
+  <!-- RUN IN DOCKER -->
+  <details class="card">
+    <summary>
+      <div class="s-left">
+        <span class="acc-eyebrow">Run in Docker</span>
+        <span class="acc-title">Run the full pipeline in the <span class="mono">app</span> container — darktable included</span>
+      </div>
+      <svg class="chev" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M9 6l6 6-6 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    </summary>
+    <div class="acc-body">
+      <p class="body">The <span class="mono">app</span> image bundles the native tools the pipeline shells out to — notably <span class="mono">darktable-cli</span> for <code>render</code> — so running inside it needs nothing installed on your host. It's the intended way to run the full pipeline, and the only option if your OS can't install darktable. Bring the stack up first with <code>uv run poe up</code>, then run <code>build</code> in a one-off <span class="mono">app</span> container.</p>
+
+      <p class="body">The one required override is <span class="mono">IMMICH__BASE_URL</span>: inside the container <span class="mono">localhost</span> is the container itself, so point it at Immich's network name (<span class="mono">DATABASE_URL</span> / <span class="mono">PREFECT_API_URL</span> are already overridden for you in <span class="mono">docker-compose.yml</span>).</p>
+
+      <div class="qs-step">
+        <div class="qs-num">›</div>
+        <div class="qs-body">
+          <h3>Resume or re-run an already-ingested album</h3>
+          <p>No photo mount needed — <code>render</code> fetches originals from Immich.</p>
+          <pre><code>docker compose run --rm \
+  -e IMMICH__BASE_URL=http://immich-server:2283/api \
+  app build --no-ingest --album &lt;slug&gt;</code></pre>
+        </div>
+      </div>
+
+      <div class="qs-step">
+        <div class="qs-num">›</div>
+        <div class="qs-body">
+          <h3>Fresh run from a directory</h3>
+          <p>Ingest reads the folder, so mount it into the container at the <i>same</i> host path.</p>
+          <pre><code>docker compose run --rm \
+  -e IMMICH__BASE_URL=http://immich-server:2283/api \
+  -v /path/to/photos:/path/to/photos:ro \
+  app build /path/to/photos --ingest-mode external</code></pre>
+        </div>
+      </div>
+
+      <p class="body"><span class="mono">--rm</span> discards the one-off container; everything after <span class="mono">app</span> is passed to the <span class="mono">photobook-generator</span> entry point. The book lands at <span class="mono">data/albums/&lt;slug&gt;/book/index.html</span> on your host (<span class="mono">./data/albums</span> is bind-mounted in).</p>
+
+      <div class="note">
+        <span class="badge">Note</span>
+        <span>The image ships the <b>offline</b> pipeline — aesthetic scoring falls back to NULL (degraded curation), since the heavy <span class="mono">scoring</span> extra (<span class="mono">torch</span> + <span class="mono">open_clip</span>) is deliberately left out to keep the image lean.</span>
+      </div>
+    </div>
+  </details>
+
   <!-- ARCHITECTURE -->
   <details class="card" open>
     <summary>
