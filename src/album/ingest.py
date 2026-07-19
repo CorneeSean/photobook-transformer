@@ -22,7 +22,7 @@ import time
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import Protocol
 
 import yaml
@@ -33,15 +33,17 @@ from album.agents.segments import (
     SegmentExtractionError,
     extract_segments_from_pdf,
 )
+from album.config import ImmichSettings, get_settings
 from album.definition import AlbumDefinition, SegmentYAML
-from album.immich.client import ImmichAsset, ImmichClient, ImmichJobCounts
+from album.immich.client import ImmichAsset, ImmichClient, ImmichJobCounts, ImmichLibrary
+from album.immich.paths import PathMapping
 from album.manifest import AlbumSpec, Manifest, SegmentSpec
 from album.text import slugify as _slugify
 from album.text import titleize as _titleize
 
 # A pluggable "how are this album's segments computed" step, shared by both the
 # PDF (`--source-document`) and the folder (manifest) paths. Given the created
-# Immich album id and the {local path → asset id} map built during upload, it
+# Immich album id and the {local path → asset id} map the registrar produced, it
 # returns an optional title suggestion (the PDF path can propose one; folders
 # never do) plus the segments to materialize.
 SegmentSource = Callable[
@@ -66,11 +68,51 @@ _DEFAULT_POLL_TIMEOUT_S = 120.0
 # The queue whose readiness actually gates the pipeline: metadata (EXIF)
 # extraction. Faces/dedupe are best-effort and handled downstream if incomplete.
 _READINESS_QUEUES = ("metadataExtraction",)
+# The queue an external-library scan enqueues; the ExternalLibraryRegistrar waits
+# it out (via the same poll) before mapping host paths to scanned asset ids.
+_LIBRARY_QUEUE = ("library",)
+# One shared external library reused across runs and a manifest's N albums
+# (external-library-ingestion.md decision 2) — matched/created by import path.
+_DEFAULT_LIBRARY_NAME = "photobook-external"
 
 
 class IngestError(RuntimeError):
     """Ingestion couldn't proceed for a user-fixable reason (empty directory, a
     directory that isn't one, or a slug that's already been imported)."""
+
+
+def _wait_for_queues(
+    get_jobs: Callable[[], dict[str, ImmichJobCounts]],
+    queues: tuple[str, ...],
+    *,
+    poll_interval_s: float,
+    poll_timeout_s: float,
+    sleep: Callable[[float], None],
+) -> bool:
+    """Poll Immich's job queues until every queue in ``queues`` is idle (no
+    ``active``/``waiting`` work), or ``poll_timeout_s`` elapses. Returns whether it
+    reached idle; the caller decides what a timeout means (the readiness wait warns
+    and continues, the external scan lets the resulting empty map surface). Uses the
+    injected ``sleep`` so tests don't actually block. The shared poll behind both
+    :meth:`DirectoryIngestor._wait_for_readiness` (EXIF queue) and
+    :class:`ExternalLibraryRegistrar` (the ``library`` scan queue), so each strategy
+    just declares the queues it waits on."""
+    waited = 0.0
+    idle = _queues_idle(get_jobs(), queues)
+    while not idle and waited < poll_timeout_s:
+        sleep(poll_interval_s)
+        waited += poll_interval_s
+        idle = _queues_idle(get_jobs(), queues)
+    return idle
+
+
+def _queues_idle(jobs: dict[str, ImmichJobCounts], queues: tuple[str, ...]) -> bool:
+    """True when none of ``queues`` has outstanding work in ``jobs``. A queue Immich
+    doesn't report is treated as idle — nothing to wait on."""
+    return all(
+        (counts := jobs.get(queue)) is None or (counts.active == 0 and counts.waiting == 0)
+        for queue in queues
+    )
 
 
 class IngestClient(Protocol):
@@ -86,10 +128,212 @@ class IngestClient(Protocol):
     def get_album_assets(self, immich_album_id: str) -> list[ImmichAsset]: ...
 
 
+class AssetRegistrar(Protocol):
+    """How an album's photos become Immich assets — the one seam ``external`` mode
+    swaps (external-library-ingestion.md). Given the album's directory and its image
+    paths, ensure each is an Immich asset and return ``{host path → asset id}``.
+    Everything downstream (``create_album``, segments, materialization, the whole
+    pipeline) consumes only that map and never cares *how* the assets got there, so
+    the entire feature lives behind this method."""
+
+    def register(self, directory: Path, image_paths: list[Path]) -> dict[Path, str]: ...
+
+
+class _Uploader(Protocol):
+    """The client slice :class:`UploadRegistrar` needs (``ImmichClient`` and the test
+    fakes satisfy it)."""
+
+    def upload_asset(self, path: Path) -> str: ...
+
+
+class _LibraryClient(Protocol):
+    """The External-Library client slice :class:`ExternalLibraryRegistrar` needs —
+    the surface build step 36 added to :class:`~album.immich.client.ImmichClient`."""
+
+    def get_current_user_id(self) -> str: ...
+
+    def get_libraries(self) -> list[ImmichLibrary]: ...
+
+    def create_library(
+        self, name: str, import_paths: list[str], *, owner_id: str
+    ) -> ImmichLibrary: ...
+
+    def scan_library(self, library_id: str) -> None: ...
+
+    def get_library_assets(self, library_id: str) -> list[ImmichAsset]: ...
+
+    def get_jobs(self) -> dict[str, ImmichJobCounts]: ...
+
+
+class UploadRegistrar:
+    """Default (``upload``) registrar: uploads a copy of each photo into Immich via
+    ``POST /assets`` — today's behavior, extracted verbatim from ``_ingest``. Immich
+    stores its own copy of every file (a 10 GB album costs ~10 GB again), which is
+    exactly what ``external`` mode avoids."""
+
+    def __init__(self, client: _Uploader) -> None:
+        self._client = client
+
+    def register(self, directory: Path, image_paths: list[Path]) -> dict[Path, str]:
+        # `directory` is unused (upload is per-file); kept for the shared protocol.
+        del directory
+        return {path: self._client.upload_asset(path) for path in image_paths}
+
+
+class ExternalLibraryRegistrar:
+    """``external`` registrar: registers the bind-mounted photo tree as an Immich
+    External Library and scans it *in place* — no copy into Immich's store
+    (external-library-ingestion.md). Ensures one shared library exists (reused across
+    runs and a manifest's albums, matched by import path), scans it, waits the
+    ``library`` queue out, then maps each host photo to its scanned asset id by
+    matching Immich's container-side ``originalPath`` back through ``mapping``.
+
+    The library spans the whole mounted tree, so ``get_library_assets`` may return
+    photos from other albums; :meth:`register` filters down to *this* call's
+    ``image_paths``. Poll knobs mirror :class:`DirectoryIngestor` so the scan wait
+    shares the ingestor's timing (and stays instant under an injected no-op sleep in
+    tests)."""
+
+    def __init__(
+        self,
+        client: _LibraryClient,
+        mapping: PathMapping,
+        *,
+        library_name: str = _DEFAULT_LIBRARY_NAME,
+        poll_interval_s: float = _DEFAULT_POLL_INTERVAL_S,
+        poll_timeout_s: float = _DEFAULT_POLL_TIMEOUT_S,
+        sleep: Callable[[float], None] = time.sleep,
+    ) -> None:
+        self._client = client
+        self._mapping = mapping
+        self._library_name = library_name
+        self._poll_interval_s = poll_interval_s
+        self._poll_timeout_s = poll_timeout_s
+        self._sleep = sleep
+
+    def register(self, directory: Path, image_paths: list[Path]) -> dict[Path, str]:
+        del directory  # the import path is the shared mount root, not per-album
+        library = self._ensure_library()
+        self._client.scan_library(library.id)
+        idle = _wait_for_queues(
+            self._client.get_jobs,
+            _LIBRARY_QUEUE,
+            poll_interval_s=self._poll_interval_s,
+            poll_timeout_s=self._poll_timeout_s,
+            sleep=self._sleep,
+        )
+        if not idle:
+            _log.warning(
+                "Immich library scan still running after %gs; mapping what was scanned "
+                "so far (missing photos will fail below with guidance)",
+                self._poll_timeout_s,
+            )
+        return self._map_assets(image_paths, self._client.get_library_assets(library.id))
+
+    def _ensure_library(self) -> ImmichLibrary:
+        """Reuse the shared external library (matched by its import path) or create
+        it. External libraries belong to the admin user, so the configured API key
+        must be the admin's — surfaced by ``get_current_user_id`` as the owner."""
+        import_path = str(self._mapping.container_root)
+        for library in self._client.get_libraries():
+            if import_path in library.import_paths:
+                return library
+        return self._client.create_library(
+            self._library_name,
+            [import_path],
+            owner_id=self._client.get_current_user_id(),
+        )
+
+    def _map_assets(self, image_paths: list[Path], assets: list[ImmichAsset]) -> dict[Path, str]:
+        """``{host path → asset id}`` for this album's photos, by matching each host
+        path's container equivalent against the scanned assets' ``originalPath``. A
+        photo that isn't among the scanned assets is a real problem (bad mount, a
+        scan that didn't finish, a file Immich skipped), so fail fast naming it
+        rather than silently building a book from fewer photos than asked."""
+        by_container = _index_by_original_path(assets)
+        registered: dict[Path, str] = {}
+        missing: list[Path] = []
+        for path in image_paths:
+            asset_id = by_container.get(self._container_of(path))
+            if asset_id is None:
+                missing.append(path)
+            else:
+                registered[path] = asset_id
+        if missing:
+            raise _missing_scan_error(missing)
+        return registered
+
+    def _container_of(self, host_path: Path) -> PurePosixPath:
+        """The container path for a host photo, rewrapping the mapping's
+        outside-the-root :class:`ValueError` as a user-facing :class:`IngestError`."""
+        try:
+            return self._mapping.to_container(host_path)
+        except ValueError as exc:
+            raise IngestError(str(exc)) from exc
+
+
+def _index_by_original_path(assets: list[ImmichAsset]) -> dict[PurePosixPath, str]:
+    """``{container originalPath → asset id}`` for the scanned assets that carry a
+    path — the lookup :meth:`ExternalLibraryRegistrar._map_assets` matches host
+    photos against."""
+    return {
+        PurePosixPath(asset.original_path): asset.id
+        for asset in assets
+        if asset.original_path is not None
+    }
+
+
+def _missing_scan_error(missing: list[Path]) -> IngestError:
+    """A clear :class:`IngestError` for photos the library scan didn't return —
+    naming the first few (the likeliest cause is a mount/root misconfiguration)."""
+    shown = ", ".join(str(path) for path in missing[:3])
+    more = f" (+{len(missing) - 3} more)" if len(missing) > 3 else ""
+    return IngestError(
+        f"external library scan did not return {len(missing)} expected "
+        f"photo(s): {shown}{more}; check the bind mount and that "
+        "IMMICH__EXTERNAL_HOST_ROOT/CONTAINER_ROOT match the compose volume",
+    )
+
+
+def build_registrar(
+    client: ImmichClient,
+    immich: ImmichSettings,
+    *,
+    poll_interval_s: float = _DEFAULT_POLL_INTERVAL_S,
+    poll_timeout_s: float = _DEFAULT_POLL_TIMEOUT_S,
+    sleep: Callable[[float], None] = time.sleep,
+) -> AssetRegistrar:
+    """The ``ingest_mode`` string → :class:`AssetRegistrar` mapping, kept out of
+    ``config.py`` (mirrors ``build_captioner``/the scorer builder). ``upload`` is the
+    default; ``external`` additionally requires ``external_host_root`` set to the
+    host prefix of the bind-mounted tree — else a clean :class:`IngestError`."""
+    mode = immich.ingest_mode
+    if mode == "upload":
+        return UploadRegistrar(client)
+    if mode == "external":
+        if not immich.external_host_root:
+            raise IngestError(
+                "external ingest mode requires IMMICH__EXTERNAL_HOST_ROOT (the host "
+                "prefix of the bind-mounted photo tree); set it or use upload mode",
+            )
+        mapping = PathMapping.from_settings(
+            immich.external_host_root, immich.external_container_root
+        )
+        return ExternalLibraryRegistrar(
+            client,
+            mapping,
+            poll_interval_s=poll_interval_s,
+            poll_timeout_s=poll_timeout_s,
+            sleep=sleep,
+        )
+    raise IngestError(f"unknown ingest mode {mode!r}; expected 'upload' or 'external'")
+
+
 class DirectoryIngestor:
-    """Walks a photo directory, uploads it to Immich as a new album, waits out
-    Immich's async processing, and materializes an ``album.yml`` — returning the
-    slug the caller hands to ``pipeline``.
+    """Walks a photo directory, registers it with Immich as a new album (uploading
+    a copy by default, or scanning an external library in place — the injected
+    :class:`AssetRegistrar`), waits out Immich's async processing, and materializes
+    an ``album.yml`` — returning the slug the caller hands to ``pipeline``.
 
     The Immich HTTP layer is injected as an :class:`IngestClient` (the real
     :class:`~album.immich.client.ImmichClient` satisfies it structurally); the
@@ -102,6 +346,7 @@ class DirectoryIngestor:
         self,
         client: IngestClient,
         *,
+        registrar: AssetRegistrar | None = None,
         albums_dir: Path = _ALBUMS_DIR,
         poll_interval_s: float = _DEFAULT_POLL_INTERVAL_S,
         poll_timeout_s: float = _DEFAULT_POLL_TIMEOUT_S,
@@ -109,6 +354,9 @@ class DirectoryIngestor:
         model: Model | None = None,
     ) -> None:
         self._client = client
+        # How photos become Immich assets (upload a copy vs. scan in place); the
+        # only thing `external` mode swaps. Defaults to today's per-file upload.
+        self._registrar = registrar or UploadRegistrar(client)
         self._albums_dir = albums_dir
         self._poll_interval_s = poll_interval_s
         self._poll_timeout_s = poll_timeout_s
@@ -253,8 +501,10 @@ class DirectoryIngestor:
 
         image_paths = self._collect_images(directory)
         # Retain the {path → asset id} map: the folder segment source needs it to
-        # tie each subfolder's photos back to their Immich capture timestamps.
-        path_to_asset_id = {path: self._client.upload_asset(path) for path in image_paths}
+        # tie each subfolder's photos back to their Immich capture timestamps. How
+        # the assets are registered (upload vs. scan-in-place) is the injected
+        # registrar's business; everything below only reads this map.
+        path_to_asset_id = self._registrar.register(directory, image_paths)
         # The Immich album is named before the document is read (extraction needs
         # the created, EXIF-ready album), so it uses the pre-document title; the
         # book's album.yml title below can still prefer a document-supplied one.
@@ -390,14 +640,15 @@ class DirectoryIngestor:
         """Poll Immich's job queues until EXIF extraction is idle, so ``sync``/
         ``cluster`` see capture timestamps. On timeout, warn and continue rather
         than hang — undated photos are handled downstream (``sync`` flags them,
-        ``cluster`` has a NULL-timestamp path). Uses the injected ``sleep`` so
-        tests don't actually wait."""
-        waited = 0.0
-        idle = self._queues_idle()
-        while not idle and waited < self._poll_timeout_s:
-            self._sleep(self._poll_interval_s)
-            waited += self._poll_interval_s
-            idle = self._queues_idle()
+        ``cluster`` has a NULL-timestamp path). Shares :func:`_wait_for_queues` with
+        the external registrar's scan wait; the injected ``sleep`` keeps tests fast."""
+        idle = _wait_for_queues(
+            self._client.get_jobs,
+            _READINESS_QUEUES,
+            poll_interval_s=self._poll_interval_s,
+            poll_timeout_s=self._poll_timeout_s,
+            sleep=self._sleep,
+        )
         if not idle:
             _log.warning(
                 "Immich still processing after %gs (queues: %s); continuing — "
@@ -406,16 +657,6 @@ class DirectoryIngestor:
                 self._poll_timeout_s,
                 ", ".join(_READINESS_QUEUES),
             )
-
-    def _queues_idle(self) -> bool:
-        """True when none of the readiness queues has outstanding work."""
-        jobs = self._client.get_jobs()
-        return all(self._queue_idle(jobs.get(queue)) for queue in _READINESS_QUEUES)
-
-    @staticmethod
-    def _queue_idle(counts: ImmichJobCounts | None) -> bool:
-        # A queue Immich doesn't report is treated as idle — nothing to wait on.
-        return counts is None or (counts.active == 0 and counts.waiting == 0)
 
     @staticmethod
     def _materialize(
@@ -598,8 +839,10 @@ def ingest_directory(
     with a fake client. The segments agent uses real Claude here (no ``model``
     injected).
     """
+    immich = get_settings().immich
     with ImmichClient.from_settings() as client:
-        return DirectoryIngestor(client).ingest(
+        ingestor = DirectoryIngestor(client, registrar=build_registrar(client, immich))
+        return ingestor.ingest(
             directory,
             slug=slug,
             title=title,
@@ -664,9 +907,17 @@ def ingest_manifest(
     real client, exactly as :func:`ingest_directory` does for the single-album path.
     The poll/sleep/model knobs thread through to the one shared
     :class:`DirectoryIngestor`."""
+    immich = get_settings().immich
     with ImmichClient.from_settings() as client:
         ingestor = DirectoryIngestor(
             client,
+            registrar=build_registrar(
+                client,
+                immich,
+                poll_interval_s=poll_interval_s,
+                poll_timeout_s=poll_timeout_s,
+                sleep=sleep,
+            ),
             poll_interval_s=poll_interval_s,
             poll_timeout_s=poll_timeout_s,
             sleep=sleep,

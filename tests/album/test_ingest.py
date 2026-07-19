@@ -131,6 +131,32 @@ class TestDirectoryIngest:
             "immich-new-1",
         )
 
+    def test_injected_registrar_replaces_the_upload_seam(self, tmp_path: Path) -> None:
+        # The whole `external` mode swaps only this: a registrar that returns the
+        # {path → asset id} map some other way (here, a canned stand-in). The album
+        # is then created from *its* ids and everything downstream is unchanged — no
+        # upload happens, and the ingestor never cares how the assets got there.
+        directory = self._photos_dir(tmp_path, "lisbon-trip", ["a.jpg", "b.jpg"])
+        client = FakeIngestClient()
+
+        class CannedRegistrar:
+            def __init__(self) -> None:
+                self.calls: list[list[Path]] = []
+
+            def register(self, _directory: Path, image_paths: list[Path]) -> dict[Path, str]:
+                self.calls.append(image_paths)
+                return {path: f"ext-{i}" for i, path in enumerate(image_paths, 1)}
+
+        registrar = CannedRegistrar()
+        ingestor = self._ingestor(client, tmp_path / "albums", registrar=registrar)
+
+        slug = ingestor.ingest(directory)
+
+        assert slug == "lisbon-trip"
+        assert client.uploaded == []  # the registrar handled it, not upload_asset
+        assert registrar.calls == [sorted(directory.glob("*.jpg"))]
+        assert client.created == [("Lisbon Trip", ["ext-1", "ext-2"])]
+
     def test_recurses_into_subdirectories(self, tmp_path: Path) -> None:
         directory = self._photos_dir(tmp_path, "trip", ["top.jpg"])
         nested = directory / "day-1"
