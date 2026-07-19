@@ -27,7 +27,7 @@ possible with **zero external API and zero API key**, fully deterministic and
 offline.
 
 Cost is **not** the driver — the full pass is ~$1–$4/album
-([AI-pass cost estimate](/build/ai-cost-estimate.md), open Q5). Offline operation,
+([AI-pass cost estimate](/build/archive/ai-cost-estimate.md), open Q5). Offline operation,
 no key, privacy, and determinism are.
 
 ## The idea: split one call into two classical jobs
@@ -79,6 +79,6 @@ injection seam, not the baseline.
 ## Scope note
 
 This is the per-photo vision call. The `--source-document` **segment-extraction**
-agent ([single-command-ingestion.md](/build/single-command-ingestion.md) step 3 /
+agent ([single-command-ingestion.md](/build/archive/single-command-ingestion.md) step 3 /
 build step 28) is a separate Claude text/PDF call — one per *album*, also
 localizable but lower priority; out of scope for this proposal.

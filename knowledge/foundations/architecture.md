@@ -78,7 +78,7 @@ the caption from one fetch, **once per selected photo** — persisted and idempo
 (segment name/place, people, capture time, `Album.meta`), regardless of which stage
 triggers it first.
 
-As of **step 29** ([local-analysis.md](/build/local-analysis.md)) both halves are
+As of **step 29** ([local-analysis.md](/build/archive/local-analysis.md)) both halves are
 **classical and offline by default** — `ClassicalToneEstimator` (CV) + `TemplateCaptioner`
 (metadata templating), behind injectable `ToneEstimator`/`Captioner` seams — so a default
 run needs **no external API and no key**. `ClaudeCaptioner` is the opt-in rich-caption

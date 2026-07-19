@@ -38,7 +38,7 @@ captions. Segments make the output *better*, not possible.
 
 **A Segment's time window has several *sources*, not several *concepts*.** It can
 be authored by hand, extracted from a `--source-document`, or — via a manifest
-([folder-structure ingestion](/build/folder-structure-ingestion.md)) — derived as
+([folder-structure ingestion](/build/archive/folder-structure-ingestion.md)) — derived as
 `[min, max]` of the capture timestamps of the photos in a subfolder. All three
 produce the identical on-disk `Segment` the pipeline reasons about; only where the
 `[start_at, end_at]` window comes from differs.

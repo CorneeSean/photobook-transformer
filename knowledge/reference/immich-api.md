@@ -54,7 +54,7 @@ Keys), base URL includes the `/api` prefix (e.g. `http://localhost:2283/api`).
 **OCR (`GET /assets/{id}/ocr`) is deliberately not consumed** — unlike
 `rating`/geocoded place (fields `sync` already fetches), it's a *separate per-asset
 endpoint* (a second N+1) for a "minor" signal whose contract isn't in this snapshot.
-Full tradeoff: [enrichment](/build/enrichment.md) step 20.
+Full tradeoff: [enrichment](/build/archive/enrichment.md) step 20.
 
 ## Timezone (informs open question #3)
 

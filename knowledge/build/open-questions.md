@@ -44,7 +44,7 @@ Resolve early; record answers back into this bundle (and note them in
 
 5. ~~**What does the full AI pass cost?**~~ **RESOLVED: acceptable — ~$1–$4/album.**
    One combined vision call per selected photo at a small thumbnail. Full math + levers:
-   [AI-pass cost estimate](/build/ai-cost-estimate.md). Metered re-check deferred to
+   [AI-pass cost estimate](/build/archive/ai-cost-estimate.md). Metered re-check deferred to
    first live run. (Moot for a default run — offline since step 29.)
 
 6. ~~**Can we offload the local ML to Immich and drop the dependency?**~~ **RESOLVED

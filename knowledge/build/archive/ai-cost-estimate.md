@@ -74,7 +74,7 @@ for 500 photos**. Still trivial.
 * **Model choice** assumes `claude-sonnet-5`. Opus-tier (`claude-opus-4-8`,
   $5/$25) would be ~2–3× — still under ~$10 for a full album.
 * **Out of scope for this question:** the `--source-document` segment-extraction
-  agent ([single-command-ingestion.md](/build/single-command-ingestion.md) step 3 /
+  agent ([single-command-ingestion.md](/build/archive/single-command-ingestion.md) step 3 /
   build step 28) is **one** extra call per *album*, not per photo — negligible.
 
 ## Caveat

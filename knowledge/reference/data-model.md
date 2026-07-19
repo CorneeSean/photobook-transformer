@@ -200,12 +200,12 @@ class Person(Base):
   counts *all* detected faces (incl. unassigned) as a portrait signal. The album-scoped
   `Person` table is the id→name cache. Nullable (`NULL` = faces not synced yet); a
   face-free album leaves `person_ids=[]` and every people-aware stage reduces to
-  face-free behavior. See [enrichment](/build/enrichment.md).
+  face-free behavior. See [enrichment](/build/archive/enrichment.md).
 - **`rating` + geocoded place** come off data `sync` already fetches (no extra call).
   `rating` (−1…5) is a *soft* `select` boost (never overrides a clearly better shot);
   `city`/`state`/`country` are `caption` grounding only — `cluster` keeps GPS/DBSCAN.
   All nullable ⇒ unrated/un-geocoded album is byte-for-byte as before. OCR deferred —
-  see [enrichment](/build/enrichment.md) step 20.
+  see [enrichment](/build/archive/enrichment.md) step 20.
 - **`Album.meta` is deliberately dumb** — interpolated into prompts/templates only, no
   stage branches on it. Anything a stage *reasons* about belongs in a real column.
 - **All datetimes stored UTC-aware** (`DateTime(timezone=True)`); `definition.py` and

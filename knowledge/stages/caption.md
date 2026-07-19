@@ -16,7 +16,7 @@ the photo is analyzed **at most once** — this stage's job is to supply the gro
 context and to store the result.
 
 **Which captioner runs is selectable per run** (step 29 —
-[local-analysis.md](/build/local-analysis.md)), behind a
+[local-analysis.md](/build/archive/local-analysis.md)), behind a
 [`Captioner`](../../src/album/analysis/captioner.py) seam:
 
 - **`TemplateCaptioner`** — the **default**, fully offline (no API, no key): composes

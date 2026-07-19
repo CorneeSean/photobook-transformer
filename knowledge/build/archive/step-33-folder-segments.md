@@ -8,10 +8,10 @@ timestamp: 2026-07-18
 
 # Step 33: Folder-derived segments in `ingest.py`
 
-**Status: todo.** Depends on [step 32](/build/step-32-manifest-schema.md) (imports
+**Status: todo.** Depends on [step 32](/build/archive/step-32-manifest-schema.md) (imports
 `AlbumSpec`/`SegmentSpec`). Second step of the
-[folder-structure-driven ingestion playbook](/build/folder-structure-ingestion.md).
-The fan-out loop + CLI is [step 34](/build/step-34-fanout-cli.md) — this step delivers
+[folder-structure-driven ingestion playbook](/build/archive/folder-structure-ingestion.md).
+The fan-out loop + CLI is [step 34](/build/archive/step-34-fanout-cli.md) — this step delivers
 and unit-tests a single-album `ingest_album(spec, root)` in isolation.
 
 ## Why
@@ -21,7 +21,7 @@ and unit-tests a single-album `ingest_album(spec, root)` in isolation.
 and factors the two behind one seam so the upload → create → readiness → materialize
 → validate spine is shared, not duplicated. A folder-derived segment's window is
 `[min, max]` of the capture timestamps of the photos actually in that subfolder
-([playbook detail](/build/folder-structure-ingestion.md#folder-derived-segment-windows--the-load-bearing-detail)).
+([playbook detail](/build/archive/folder-structure-ingestion.md#folder-derived-segment-windows--the-load-bearing-detail)).
 
 ## Design — a segment-source seam
 
@@ -136,7 +136,7 @@ All DB-free/torch-free — default `poe check` collection.
 
 ## Docs to update
 
-- [single-command-ingestion.md](/build/single-command-ingestion.md) — cross-reference:
+- [single-command-ingestion.md](/build/archive/single-command-ingestion.md) — cross-reference:
   segments now also come from folders, not only a document.
 - [domain-model.md](/foundations/domain-model.md) — one line noting a Segment's time
   range can be derived from a subfolder's photo timestamps (a new segment *source*, not

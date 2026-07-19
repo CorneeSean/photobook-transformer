@@ -9,7 +9,7 @@ timestamp: 2026-07-15
 # TestContainers integration testing — build order (steps 21+)
 
 A follow-on to the [build order](/build/build-order.md) and the
-[Immich enrichment playbook](/build/enrichment.md). The pipeline's fast test
+[Immich enrichment playbook](/build/archive/enrichment.md). The pipeline's fast test
 suite is in-memory SQLite + injected doubles (`respx` for Immich/Lulu HTTP,
 PydanticAI `TestModel` for the agent, a numpy `StubSimilarity` for pgvector). One
 real container is already used — `tests/test_similarity.py` runs the pgvector

@@ -71,7 +71,7 @@ in group 1 (per-photo ML), the `enhance→render` chain in group 2 (render shell
 
 | Group | Stages | Why independent | Joins at |
 |---|---|---|---|
-| **After `sync`** | [`resolve-leads`](/build/enrichment.md) ‖ [`quality`](/stages/quality.md) ‖ [`cluster`](/stages/cluster.md) | Each reads only `Photo` rows, writes disjoint state (`Person.is_lead`; scores/`clip_embedding`; segment/scene). No stage reads another's output. | [`select`](/stages/select.md) |
+| **After `sync`** | [`resolve-leads`](/build/archive/enrichment.md) ‖ [`quality`](/stages/quality.md) ‖ [`cluster`](/stages/cluster.md) | Each reads only `Photo` rows, writes disjoint state (`Person.is_lead`; scores/`clip_embedding`; segment/scene). No stage reads another's output. | [`select`](/stages/select.md) |
 | **After `select`** | [`enhance`](/stages/enhance.md)→[`render`](/stages/render.md) ‖ [`caption`](/stages/caption.md) | Both consume the `selected=True` set; render makes JPEGs, caption makes text. `enhance→render` is a hard chain (render needs enhance's XMP sidecars). | [`assemble`](/stages/assemble.md) |
 
 True chains (not parallelisable): `sync → everything`, the group-1 trio → `select`,
@@ -85,7 +85,7 @@ at `sync` (the boundary — see [architecture](/foundations/architecture.md)).
 | Stage | Group | Responsibility | Writes |
 |---|---|---|---|
 | [`sync`](/stages/sync.md) | seq | **The boundary.** Pull the album's assets from Immich, keyed on asset id. Idempotent. | `Photo` |
-| [`resolve-leads`](/build/enrichment.md) | 1 | Resolve `album.yml` priority subjects to Immich people; mark lead. | `Person.is_lead` |
+| [`resolve-leads`](/build/archive/enrichment.md) | 1 | Resolve `album.yml` priority subjects to Immich people; mark lead. | `Person.is_lead` |
 | [`quality`](/stages/quality.md) | 1 | Score blur (real) + aesthetic + CLIP embedding — real `ClipAestheticModel` (ViT-L/14 + LAION head, step 31), behind the opt-in `scoring` extra with a NULL-scoring fallback. | `Photo` scores |
 | [`cluster`](/stages/cluster.md) | 1 | Assign each photo to a segment (timestamp) + scene (gap detection). | `segment_id`, `Scene` |
 | [`select`](/stages/select.md) | seq | Diversity- + people-aware best-of-scene via MMR; near-dup suppression. | `Photo.selected` |

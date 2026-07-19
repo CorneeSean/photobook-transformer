@@ -21,7 +21,7 @@ doesn't expose its own embeddings, this stage also computes the
 [`cluster`](./cluster.md) and [`select`](./select.md) depend on.
 
 **Real scorer (build step 31).** The learned scorer + CLIP embedder are
-[`ClipAestheticModel`](/build/step-31-laion-aesthetic-scorer.md) (ViT-L/14 CLIP +
+[`ClipAestheticModel`](/build/archive/step-31-laion-aesthetic-scorer.md) (ViT-L/14 CLIP +
 LAION head), injected behind the `AestheticScorer`/`Embedder` protocols — one shared
 model backs both, with a one-entry feature memo so `score` + `embed` on the same
 thumbnail run the CLIP forward once. It's **capability-gated**: `config.quality.scorer`

@@ -15,7 +15,7 @@ exceeds a threshold, or that Immich flagged as a duplicate. Result: the best
 shots, without five near-identical "good" ones.
 
 **People/lead awareness** (enrichment step 18 — see
-[Immich enrichment](/build/enrichment.md)) layers on top and reduces to plain MMR for a
+[Immich enrichment](/build/archive/enrichment.md)) layers on top and reduces to plain MMR for a
 face-free scene (byte-for-byte). The **effective score** is `aesthetic_score` plus small
 tunable boosts — `group_boost` per recognized person and `lead_boost` per lead
 (`Person.is_lead`) — so a lead outranks the group tie-break; being small, they only

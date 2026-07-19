@@ -9,7 +9,7 @@ timestamp: 2026-07-17
 # Single-command album generation + document-driven segments
 
 Follow-on to the [build order](/build/build-order.md) and
-[enrichment playbook](/build/enrichment.md). **Built in steps 26–28** (see
+[enrichment playbook](/build/archive/enrichment.md). **Built in steps 26–28** (see
 [progress](/build/progress.md) / [`log.md`](/log.md)). The shipped command is a
 single `photobook-generator` with two subcommands:
 
@@ -28,7 +28,7 @@ photobook-generator run --album <slug>          # the album.yml-first path, unch
 2. **Document-driven segments.** `--source-document doc.pdf` extracts `segments:`
    (time/place chapters) from an itinerary / run-sheet / lineup instead of typing them.
    Segments can *also* come from a folder's photo timestamps rather than a document —
-   see the [folder-structure ingestion playbook](/build/folder-structure-ingestion.md)
+   see the [folder-structure ingestion playbook](/build/archive/folder-structure-ingestion.md)
    (`generate <root> --manifest`), which reuses this same `DirectoryIngestor` spine.
 
 Both are **additive** — no stage logic, data-model, or DAG change. Everything

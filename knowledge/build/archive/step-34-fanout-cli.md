@@ -8,11 +8,11 @@ timestamp: 2026-07-18
 
 # Step 34: Fan-out orchestration + `generate --manifest`
 
-**Status: todo.** Depends on [step 32](/build/step-32-manifest-schema.md)
-(`load_manifest`) and [step 33](/build/step-33-folder-segments.md) (`ingest_album`).
+**Status: todo.** Depends on [step 32](/build/archive/step-32-manifest-schema.md)
+(`load_manifest`) and [step 33](/build/archive/step-33-folder-segments.md) (`ingest_album`).
 Both this step and step 33 edit `ingest.py`, so they **cannot** be built in parallel.
 Third step of the
-[folder-structure-driven ingestion playbook](/build/folder-structure-ingestion.md).
+[folder-structure-driven ingestion playbook](/build/archive/folder-structure-ingestion.md).
 
 ## Why
 
@@ -20,7 +20,7 @@ Steps 32–33 gave a validated manifest and a single-album `ingest_album`. This 
 drives the fan-out: read the manifest, ingest **every** declared album under one shared
 Immich client with per-album isolation, then run the existing `pipeline` once per
 successfully-ingested album — N independent books
-([decision 2](/build/folder-structure-ingestion.md#decisions-settled-with-the-user-before-planning)).
+([decision 2](/build/archive/folder-structure-ingestion.md#decisions-settled-with-the-user-before-planning)).
 
 ## Orchestration — `src/album/ingest.py`
 
@@ -69,7 +69,7 @@ step 33's signature, noted here as this step's dependency on it).
 ## CLI — `src/album/cli.py`
 
 Add `--manifest` to the `generate` sub-parser (opt-in per
-[decision 3](/build/folder-structure-ingestion.md#decisions-settled-with-the-user-before-planning)):
+[decision 3](/build/archive/folder-structure-ingestion.md#decisions-settled-with-the-user-before-planning)):
 
 ```python
 parser.add_argument(
@@ -84,7 +84,7 @@ parser.add_argument(
 - **Absent** → today's single-album path, byte-for-byte unchanged.
 - **Present** → `_generate_manifest(args)`:
   1. **Reject the per-album flags**
-     ([decision 4](/build/folder-structure-ingestion.md#decisions-settled-with-the-user-before-planning)):
+     ([decision 4](/build/archive/folder-structure-ingestion.md#decisions-settled-with-the-user-before-planning)):
      if any of `--slug/--title/--source-document/--lead-face` is set, exit(1) with a
      clear message ("… are per-album; set them in the manifest"). `--timezone` (global
      default), `--captioner`, `--force` are allowed.
@@ -130,13 +130,13 @@ DB-free/torch-free — default `poe check` collection.
 
 ## Docs to update
 
-- [folder-structure-ingestion.md](/build/folder-structure-ingestion.md) — mark the
+- [folder-structure-ingestion.md](/build/archive/folder-structure-ingestion.md) — mark the
   fan-out + CLI as built; add any as-built deviations.
 - [progress.md](/build/progress.md) — move the step-34 row Outstanding → Completed on merge.
 - [log.md](/log.md) — record the change once implemented.
 
 (README + `folder-structure.md` + the end-to-end genericity test are
-[step 35](/build/step-35-docs-verify.md).)
+[step 35](/build/archive/step-35-docs-verify.md).)
 
 ## Verification (when implemented)
 

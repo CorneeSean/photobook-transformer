@@ -10,7 +10,7 @@ timestamp: 2026-07-18
 
 **Status: todo.** Depends on steps 32–34 (documents and verifies the finished
 feature). Final step of the
-[folder-structure-driven ingestion playbook](/build/folder-structure-ingestion.md).
+[folder-structure-driven ingestion playbook](/build/archive/folder-structure-ingestion.md).
 Steps 32–34 each update their own local docs at merge (per convention); this step is
 the **cross-cutting** docs + the end-to-end guard that belongs to no single code step.
 
@@ -35,7 +35,7 @@ abstraction.
 - [album-definition.md](/reference/album-definition.md) — cross-reference: segments may
   be authored by hand, extracted from a `--source-document`, **or** derived from
   subfolders via a manifest; the on-disk `album.yml` shape is identical either way.
-- [folder-structure-ingestion.md](/build/folder-structure-ingestion.md) (umbrella) —
+- [folder-structure-ingestion.md](/build/archive/folder-structure-ingestion.md) (umbrella) —
   add an "As-built" preamble reconciling any implementation-time deviations across
   steps 32–34 (the step-30/31 playbooks set the precedent for this).
 - [progress.md](/build/progress.md) / [log.md](/log.md) — final playbook-complete

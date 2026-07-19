@@ -8,7 +8,7 @@ timestamp: 2026-07-18
 
 # Folder-structure-driven ingestion
 
-Follow-on to the [single-command ingestion playbook](/build/single-command-ingestion.md).
+Follow-on to the [single-command ingestion playbook](/build/archive/single-command-ingestion.md).
 That playbook made `generate <dir>` collapse "upload + create Immich album + author
 `album.yml`" into one call for **one** album, with optional PDF-derived segments
 (`--source-document`). This playbook generalizes the *front* of that flow: one root
@@ -130,10 +130,10 @@ two pure helpers are independent of the spine refactor.)
 
 | # | Step | Playbook | Touches | Depends on |
 |---|------|----------|---------|------------|
-| 32 | Manifest schema + loader | [step-32](/build/step-32-manifest-schema.md) | new `manifest.py` | — |
-| 33 | Folder-derived segments in `ingest.py` | [step-33](/build/step-33-folder-segments.md) | `ingest.py` | 32 |
-| 34 | Fan-out orchestration + `generate --manifest` | [step-34](/build/step-34-fanout-cli.md) | `ingest.py`, `cli.py` | 32, 33 |
-| 35 | Docs + end-to-end genericity verification | [step-35](/build/step-35-docs-verify.md) | knowledge/, README, tests | 32–34 |
+| 32 | Manifest schema + loader | [step-32](/build/archive/step-32-manifest-schema.md) | new `manifest.py` | — |
+| 33 | Folder-derived segments in `ingest.py` | [step-33](/build/archive/step-33-folder-segments.md) | `ingest.py` | 32 |
+| 34 | Fan-out orchestration + `generate --manifest` | [step-34](/build/archive/step-34-fanout-cli.md) | `ingest.py`, `cli.py` | 32, 33 |
+| 35 | Docs + end-to-end genericity verification | [step-35](/build/archive/step-35-docs-verify.md) | knowledge/, README, tests | 32–34 |
 
 Each step follows the standard workflow (branch off `main` → test-first → `poe check`
 green → sub-agent review → squash → fast-forward merge → push) and updates

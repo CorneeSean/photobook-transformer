@@ -62,7 +62,7 @@ Audit trail — one line per step; see the commit and [log.md](/log.md) for deta
 | 15 | `fulfill` stage | step-15-fulfill | 92a7d4c | Lulu client (OAuth2); `lulu_order_id` → `output_ref` post-step-16; no PDF hosting yet; sandbox order deferred |
 | 16 | Prove genericity | step-16-prove-genericity | d7e903d | adds `smith-wedding/album.yml` + genericity test; zero `src/` touched |
 
-### Enrichment playbook (see [enrichment.md](/build/enrichment.md))
+### Enrichment playbook (see [enrichment.md](/build/archive/enrichment.md))
 
 | # | Step | Branch | Commit | Notes |
 |---|------|--------|--------|-------|
@@ -85,7 +85,7 @@ Audit trail — one line per step; see the commit and [log.md](/log.md) for deta
 
 *(Step 23 is outstanding — see [Outstanding (TODO)](#outstanding-todo).)*
 
-### Single-command ingestion playbook (see [single-command-ingestion.md](/build/single-command-ingestion.md))
+### Single-command ingestion playbook (see [single-command-ingestion.md](/build/archive/single-command-ingestion.md))
 
 | # | Step | Branch | Commit | Notes |
 |---|------|--------|--------|-------|
@@ -93,25 +93,25 @@ Audit trail — one line per step; see the commit and [log.md](/log.md) for deta
 | 27 | `ingest.py` + `generate` subcommand (Feature A) | step-27-ingest-cli | c1c5146 | `DirectoryIngestor` → the unchanged `pipeline`; single `photobook-generator` CLI; `--force` re-runs a slug safely; live ingestion deferred |
 | 28 | `agents/segments.py` + `--source-document` (Feature B) | step-28-segments-agent | 1e2b0af | PydanticAI segment extraction (pypdf + scanned fallback); occasion-agnostic; validated fail-fast; extraction spot-check deferred |
 
-### Offline analysis playbook (see [local-analysis.md](/build/local-analysis.md))
+### Offline analysis playbook (see [local-analysis.md](/build/archive/local-analysis.md))
 
 | # | Step | Branch | Commit | Notes |
 |---|------|--------|--------|-------|
 | 29 | Classical replacement for the Claude vision call | step-29-offline-analysis | ba6c1bf | dropped the **last external-API dependency** — `ClassicalToneEstimator` + `TemplateCaptioner` default, `ClaudeCaptioner` opt-in (`--captioner`); retired `agents/analysis.py`; 4-agent review; caption spot-check deferred |
 
-### Lead-face CLI playbook (see [step-30-cli-lead-faces.md](/build/step-30-cli-lead-faces.md))
+### Lead-face CLI playbook (see [step-30-cli-lead-faces.md](/build/archive/step-30-cli-lead-faces.md))
 
 | # | Step | Branch | Commit | Notes |
 |---|------|--------|--------|-------|
 | 30 | CLI flag for multiple lead-face reference photos | step-30-cli-lead-faces | e50a54a | repeatable `--lead-face IMAGE` on `generate`/`run` writes/patches `lead_faces.reference_images`; `LeadFacesYAML` → three symmetric list inputs (single = one-element, no singular forms). Verify-plan-first caught it orphaning the singular path; adversarial review caught the plan's count-keyed cache silently keeping the old lead on a same-count swap → **dropped the cache**, rely on Immich content-dedup (migration `a7e3f9c21b84` drops `Album.lead_reference_asset_id`). 3-agent review, all findings applied; `poe check` green (341/3); live multi-photo verify deferred |
 
-### Aesthetic scorer playbook (see [step-31-laion-aesthetic-scorer.md](/build/step-31-laion-aesthetic-scorer.md))
+### Aesthetic scorer playbook (see [step-31-laion-aesthetic-scorer.md](/build/archive/step-31-laion-aesthetic-scorer.md))
 
 | # | Step | Branch | Commit | Notes |
 |---|------|--------|--------|-------|
 | 31 | Wire the real LAION/open_clip aesthetic scorer | step-31-laion-aesthetic-scorer | 2446901 | closes the step-6/14 deferral: `ClipAestheticModel` (ViT-L/14 CLIP + LAION head) behind the existing `AestheticScorer`/`Embedder` seam; `scoring` extra (torch out of base deps); capability-gated with graceful fallback to the NULL-scoring placeholder; one shared model backs both protocols with a one-entry feature memo; no migration (`clip_embedding` already `Vector(768)`). Offline monotonicity verified via `poe test-scoring`; live within-scene curation spot-check deferred (no reachable Immich) |
 
-### Folder-structure-driven ingestion playbook (see [folder-structure-ingestion.md](/build/folder-structure-ingestion.md))
+### Folder-structure-driven ingestion playbook (see [folder-structure-ingestion.md](/build/archive/folder-structure-ingestion.md))
 
 | # | Step | Branch | Commit | Notes |
 |---|------|--------|--------|-------|

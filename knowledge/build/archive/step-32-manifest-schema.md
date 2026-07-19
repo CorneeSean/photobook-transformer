@@ -9,13 +9,13 @@ timestamp: 2026-07-18
 # Step 32: Ingest manifest schema + loader
 
 **Status: todo.** First step of the
-[folder-structure-driven ingestion playbook](/build/folder-structure-ingestion.md).
+[folder-structure-driven ingestion playbook](/build/archive/folder-structure-ingestion.md).
 Foundational and standalone — no dependency on steps 33/34; they depend on it.
 
 ## Why
 
 The manifest is the single new source of truth for folder-driven ingestion
-([decision 1](/build/folder-structure-ingestion.md#decisions-settled-with-the-user-before-planning)).
+([decision 1](/build/archive/folder-structure-ingestion.md#decisions-settled-with-the-user-before-planning)).
 This step delivers just its **schema + loader** — pure, no side effects — so the
 mechanism is fully unit-testable in isolation before any upload/fan-out wiring lands.
 It mirrors `definition.py`'s posture: parse + validate a YAML file into validated
@@ -71,7 +71,7 @@ each rule small and separately asserted (xenon/complexity):
   treated as a prefix of `day-10`). This guarantees each photo maps to at most one
   segment; overlapping *time* windows are caught later by the `AlbumYAML` loader.
 - **`segments` and `source_document` are mutually exclusive** per album (one segment
-  source; [playbook detail](/build/folder-structure-ingestion.md#folder-derived-segment-windows--the-load-bearing-detail)).
+  source; [playbook detail](/build/archive/folder-structure-ingestion.md#folder-derived-segment-windows--the-load-bearing-detail)).
 
 **Deliberately not validated here:** on-disk existence of any path and whether a folder
 contains images. Those are filesystem I/O and belong to the ingest layer (steps 33/34),

@@ -92,7 +92,7 @@ conscious call. Cleaner-licensed but weaker alternatives: `face_recognition`/dli
 3. **What Immich actually earns is the *library*, not the ML.** Immich is a managed
    library: import pipelines, and a **web UI for the human-in-the-loop** steps the
    design leans on — confirming a `Person` in the UI so cross-album matching works
-   ([enrichment](/build/enrichment.md) step 17b), and picking `immich_album_id` from the UI.
+   ([enrichment](/build/archive/enrichment.md) step 17b), and picking `immich_album_id` from the UI.
    If a human curating in a real app is part of the product, Immich earns its keep.
    If this stays a headless batch job over a folder, Immich is heavy for what it does.
 

@@ -19,7 +19,7 @@ zone is ambiguous) — see [Open questions](/build/open-questions.md) #3.
 
 `sync` also pulls **faces/people** per asset (`GET /faces?id=`, one call per
 asset) into `Photo.face_count`/`Photo.person_ids` and upserts an album-scoped
-`Person` cache — see [Immich enrichment](/build/enrichment.md) and the
+`Person` cache — see [Immich enrichment](/build/archive/enrichment.md) and the
 [data model](/reference/data-model.md). Like the ambiguous-timestamp path, a face fetch that
 fails for one asset is isolated: it's logged and recorded in `SyncResult`, leaving
 that photo's face columns NULL rather than aborting the album. An album with no
@@ -31,7 +31,7 @@ fetches (enrichment step 20): the manual star `rating` (a `select` curation
 signal) and the reverse-geocoded place `city`/`state`/`country` (a `caption`
 grounding signal). Both land in nullable columns, so an album with neither is
 unaffected. OCR — the third step-20 signal — is deferred (a separate per-asset
-endpoint; see [Immich enrichment](/build/enrichment.md) step 20).
+endpoint; see [Immich enrichment](/build/archive/enrichment.md) step 20).
 
 > Immich exposes no CLIP embeddings — resolved, see [Immich API notes](/reference/immich-api.md); `quality` computes them via `open_clip`.
 

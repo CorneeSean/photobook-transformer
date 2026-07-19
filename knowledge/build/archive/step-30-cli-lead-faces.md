@@ -35,7 +35,7 @@ timestamp: 2026-07-18
 Naming an album's priority subjects (`lead_faces`) today requires
 hand-authoring `album.yml`, and its `reference_image` input supports exactly
 **one** local photo (see [album-definition.md](/reference/album-definition.md),
-[enrichment.md](/build/enrichment.md)). This adds a repeatable `--lead-face
+[enrichment.md](/build/archive/enrichment.md)). This adds a repeatable `--lead-face
 IMAGE` CLI flag so one or more reference photos can be passed directly, with
 `generate`/`run` doing the `album.yml` bookkeeping — matching how `generate`
 already auto-materializes `album.yml` for `slug`/`title`/`segments`.
@@ -193,7 +193,7 @@ already do on the reuse path).
 ## Docs to update
 
 - [Album definition](/reference/album-definition.md) — document `reference_images` and the `--lead-face` CLI flag.
-- [Immich enrichment](/build/enrichment.md) — "three `album.yml` inputs" → four; mention the CLI shortcut.
+- [Immich enrichment](/build/archive/enrichment.md) — "three `album.yml` inputs" → four; mention the CLI shortcut.
 - [Data model](/reference/data-model.md) — update the `Album.lead_reference_asset_id` description to the renamed/generalized column.
 - **Model comment** `src/album/db/models.py` (the `lead_reference_asset_id` block, ~lines 54-58) — rename to `lead_reference_asset_ids`, reword "asset id" → "asset ids".
 - [Progress tracker](/build/progress.md) — move this row from Outstanding to Completed once merged.

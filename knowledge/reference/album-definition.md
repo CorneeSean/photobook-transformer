@@ -60,7 +60,7 @@ segments:
 by hand (above), extract them from a `--source-document` PDF, or derive them from
 subfolders via a manifest (`generate <root> --manifest` — each subfolder's window is
 `[min, max]` of its photos' capture timestamps; see
-[folder-structure-driven ingestion](/build/folder-structure-ingestion.md)). All three
+[folder-structure-driven ingestion](/build/archive/folder-structure-ingestion.md)). All three
 produce the identical `segments` block this file documents, validated by the same
 loader — the source differs, the shape does not.
 
@@ -68,7 +68,7 @@ loader — the source differs, the shape does not.
 
 An optional `lead_faces` block names the key people — the couple, the baby, the
 guest of honour — so [`select`](/stages/select.md) prioritizes photos of them.
-Set **exactly one** of three inputs (see [Immich enrichment](/build/enrichment.md)).
+Set **exactly one** of three inputs (see [Immich enrichment](/build/archive/enrichment.md)).
 Every input is a *list*, so naming one lead is just the one-element case:
 
 ```yaml

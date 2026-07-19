@@ -7,8 +7,8 @@ bodies this log cites; keep entries tight (see
 ## 2026-07-19
 
 * **Step 35 — folder-structure-driven ingestion docs + genericity gate** (`38a3aee`;
-  [step-35-docs-verify.md](/build/step-35-docs-verify.md)). Closes the
-  [folder-structure-driven ingestion playbook](/build/folder-structure-ingestion.md)
+  [step-35-docs-verify.md](/build/archive/step-35-docs-verify.md)). Closes the
+  [folder-structure-driven ingestion playbook](/build/archive/folder-structure-ingestion.md)
   (steps 32–35 all merged). User-facing docs landed (README "Multiple albums from one
   folder tree", `album-definition.md`'s "three sources, one shape" note,
   `folder-structure.md`'s `ingest.py` fan-out line, and a consolidated **As-built**
@@ -31,7 +31,7 @@ bodies this log cites; keep entries tight (see
   fixture-tree e2e is the offline stand-in.
 
 * **Step 34 — manifest fan-out + `generate --manifest`** (`0e67990`;
-  [step-34-fanout-cli.md](/build/step-34-fanout-cli.md)). `ingest_manifest` ingests
+  [step-34-fanout-cli.md](/build/archive/step-34-fanout-cli.md)). `ingest_manifest` ingests
   every album a manifest declares under ONE shared `ImmichClient`, returning an
   `AlbumOutcome` per album (slug on success, error on an isolated failure); the loop
   lives in `_ingest_all` so it unit-tests with a fake client, mirroring
@@ -55,7 +55,7 @@ bodies this log cites; keep entries tight (see
   complete; only step 35 (user docs + e2e genericity gate) remains.
 
 * **Step 33 — folder-derived segments in `ingest.py`** (`28c3ba0`;
-  [step-33-folder-segments.md](/build/step-33-folder-segments.md)). New
+  [step-33-folder-segments.md](/build/archive/step-33-folder-segments.md)). New
   `DirectoryIngestor.ingest_album(spec, root)` ingests one manifest album, deriving
   each declared subfolder's `[start_at, end_at]` window from the capture timestamps of
   the photos in it. The upload → create → readiness → segments → materialize spine was
@@ -79,7 +79,7 @@ bodies this log cites; keep entries tight (see
   still deferred to the standing no-reachable-Immich gap.
 
 * **Step 32 — ingest manifest schema + loader** (`445357f`;
-  [step-32-manifest-schema.md](/build/step-32-manifest-schema.md)). New pure
+  [step-32-manifest-schema.md](/build/archive/step-32-manifest-schema.md)). New pure
   `src/album/manifest.py`: `Manifest`/`AlbumSpec`/`SegmentSpec` (`extra="forbid"`) +
   `load_manifest()`, parsing a root `ingest.yml` into validated album/segment boundary
   declarations. All shape/relationship validation, no filesystem or Immich I/O — the
@@ -103,7 +103,7 @@ bodies this log cites; keep entries tight (see
 ## 2026-07-18
 
 * **Plans — folder-structure-driven ingestion (steps 32–35)** (planning only, no code).
-  New [folder-structure-ingestion.md](/build/folder-structure-ingestion.md) umbrella
+  New [folder-structure-ingestion.md](/build/archive/folder-structure-ingestion.md) umbrella
   playbook + four step plans: a root `ingest.yml` **manifest** declares which subfolders
   are album vs segment boundaries, so `generate <root> --manifest` fans one tree into N
   independent Immich albums / `album.yml` files / pipeline runs / books. Folder-derived
@@ -120,7 +120,7 @@ bodies this log cites; keep entries tight (see
   [progress.md](/build/progress.md) Outstanding.
 
 * **Step 30 — repeatable `--lead-face` CLI flag + multi-photo lead resolution**
-  (`e50a54a`; [step-30-cli-lead-faces.md](/build/step-30-cli-lead-faces.md)). `generate`/`run`
+  (`e50a54a`; [step-30-cli-lead-faces.md](/build/archive/step-30-cli-lead-faces.md)). `generate`/`run`
   take a repeatable `--lead-face IMAGE` that writes/patches the `lead_faces.reference_images`
   block, so priority subjects are named without hand-authoring `album.yml`. Two decisions
   changed the plan: (1) **verifying the plan first** showed dropping the scalar cache column
@@ -133,7 +133,7 @@ bodies this log cites; keep entries tight (see
   findings applied; `poe check` green (341/3); live multi-photo verify deferred.
 
 * **Step 31 — real LAION/open_clip aesthetic scorer wired** (`2446901`;
-  [step-31-laion-aesthetic-scorer.md](/build/step-31-laion-aesthetic-scorer.md)). New
+  [step-31-laion-aesthetic-scorer.md](/build/archive/step-31-laion-aesthetic-scorer.md)). New
   `album.analysis.aesthetic.ClipAestheticModel` (ViT-L/14 CLIP + LAION MLP head) backs
   both the `AestheticScorer` + `Embedder` protocols from one loaded model, with a
   one-entry feature memo so `score`+`embed` on a thumbnail forward once; torch/open_clip
@@ -194,7 +194,7 @@ bodies this log cites; keep entries tight (see
 ## 2026-07-17
 
 * **Step 29 — offline classical replacement for the Claude vision call** (`ba6c1bf`;
-  [local-analysis.md](/build/local-analysis.md)). Split the fused per-photo vision
+  [local-analysis.md](/build/archive/local-analysis.md)). Split the fused per-photo vision
   call into two injectable collaborators in a new `album.analysis` package — a
   `ClassicalToneEstimator` (tone now always classical) and a `Captioner` seam
   (`TemplateCaptioner` offline default + opt-in `ClaudeCaptioner`), composed by
@@ -222,14 +222,14 @@ bodies this log cites; keep entries tight (see
   session, so it composes with fan-out session ownership. Fixed the latent drift Q7
   warned of — `caption` was missing `.order_by(Photo.id)` (determinism only).
 
-* **Proposal recorded — offline analysis** (new [local-analysis.md](/build/local-analysis.md)).
+* **Proposal recorded — offline analysis** (new [local-analysis.md](/build/archive/local-analysis.md)).
   Design proposal to drop the last external-API dependency by splitting the Claude
   call into classical tone (CV) + metadata-template caption, keeping a VLM injectable
   as an optional "rich caption" mode. Not cost-driven (~$1–$4/album) — offline /
   no-key / deterministic. Implemented as step 29 above.
 
 * **Open question 5 resolved — AI-pass cost estimate** (new
-  [ai-cost-estimate.md](/build/ai-cost-estimate.md); Q5). The full Claude vision pass
+  [ai-cost-estimate.md](/build/archive/ai-cost-estimate.md); Q5). The full Claude vision pass
   ≈ **$1–$4 per 300–500-photo album** (one idempotent call per selected photo).
   Verdict: acceptable, no cost control needed; caching not worth it (system prompt
   below Sonnet's cache floor). Metered re-check deferred to the first live run.
@@ -245,7 +245,7 @@ bodies this log cites; keep entries tight (see
   (dominated by the base image; little to reclaim in our layer).
 
 * **Enrichment step 20 — rating + geocoded place; OCR deferred** (`bb430d2`;
-  [enrichment.md](/build/enrichment.md)). Two optional Immich signals read from data
+  [enrichment.md](/build/archive/enrichment.md)). Two optional Immich signals read from data
   `sync` already fetches (no extra call): manual star `rating` and reverse-geocoded
   place. New nullable `Photo` columns + one migration. `select` gains a soft per-star
   `rating_boost` (reorders comparable photos only; never drops a lead; inert for an
@@ -254,7 +254,7 @@ bodies this log cites; keep entries tight (see
   the pinned v3.0.2 API. **Completes the Immich-enrichment playbook.**
 
 * **Build step 28 — document-driven segments (`--source-document`)** (`1e2b0af`;
-  [single-command-ingestion.md](/build/single-command-ingestion.md)). New
+  [single-command-ingestion.md](/build/archive/single-command-ingestion.md)). New
   `agents/segments.py`: a PydanticAI agent that turns a schedule PDF into the album's
   `segments` (text via `pypdf`, falling back to page images for a scanned PDF). Output
   reuses `SegmentYAML`; the `album.yml` loader stays the correctness authority (UTC
@@ -284,7 +284,7 @@ bodies this log cites; keep entries tight (see
   `ImmichAsset`/`ImmichFace` pattern). Modelled against the OpenAPI contract, not a
   live capture — re-verify on the first live ingestion.
 
-* **Plan added — [single-command ingestion](/build/single-command-ingestion.md)**
+* **Plan added — [single-command ingestion](/build/archive/single-command-ingestion.md)**
   (handover). Captures two user-requested UX features — `generate <dir>` and
   `--source-document=doc.pdf` — and how they fit the current architecture (additive:
   no stage logic, data-model, or DAG changes). Recommends the app-feature path over a
@@ -436,7 +436,7 @@ bodies this log cites; keep entries tight (see
       the current config.
 
 * **Enrichment step 17 — faces/people in the client + `sync` (+schema)** (`c99d319`).
-  First step of the [enrichment playbook](/build/enrichment.md); adopts Immich's
+  First step of the [enrichment playbook](/build/archive/enrichment.md); adopts Immich's
   faces/people API with **no local face-detection dependency**.
     * `ImmichFace` flattens the nested `person` up to the boundary; `get_faces` via
       `GET /faces?id=`. New `Photo.face_count`/`person_ids` (nullable: NULL = not
