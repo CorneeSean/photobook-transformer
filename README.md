@@ -232,9 +232,11 @@ docker compose run --rm \
 `data/albums/<slug>/book/index.html` on your host (`./data/albums` is
 bind-mounted into the container).
 
-> **Note:** the image ships the **offline** pipeline — aesthetic scoring falls
-> back to NULL (degraded curation), since the heavy `scoring` extra
-> (`torch` + `open_clip`) is deliberately left out to keep the image lean.
+> **Note:** the image bakes in the `scoring` extra (CPU `torch` + `open_clip`)
+> with the ViT-L/14 + LAION weights, so aesthetic curation runs out of the box —
+> on **CPU** (Docker's Linux VM has no GPU), which adds ~4 GB to the image. torch
+> is pinned to PyTorch's CPU index on Linux (`pyproject.toml`) to avoid pulling
+> ~5 GB of unusable CUDA libraries.
 
 ## Architecture
 

@@ -369,7 +369,7 @@ uv run poe migrate</code></pre>
 
       <div class="note">
         <span class="badge">Note</span>
-        <span>The image ships the <b>offline</b> pipeline — aesthetic scoring falls back to NULL (degraded curation), since the heavy <span class="mono">scoring</span> extra (<span class="mono">torch</span> + <span class="mono">open_clip</span>) is deliberately left out to keep the image lean.</span>
+        <span>The image bakes in the <span class="mono">scoring</span> extra (CPU <span class="mono">torch</span> + <span class="mono">open_clip</span>) with the ViT-L/14 + LAION weights, so aesthetic curation runs out of the box — on <b>CPU</b> (no GPU in Docker's Linux VM), adding ~4 GB to the image. torch is pinned to PyTorch's CPU index on Linux to avoid ~5 GB of unusable CUDA libraries.</span>
       </div>
     </div>
   </details>

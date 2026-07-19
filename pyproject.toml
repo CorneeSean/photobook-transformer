@@ -41,11 +41,31 @@ dependencies = [
 # every base dep's idiom; uv.lock pins the exact resolved build. Do NOT move to base.
 scoring = [
     "torch>=2.13.0",
+    # Declared explicitly (even though open-clip-torch pulls it transitively) so the
+    # Linux CPU-index pin in [tool.uv.sources] binds to it too — otherwise torchvision
+    # resolves from PyPI (CUDA ABI) against a +cpu torch and open_clip's import fails
+    # with `operator torchvision::nms does not exist`.
+    "torchvision>=0.28.0",
     "open-clip-torch>=3.3.0",
 ]
 
 [project.scripts]
 photobook-generator = "album.cli:main"
+
+# On Linux, PyPI's default `torch` wheels are the CUDA build (~5 GB of unusable
+# nvidia-* libs in our GPU-less container — Docker's Linux VM has no GPU). Pin
+# torch/torchvision to PyTorch's CPU index there so the `scoring` image stays lean.
+# Linux-only marker: macOS keeps the default PyPI wheel (MPS-capable on macOS 14+),
+# so a native Apple-Silicon scoring host is unaffected. `explicit` = only torch/
+# torchvision resolve from this index, nothing else.
+[[tool.uv.index]]
+name = "pytorch-cpu"
+url = "https://download.pytorch.org/whl/cpu"
+explicit = true
+
+[tool.uv.sources]
+torch = [{ index = "pytorch-cpu", marker = "sys_platform == 'linux'" }]
+torchvision = [{ index = "pytorch-cpu", marker = "sys_platform == 'linux'" }]
 
 [build-system]
 requires = ["uv_build>=0.11.26,<0.12.0"]
