@@ -6,6 +6,29 @@ bodies this log cites; keep entries tight (see
 
 ## 2026-07-19
 
+* **Step 39 — unify the CLI into one `build` command** (`22acb9c`). User-requested cleanup of a
+  CLI that had grown verbose and scattered across `generate`/`run` subcommands with parallel
+  `_generate_single`/`_generate_manifest`/`_run` handlers. Now a single `photobook-generator build`
+  with two phases — **ingest** (default on) and **pipeline** — that become an `AlbumSource` strategy
+  (an ABC) chosen once from the parsed args: `build <dir>` → `DirectoryIngestSource`; `--manifest` →
+  `ManifestIngestSource` (fan-out); `--no-ingest --album <slug>` → `NoIngestSource` (skip ingest, run
+  an existing `album.yml`, the old `run`). `_select_source` decides the strategy and validates the
+  argument combination; each strategy returns `PreparedAlbum`(s), and one shared `_run_pipelines` +
+  `_report` driver runs the pipeline over them and prints a single combined summary (uniform for one
+  album or N). Surface decisions confirmed with the user up front (via a quick question set): the new
+  verb is **`build`**, skip-ingest is the explicit **`--no-ingest`** flag, and it's a **clean break —
+  no `generate`/`run` aliases**. Two intended behavior changes fell out: argument *misuse* is now a
+  uniform argparse usage error (exit 2) rather than the old ad-hoc exit 1, and the single/no-ingest
+  paths print the same book-count summary the fan-out already did. `test_cli.py` was rewritten around
+  the three strategies; `test_genericity.py` retargeted from the removed `_run_album_pipelines` to
+  `_run_pipelines` + `_prepared_from_outcome`; the poe `run`/`generate` tasks collapsed to `build`;
+  and every living doc (`README.md`/`README.html`, `AGENTS.md`, `working-agreement.md`,
+  `folder-structure.md`, the ingest stage doc, the external-library playbook) was updated to the new
+  command (historical log/archive/build-order entries left as-is). Inline review across the
+  correctness/reuse/simplification/altitude angles: no defects; the complexity gate split
+  `_select_source` (rank B → A). `poe check` green (440 passed, 6 skipped). Logged as build step 39
+  at the user's request.
+
 * **Step 38 — external-library ingest: the `--ingest-mode` flag (closes the playbook)** (`f356c2b`;
   [external-library-ingestion.md](/build/external-library-ingestion.md)). Exposes the step-37
   `AssetRegistrar` seam on the CLI: `generate --ingest-mode {upload,external}`, with precedence
