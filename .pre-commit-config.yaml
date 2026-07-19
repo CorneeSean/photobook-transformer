@@ -29,3 +29,15 @@ repos:
         language: system
         types: [python]
         pass_filenames: false
+
+      # The heavy tier: the full `poe check` (ruff + ruff-format + basedpyright +
+      # xenon + the whole pytest suite, integration included) runs once at push —
+      # before code reaches origin/main — not on every commit. Install with
+      # `pre-commit install -t pre-push` (or `pre-commit install --install-hooks`).
+      - id: poe-check
+        name: poe check (all checks + all tests)
+        entry: uv run poe check
+        language: system
+        pass_filenames: false
+        always_run: true
+        stages: [pre-push]

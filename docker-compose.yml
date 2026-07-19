@@ -16,7 +16,7 @@ services:
       # the host-side value.
       DATABASE_URL: postgresql+psycopg://${APP_DB_USER:-album}:${APP_DB_PASSWORD:-album}@db:5432/${APP_DB_NAME:-album}
       # Same reasoning as DATABASE_URL above: the in-network hostname, not
-      # localhost, so `docker compose run app album run --album <slug>`
+      # localhost, so `docker compose run app build --no-ingest --album <slug>`
       # reports its flow run to the real server (build-order.md step 14's
       # "the Prefect UI shows it").
       PREFECT_API_URL: http://prefect-server:4200/api
@@ -25,7 +25,7 @@ services:
         condition: service_healthy
       # No healthcheck defined on prefect-server below, so this is only
       # "container started," not "API actually accepting requests" — a
-      # `poe run`/`album run` right after `poe up` may still need a retry;
+      # `poe build` right after `poe up` may still need a retry;
       # `poe up` followed by a beat before running is the documented flow.
       prefect-server:
         condition: service_started

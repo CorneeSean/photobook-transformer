@@ -38,33 +38,17 @@ from album.flow.stages.enhance import write_xmp_sidecar
 
 pytestmark = pytest.mark.integration
 
-_REPO_ROOT = Path(__file__).resolve().parent.parent.parent.parent.parent
-_IMAGE_TAG = "album-render-integration:latest"
-
 # Runs the real DarktableRenderer inside the container — the same code path
 # `render` uses in production (subprocess -> darktable-cli), against the real
-# darktable binary baked into the app image.
+# darktable binary baked into the app image. The `app_image` fixture (shipped-image
+# build, session-scoped) lives in tests/conftest.py, shared with the CLI entrypoint
+# smoke test.
 _RENDER_SCRIPT = (
     "from pathlib import Path;"
     "from album.flow.stages.render import DarktableRenderer;"
     "DarktableRenderer().render("
     "Path('/work/in.jpg'), Path('/work/in.jpg.xmp'), Path('/work/out.jpg'))"
 )
-
-
-@pytest.fixture(scope="session")
-def app_image() -> str:
-    """Build the shipped app Docker image (darktable-cli + the album package)
-    once per session; returns its tag. The build is idempotent and layer-cached,
-    so a warm run is fast; the image is left in place as that cache."""
-    build = subprocess.run(
-        ["docker", "build", "-t", _IMAGE_TAG, str(_REPO_ROOT)],
-        capture_output=True,
-        text=True,
-    )
-    if build.returncode != 0:
-        pytest.fail(f"app image build failed:\n{build.stdout}\n{build.stderr}")
-    return _IMAGE_TAG
 
 
 def _run_render(image: str, work_dir: Path) -> subprocess.CompletedProcess[str]:

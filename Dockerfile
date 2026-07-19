@@ -26,5 +26,5 @@ COPY --from=builder /app/src /app/src
 COPY pyproject.toml uv.lock ./
 ENV PATH="/app/.venv/bin:$PATH"
 
-ENTRYPOINT ["album"]
+ENTRYPOINT ["photobook-generator"]
 CMD ["--help"]
