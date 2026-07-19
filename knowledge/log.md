@@ -6,6 +6,26 @@ bodies this log cites; keep entries tight (see
 
 ## 2026-07-19
 
+* **Step 38 — external-library ingest: the `--ingest-mode` flag (closes the playbook)** (`f356c2b`;
+  [external-library-ingestion.md](/build/external-library-ingestion.md)). Exposes the step-37
+  `AssetRegistrar` seam on the CLI: `generate --ingest-mode {upload,external}`, with precedence
+  flag > `IMMICH__INGEST_MODE` env > `upload` default (the `--captioner` pattern). It is a
+  **run-level** mode — how bytes reach Immich — so it applies to every album including the
+  `--manifest` fan-out, and is deliberately *not* in the per-album-flag rejection set. `INGEST_MODES`
+  centralizes the valid set that the CLI `choices` and `build_registrar`'s dispatch both read;
+  `build_registrar` gained an `ingest_mode` override threaded from `ingest_directory`/
+  `ingest_manifest`. User docs landed: a README "Scan photos in place (no second copy)" section and
+  an ingest stage-doc note, both covering setup (uncomment the `${PHOTOS_LOCATION}:/external:ro`
+  mount, `IMMICH__EXTERNAL_HOST_ROOT`, the admin-key requirement) and the core trade-off — the
+  originals must stay mounted for the album's life or Immich marks the assets offline. Default
+  upload path unchanged (byte-for-byte); new CLI flag-threading + flag-over-env precedence tests,
+  plus a `--help` smoke confirming the flag is registered. Inline review across the
+  correctness/reuse/simplification/altitude angles: no defects. `poe check` green (438 passed, 6
+  skipped). This **completes the external-library / scan-in-place ingestion playbook** (steps
+  36–38); a live external run against a real Immich + bind mount stays folded into the standing
+  live-integration gap (no reachable Immich in this sandbox). Only the optional step 23 remains on
+  the build order.
+
 * **Step 37 — external-library ingest: the `AssetRegistrar` seam** (`749a57e`;
   [external-library-ingestion.md](/build/external-library-ingestion.md)).
   Wires the mode swap the step-36 plumbing set up, still **opt-in** (default unchanged). The one

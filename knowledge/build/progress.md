@@ -31,17 +31,17 @@ on missing code (see [Notes / blockers](#notes--blockers)).
 | # | Step | Playbook | Status | Branch | Notes |
 |---|------|----------|--------|--------|-------|
 | 23 | DB-backed flow smoke test (optional) | testcontainers | todo | — | largely subsumed by step 25's `test_flow_integration.py`; revisit only if a gap remains |
-| 38 | External-library ingest: `--ingest-mode` flag + docs + verify | [external-library-ingestion](/build/external-library-ingestion.md) | todo | — | flag > `IMMICH__INGEST_MODE` env, default `upload`. Depends on 37 (done) |
 
 The folder-structure-driven ingestion playbook (steps 32–35) is **complete** — see
 [Completed](#folder-structure-driven-ingestion-playbook-see-folder-structure-ingestionmd).
 The **external-library / scan-in-place ingestion** playbook (steps 36–38, an opt-in
-mode; upload stays the default) is underway: **steps 36 (plumbing) + 37 (the
-`AssetRegistrar` seam) are done** (see
-[Completed](#external-library-ingestion-playbook-in-progress-see-external-library-ingestionmd));
-step 38 (the `--ingest-mode` flag + user docs + verify) remains. The
+mode; upload stays the default) is **complete** — all three steps (plumbing, the
+`AssetRegistrar` seam, the `--ingest-mode` flag + docs) are done and merged (see
+[Completed](#external-library-ingestion-playbook-complete-see-external-library-ingestionmd)).
+The
 [decisions](/build/external-library-ingestion.md#decisions-confirmed-with-the-user-2026-07-19-before-step-36)
-were confirmed with the user 2026-07-19. Step 23 remains optional.
+were confirmed with the user 2026-07-19. **Step 23 is the only outstanding step,
+and it is optional** — nothing else remains on the build order.
 
 ## Completed (DONE)
 
@@ -127,21 +127,22 @@ Audit trail — one line per step; see the commit and [log.md](/log.md) for deta
 | 34 | Fan-out orchestration + `generate --manifest` | step-34-fanout-cli | 0e67990 | `ingest_manifest`/`_ingest_all` + `AlbumOutcome`: ingest N albums under ONE shared `ImmichClient` with per-album isolation (ingest.py stays pipeline-free). CLI `generate --manifest [FILE]` (opt-in) fans the tree into N books, rejecting per-album flags, threading globals, running the pipeline per album with isolation, and printing a combined summary (exit non-zero only if every album failed). 4-agent review (2× correctness, style/reuse, architecture): no correctness defects; applied captioner fail-fast (inside the guard, before uploads) + `_book_path` DRY helper. As-built: narrow pipeline catch surfaces unexpected errors (deliberate). `poe check` green (404/6); live fan-out deferred |
 | 35 | Docs + end-to-end genericity verification | step-35-docs-verify | 38a3aee | Closes the playbook. User docs (README multi-album section, `album-definition.md`/`folder-structure.md` cross-refs, umbrella "As-built" preamble). Verification gate: a scoped token guard (`manifest.py`/`text.py`/`ingest.py` carry no trip/day/itinerary/occasion vocabulary — whole-`src/` grep infeasible) + an end-to-end test over a committed two-album fixture tree (`tests/fixtures/manifest_tree`) driving real `load_manifest`+`_ingest_all`+materialization+patched pipeline (N albums → N `album.yml`, one folder-windowed + one zero-segment → N pipeline runs). `DatingIngestClient` hoisted to `tests/doubles.py`. 2-agent review (adversarial + style/docs): caught a stray `open-questions.md` frontmatter corruption (reverted); gate sound. `poe check` green (408/6); live fan-out deferred |
 
-### External-library ingestion playbook (in progress) (see [external-library-ingestion.md](/build/external-library-ingestion.md))
+### External-library ingestion playbook (complete) (see [external-library-ingestion.md](/build/external-library-ingestion.md))
 
 | # | Step | Branch | Commit | Notes |
 |---|------|--------|--------|-------|
 | 36 | Plumbing (config + path translation + client `/libraries` methods + Docker mount) | step-36-external-library-plumbing | 2279207 | Foundation for opt-in scan-in-place ingest, no behavior wired yet: `ImmichSettings.ingest_mode`/`external_host_root`/`external_container_root`; pure `PathMapping` (`immich/paths.py`) host↔container translation; `ImmichClient` External-Library surface (`get_current_user_id`/`get_libraries`/`create_library`/`scan_library`/`get_library_assets`) + `originalPath` on `ImmichAsset`, sharing a new `_search_metadata` helper with `get_album_assets`; opt-in commented `${PHOTOS_LOCATION}:/external:ro` mount + `.env.example`. 2-agent review (adversarial correctness + style/reuse): no blockers/majors; nits applied. `/libraries` methods modelled on documented API, respx-tested only — **live-verify shape on first reachable Immich** (live-integration gap). Static gate + all non-container tests green; container tests were blocked at merge by an unresponsive Docker daemon (env, not code), accepted by the user. **Re-verified 2026-07-19 with Docker running: the container-backed suite passes (44 passed, incl. the pgvector testcontainer).** `_wait_for_readiness` scan-queue extension deferred to step 37 |
 | 37 | The `AssetRegistrar` seam (extract `UploadRegistrar`; add `ExternalLibraryRegistrar`; inject into `DirectoryIngestor`) | step-37-asset-registrar | 749a57e | Wires the step-36 plumbing behind an opt-in seam (default upload unchanged). `_ingest`'s inline `{path: upload_asset(path)}` → an injected `AssetRegistrar.register(directory, image_paths) → {host path → asset id}`; everything downstream reads only that map. `UploadRegistrar` (today's upload, extracted verbatim, default) + `ExternalLibraryRegistrar` (ensure one shared library reused by import path → scan → wait the `library` queue → map by `originalPath` through `PathMapping`, filter tree-wide library to this album, fail-fast naming unscanned photos). Readiness poll generalized to a shared `_wait_for_queues(get_jobs, queues, …)` so each strategy declares its queues (EXIF for the ingestor, scan queue for the registrar). `build_registrar` maps `ingest_mode` → registrar (validation out of `config.py`, mirrors `build_captioner`); `ingest_directory`/`ingest_manifest` build it from settings. Complexity gate split `_map_assets` (rank B → helpers). Inline review (correctness/reuse/simplification/altitude): no defects; stale "upload" doc comments refreshed. **Live-verify caveat:** async scan means the `library`-queue poll's initial idle check could race a not-yet-enqueued job on a real Immich — folded into the live-integration gap. `poe check` green (434/6, incl. pgvector testcontainer). `--ingest-mode` flag + user docs are step 38 |
+| 38 | The `--ingest-mode` flag + docs (closes the playbook) | step-38-ingest-mode-flag | f356c2b | Exposes the step-37 seam on the CLI: `generate --ingest-mode {upload,external}`, flag > `IMMICH__INGEST_MODE` env > `upload` default (mirrors `--captioner`). Run-level (applies to every album incl. `--manifest` fan-out), so it is **not** a per-album flag and is never rejected. `INGEST_MODES` centralizes the valid set the CLI `choices` and `build_registrar` dispatch both read; `build_registrar` takes an `ingest_mode` override threaded from `ingest_directory`/`ingest_manifest`. Docs: README "Scan photos in place (no second copy)" section + ingest stage-doc note (mount, `EXTERNAL_HOST_ROOT`, admin-key, originals-must-stay-mounted trade-off). Default upload path unchanged; new CLI/precedence tests + a `--help` smoke. Inline review: no defects. `poe check` green (438/6). Live external run against a real Immich + bind mount stays in the live-integration gap (no reachable Immich here) |
 
 ## Notes / blockers
 
 **Current status.** Every build-order + enrichment + testcontainers + single-command-ingestion
 + offline-analysis + folder-structure-ingestion step is done and merged, plus the lead-face CLI
-follow-on (**step 30**), the real LAION aesthetic scorer (**step 31**), and external-library
-ingestion **steps 36–37** (plumbing + the `AssetRegistrar` seam). Outstanding: the optional
-**step 23** (largely subsumed by step 25's `test_flow_integration.py`) and external-library
-**step 38** (the `--ingest-mode` flag + user docs). The pipeline is **fully offline by default**
+follow-on (**step 30**), the real LAION aesthetic scorer (**step 31**), and the **complete
+external-library ingestion playbook** (**steps 36–38**: plumbing + the `AssetRegistrar` seam +
+the `--ingest-mode` flag). The only outstanding step is the optional **step 23** (largely
+subsumed by step 25's `test_flow_integration.py`). The pipeline is **fully offline by default**
 (classical tone + template caption, no API/key); Claude is opt-in per run (`--captioner claude`,
 `--force` for A/B). Under `--force`, `enhance` and `caption` each re-run the shared analysis for a
 clustered photo — an accepted ~2× cost on paid Claude A/B; prefer a fresh slug for a large online run.
