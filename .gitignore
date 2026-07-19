@@ -6,9 +6,14 @@ __pycache__/
 # JetBrains IDE project files (per-developer, not shared).
 .idea/
 
-# Album definitions are code; everything else under an album dir is generated.
-data/albums/*/*
-!data/albums/*/album.yml
+# Album dirs hold generated output. Only demo/test fixtures are tracked, and only
+# their album.yml (definition) — every other album (personal runs) is ignored
+# whole. Add a fixture by allowlisting its album.yml the same way smith-wedding is.
+data/albums/*
+!data/albums/.gitkeep
+!data/albums/smith-wedding/
+data/albums/smith-wedding/*
+!data/albums/smith-wedding/album.yml
 
 # Immich's bind-mounted storage (UPLOAD_LOCATION / DB_DATA_LOCATION).
 data/immich/
