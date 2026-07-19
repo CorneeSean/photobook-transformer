@@ -349,5 +349,5 @@ head); torch install ~0.3–1 GB one-time (platform-dependent) → budget ~1.5�
   one-shot per photo and idempotent (`_already_scored`), so a resumed run doesn't
   repay it. Speed is a config flip, not code: `quality.device="mps"` (Apple Silicon)
   or `"cuda"`.
-- **Ruff `except` landmine still applies** (progress.md Toolchain landmine): the
+- **Ruff `except` landmine still applies** (see the [working agreement](/process/working-agreement.md#pre-commit-hooks-local-enforcement)): the
   `_build_quality_model` `except` must be a single clause or `# fmt: skip`.

@@ -20,7 +20,9 @@ Resolve early; record answers back into this bundle (and note them in
 
 2. **Confirm the honeymoon photos genuinely lack GPS** — check a few originals
    never shared through messaging apps (which strip EXIF). If some have it, the
-   spatial path in `cluster` gets exercised on the very first album.
+   spatial path in `cluster` gets exercised on the very first album. *(Still open;
+   the live check is tracked in [progress.md](/build/progress.md)'s live-integration
+   gap — the canonical list of what's deferred.)*
 
 3. **Per-photo source timezone.** The schema decision is settled — everything is
    stored tz-aware in UTC, `album.yml` carries offsets (or an album `timezone`),
@@ -34,7 +36,8 @@ Resolve early; record answers back into this bundle (and note them in
    (IANA) + `dateTimeOriginal`, which [`sync`](/stages/sync.md) now uses before
    falling back to `Album.timezone` — see [Immich API notes](/reference/immich-api.md). The
    mid-segment zone-span edge and these fields' reliability on real assets still
-   need a live check.*
+   need a live check, tracked in [progress.md](/build/progress.md)'s live-integration
+   gap (the canonical deferral list).*
 
 4. ~~**Lulu's trim size / bleed / spine-width spec**~~ **RESOLVED (step 13):**
    [`assemble`](/stages/assemble.md) is pinned to Lulu's **Square 8.5×8.5in** trim,

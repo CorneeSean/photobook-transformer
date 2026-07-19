@@ -25,25 +25,15 @@ accurate — it is part of the workflow, not optional tidiness.
 
 ## Outstanding (TODO)
 
-**Nothing outstanding.** Every build-order and follow-on playbook step is done and
-merged. The optional **step 23** was closed as subsumed (2026-07-19) — see
-[Completed](#testcontainers-playbook-see-testcontainersmd). All remaining deferrals
-are live-integration only (no reachable Immich / `ANTHROPIC_API_KEY` / `darktable-cli`
-/ Lulu creds in this sandbox), not missing code — see [Notes / blockers](#notes--blockers).
-
-The folder-structure-driven ingestion playbook (steps 32–35) is **complete** — see
-[Completed](#folder-structure-driven-ingestion-playbook-see-folder-structure-ingestionmd).
-The **external-library / scan-in-place ingestion** playbook (steps 36–38, an opt-in
-mode; upload stays the default) is **complete** — all three steps (plumbing, the
-`AssetRegistrar` seam, the `--ingest-mode` flag + docs) are done and merged (see
-[Completed](#external-library-ingestion-playbook-complete-see-external-library-ingestionmd)).
-The
-[decisions](/build/archive/external-library-ingestion.md#decisions-confirmed-with-the-user-2026-07-19-before-step-36)
-were confirmed with the user 2026-07-19. The **step-39 follow-up** — splitting
-`cli.py` into an `album/cli/` package
-([plan](/build/archive/step-39-cli-package-split.md)) — is **done** (`ae40daa`, a pure
-structural refactor with no behaviour change). **Nothing is outstanding** — the
-optional **step 23** was closed as subsumed (2026-07-19).
+**Build complete — nothing outstanding.** Every build-order step (0–16) and every
+follow-on playbook — enrichment (17–20), TestContainers (21–25), single-command
+ingestion (26–28), offline analysis (29), folder-structure ingestion (32–35),
+external-library ingestion (36–38) — plus the lead-face CLI (30), the LAION scorer
+(31), and the CLI unification (39, incl. the `album/cli/` package split) is done and
+merged; see [Completed](#completed-done). The optional **step 23** was closed as
+subsumed (2026-07-19). All that remains is **live-integration verification** — no
+reachable Immich / `ANTHROPIC_API_KEY` / `darktable-cli` / Lulu creds in this sandbox
+— tracked in [Notes / blockers](#notes--blockers); nothing is blocked on code.
 
 ## Completed (DONE)
 
@@ -90,7 +80,7 @@ Audit trail — one line per step; see the commit and [log.md](/log.md) for deta
 | 21 | pgvector schema + integration harness | step-21-pgvector-integration | ac2cd14 | alembic-migrated pgvector container; `select` over the real query; no drift; +`poe test-fast` |
 | 22 | darktable-cli render integration | step-22-darktable-render | 8aac81b | real render in the app image, visibly brighter; validated the darktable XMP history-stack format; closes step 11's manual check |
 | 23 | DB-backed flow smoke test (optional) | — | — (subsumed) | **Closed as subsumed, 2026-07-19** — not implemented separately. Its stated goal (real Postgres container, whole Prefect flow, Immich/Claude/Lulu doubled, cross-stage data flow + real per-stage commits) is already met by step 25's `tests/album/flow/test_flow_integration.py` (real `pipeline()` end-to-end on the pgvector container, all external boundaries doubled, asserts every stage's columns via `expire_all()` read-after-write) plus step 21's `test_pgvector_integration.py` (real `select`/`cluster` query + near-dup guard). Tracker's "revisit only if a gap remains" condition not met; a standalone test would be a near-duplicate |
-| 24 | Immich ML integration (offline baked image) | step-24-immich-ml-integration | ad86550 | out of order (23 still todo); pre-baked CLIP+`buffalo_l` ONNX image; real 4-service stack; closes the faces+CLIP live half; opt-in, skipped in `poe check` |
+| 24 | Immich ML integration (offline baked image) | step-24-immich-ml-integration | ad86550 | built out of order (ahead of 23, which was later closed as subsumed); pre-baked CLIP+`buffalo_l` ONNX image; real 4-service stack; closes the faces+CLIP live half; opt-in, skipped in `poe check` |
 | 25 | Parallelize the flow (fan-out groups) | step-25-parallelize-flow | 036fcc2 | fan-out DAG per `pipeline-execution.md`; fixed the `enhance`‖`caption` idempotency race (join `enhance` first); real-concurrency integration test |
 
 *(Playbook complete — step 23 closed as subsumed, 2026-07-19.)*
@@ -146,27 +136,16 @@ Audit trail — one line per step; see the commit and [log.md](/log.md) for deta
 
 ## Notes / blockers
 
-**Current status.** Every build-order + enrichment + testcontainers + single-command-ingestion
-+ offline-analysis + folder-structure-ingestion step is done and merged, plus the lead-face CLI
-follow-on (**step 30**), the real LAION aesthetic scorer (**step 31**), the **complete
-external-library ingestion playbook** (**steps 36–38**: plumbing + the `AssetRegistrar` seam +
-the `--ingest-mode` flag), and the **CLI unification** (**step 39**: one `build` command). The
-optional **step 23** was closed as subsumed on 2026-07-19 (its cross-stage DB coverage is met by
-step 25's `test_flow_integration.py` + step 21's `test_pgvector_integration.py`) — **nothing is
-outstanding**. The pipeline is **fully offline by default**
-(classical tone + template caption, no API/key); Claude is opt-in per run (`--captioner claude`,
-`--force` for A/B). Under `--force`, `enhance` and `caption` each re-run the shared analysis for a
-clustered photo — an accepted ~2× cost on paid Claude A/B; prefer a fresh slug for a large online run.
+**Operational status.** The pipeline is **fully offline by default** (classical tone +
+template caption, no API/key); Claude is opt-in per run (`--captioner claude`, `--force`
+for A/B). Under `--force`, `enhance` and `caption` each re-run the shared analysis for a
+clustered photo — an accepted ~2× cost on paid Claude A/B; prefer a fresh slug for a large
+online run. Build completeness is summarized under [Outstanding](#outstanding-todo).
 
-**Standing process notes.**
-- **Human-review gate waived (step 4 onward, per user):** after `poe check` green + sub-agent
-  review clean, squash and fast-forward-merge autonomously.
-- **Sub-agent review panel is up to 4 (2026-07-17):** 2 adversarial correctness + style/reuse +
-  architecture ([implementation-workflow.md](/process/implementation-workflow.md) §6); scale down for small diffs.
-- **`main` is commit-protected:** update the tracker + `log.md` on the step branch *before* the
-  fast-forward merge.
-- **Parallel-build precedent (2026-07-14, user-approved exception):** steps 10/11/12/13/15 were built
-  concurrently on separate worktrees after a no-shared-files check. Not a new default.
+**Process conventions live in the workflow docs, not here.** The review panel, the
+waived human-review gate, and the `main`-commit-protection rule are in
+[implementation-workflow.md](/process/implementation-workflow.md); the 2026-07-14
+parallel-build exception is recorded in [log.md](/log.md).
 
 **Open blockers — all "no reachable live service in this sandbox"; nothing blocked on code:**
 - **Live-integration gap.** No reachable Immich, `ANTHROPIC_API_KEY`, host `darktable-cli` (only in
@@ -174,22 +153,17 @@ clustered photo — an accepted ~2× cost on paid Claude A/B; prefer a fresh slu
   cleanly at `sync` (`ConnectionRefused`). Deferred to first live run: honeymoon + wedding re-verify,
   faces/rating/geocode on real assets, live-Claude caption spot-check (9/10/12/19/28/29), a real
   darktable render, and a single-copy Lulu test order (+ confirm `GET /print-jobs/{id}/` schema).
-  Step 24's offline ML stack already closed the faces + CLIP half.
+  Also folds in the two still-open [design questions](/build/open-questions.md): **#2** confirm the
+  honeymoon originals genuinely lack GPS (if some carry it, `cluster`'s spatial path gets exercised on
+  the first album) and **#3** per-photo capture-zone reliability on real assets (Immich's
+  `exifInfo.timeZone`/`OffsetTimeOriginal` vs the `Album.timezone` fallback, incl. the mid-segment
+  zone-span edge). Also pending live: confirm the wired LAION scorer (step 31) picks the visibly
+  better frame within a scene on a real album. Step 24's offline ML stack already closed the faces +
+  CLIP half.
 - **No PDF-hosting for `LuluPrinter` (step 15).** `Album.assembled_pdf_path` is a local path; Lulu's
   `source_url` needs a fetchable `http(s)://` URL, so `LuluPrinter.print` raises `UnreachablePdfError`.
   Only affects the opt-in `LuluPrinter` (default `HtmlPrinter` needs none).
-- **Real LAION/open_clip scorer — wired (step 31, 2026-07-18).** `ClipAestheticModel` (ViT-L/14 CLIP
-  + LAION head) now backs the `AestheticScorer`/`Embedder` seam, behind the opt-in `scoring` extra and
-  capability-gated with a graceful fallback to the `_UnavailableQualityModel` placeholder (unchanged
-  NULL-score behavior when the extra/weights are absent). Offline monotonicity verified via
-  `poe test-scoring`. *Remaining, live-only:* confirm `select` picks the visibly better frame within a
-  scene on a real album (needs reachable Immich) — folded into the live-integration gap above.
 
-**Toolchain landmine.** `ruff` 0.15.21's formatter under `target-version = "py314"` rewrites
-`except (A, B):` into invalid paren-less syntax — use separate `except` clauses or `# fmt: skip`.
-See [log.md](/log.md) 2026-07-13.
-
-**Resolved landmines (kept as record).** Ryuk socket-mount failure went away with a Docker reinstall
-(2026-07-15) — plain `poe check` is green; `PostgresContainer` still needs `driver="psycopg"` (psycopg3).
-The `output_ref` rename (2026-07-14) and the `db/queries.py` hoist (Open Q7) are done — see the DONE
-tables and [open-questions.md](/build/open-questions.md).
+Coding landmines (e.g. the ruff py314 `except`-paren formatter bug) live in the
+[working agreement](/process/working-agreement.md#pre-commit-hooks-local-enforcement); resolved
+ones are in [log.md](/log.md).

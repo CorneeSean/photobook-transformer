@@ -20,8 +20,10 @@ review chain, squash, merge, push) around it.
 - **Never work on or commit to `main`.** Every step is a branch merged in; `main`
   only advances by merging a reviewed, approved step branch (`no-commit-to-branch`
   hook enforces it).
-- **Merge only when ALL hold:** sub-agent review clean, **user approved**, and
-  `uv run poe check` green (plus any manual verification).
+- **Merge only when ALL hold:** sub-agent review clean and `uv run poe check` green
+  (plus any manual verification). *(The **user-approval** gate is **waived for this
+  project** by standing instruction — see step 7; without that waiver, user approval
+  is also required.)*
 - **Subcommits allowed on the branch, but squash before merge** — one clean commit.
 - **Order is fixed: checks → sub-agent review → user review → commit.** `poe check`
   must be green *immediately before each review*; any change re-runs checks (and the
@@ -79,6 +81,13 @@ review chain, squash, merge, push) around it.
    If the user requests changes: make them, **re-run `uv run poe check` until
    green**, **re-run the sub-agent review until it has no comments**, then return
    to the user. Only a clear user approval advances the step.
+
+   > **Standing waiver (this project, step 4 onward — per the user).** The
+   > human-review gate is **waived**: once `poe check` is green and the sub-agent
+   > review is clean, squash and fast-forward-merge **autonomously**, no pause for
+   > approval. The user may still ask to review any step — the waiver only removes
+   > the *mandatory* pause. (This is the canonical statement of the waiver; the
+   > tracker just points here.)
 8. **Finalize.** With user approval in hand and `uv run poe check` green (and
    manual verification done, if any): **squash** the branch's subcommits into one
    commit using the [commit format](/process/working-agreement.md)

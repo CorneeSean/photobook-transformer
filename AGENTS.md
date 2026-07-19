@@ -66,7 +66,8 @@ any change re-runs what precedes it. In short:
    correctness, 1 style/reuse, 1 architecture; scale down for small diffs). Address
    comments, re-run `poe check`, re-review until clean.
 6. **User review** (skipped per standing instruction — merge autonomously once
-   checks + sub-agent review are clean; see the tracker's process-change note).
+   checks + sub-agent review are clean; see the waiver in
+   [`implementation-workflow.md`](./knowledge/process/implementation-workflow.md) step 7).
 7. **Squash** into one `<stage>: <what changed>` commit, **update the tracker +
    `log.md`** on the branch, **fast-forward merge** to `main`, **push to
    `origin`**, delete the branch.

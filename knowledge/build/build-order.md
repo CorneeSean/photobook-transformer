@@ -123,7 +123,9 @@ verify:* the PDF opens with correct trim/bleed. **Resolve
 dimensions. **Commit.**
 
 **14. Wire the flow.** `flow.py` + `cli.py`. *Manually verify:* `photobook-generator
-run --album honeymoon-2026` runs end-to-end; the Prefect UI shows it. Now that
+run --album honeymoon-2026` runs end-to-end (the `run` verb was later folded into
+`build --no-ingest --album honeymoon-2026` — single `build` command, step 39); the
+Prefect UI shows it. Now that
 Postgres handles concurrent writes, tasks can write per-photo and keep true
 failure isolation — but **watch connection-pool sizing** under Prefect's fan-out
 (cap task concurrency, or the pool will exhaust). Update `README.md`'s

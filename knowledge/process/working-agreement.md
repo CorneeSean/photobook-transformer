@@ -141,6 +141,11 @@ The full `pytest` suite is *not* run per-commit (too slow for fast subcommits); 
 runs in `uv run poe check` before a step is finalized, and in CI. Optionally add
 it as a `pre-push` hook.
 
+> **Landmine — ruff formatter under `py314`.** `ruff` 0.15.21's formatter with
+> `target-version = "py314"` rewrites a valid `except (A, B):` into the invalid
+> paren-less form. Use separate `except` clauses, or `# fmt: skip` on that line.
+> (Discovered 2026-07-13 — see [log.md](/log.md).)
+
 ## Local workflow commands
 
 Common workflow actions are encoded as `poethepoet` tasks in `pyproject.toml`
