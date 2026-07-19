@@ -20,19 +20,24 @@ anything that reasons about structure.
 
 ## Current state
 
-The build order and every follow-on playbook are done and merged to `main`:
-build order (0–16), Immich enrichment (17–20), TestContainers integration
-(21–25), single-command ingestion (26–28), and offline analysis (29). Only the
-**optional step 23** (DB-backed flow smoke test) is outstanding. The pipeline is
-**fully offline by default** (classical tone + template caption, no API key);
-Claude is an opt-in caption upgrade (`--captioner claude`). See
+The build order and every follow-on playbook through step 35 are done and merged to
+`main`: build order (0–16), Immich enrichment (17–20), TestContainers integration
+(21–25), single-command ingestion (26–28), offline analysis (29), and
+folder-structure ingestion (32–35). Outstanding work — the optional step 23 and the
+queued external-library ingestion (36–38) — lives in `progress.md`'s Outstanding
+table (see below), not here. The pipeline is **fully offline by default** (classical
+tone + template caption, no API key); Claude is an opt-in caption upgrade
+(`--captioner claude`). See
 [`progress.md`](./knowledge/build/progress.md) — its **Notes / blockers** section
 is the current list of everything still deferred (all "no reachable live
 Immich / `ANTHROPIC_API_KEY` / `darktable-cli` / Lulu creds in this sandbox"
 follow-ups, not new code).
 
-There is no queued build work. Further changes are either closing a deferred item
-or new, user-directed work — both still follow the workflow below.
+Any queued or outstanding build work lives in
+[`progress.md`](./knowledge/build/progress.md)'s **Outstanding** table — the single
+source of truth for what's next; don't duplicate the queue here. Further changes are
+either closing a deferred item or new, user-directed work — both still follow the
+workflow below.
 
 ## Starting a session
 

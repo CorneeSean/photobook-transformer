@@ -222,3 +222,96 @@ class TestImmichClient:
 
         with pytest.raises(httpx.HTTPStatusError):
             client.get_duplicates()
+
+
+class TestExternalLibraries:
+    """The external-library surface (build step 36): current-user id, list/create
+    library, trigger scan, and list a library's scanned assets with their
+    ``originalPath``. Modelled on the documented Immich `/libraries` API; re-verify
+    against a live instance on the first reachable Immich."""
+
+    @pytest.fixture
+    def client(self) -> ImmichClient:
+        return ImmichClient(_BASE_URL, "test-api-key")
+
+    @respx.mock
+    def test_get_current_user_id(self, client: ImmichClient) -> None:
+        respx.get(f"{_BASE_URL}/users/me").mock(
+            return_value=httpx.Response(200, json={"id": "admin-1", "email": "a@b.c"}),
+        )
+
+        assert client.get_current_user_id() == "admin-1"
+
+    @respx.mock
+    def test_get_libraries_parses_import_paths(self, client: ImmichClient) -> None:
+        respx.get(f"{_BASE_URL}/libraries").mock(
+            return_value=httpx.Response(
+                200,
+                json=[{"id": "lib-1", "name": "photobook", "importPaths": ["/external"]}],
+            ),
+        )
+
+        libraries = client.get_libraries()
+
+        assert [(lib.id, lib.name, lib.import_paths) for lib in libraries] == [
+            ("lib-1", "photobook", ["/external"]),
+        ]
+
+    @respx.mock
+    def test_create_library_posts_owner_name_and_import_paths(self, client: ImmichClient) -> None:
+        route = respx.post(f"{_BASE_URL}/libraries").mock(
+            return_value=httpx.Response(
+                201,
+                json={"id": "lib-new", "name": "photobook", "importPaths": ["/external"]},
+            ),
+        )
+
+        library = client.create_library("photobook", ["/external"], owner_id="admin-1")
+
+        assert library.id == "lib-new"
+        body = json.loads(route.calls[0].request.content)
+        assert body == {"ownerId": "admin-1", "name": "photobook", "importPaths": ["/external"]}
+
+    @respx.mock
+    def test_scan_library_posts_to_scan_endpoint(self, client: ImmichClient) -> None:
+        route = respx.post(f"{_BASE_URL}/libraries/lib-1/scan").mock(
+            return_value=httpx.Response(204),
+        )
+
+        client.scan_library("lib-1")
+
+        assert route.called
+        assert route.calls[0].request.method == "POST"
+        # A parameterless scan — no LibraryScanDto body (recent Immich takes none).
+        assert route.calls[0].request.content == b""
+
+    @respx.mock
+    def test_get_library_assets_scopes_by_library_and_reads_original_path(
+        self,
+        client: ImmichClient,
+    ) -> None:
+        route = respx.post(f"{_BASE_URL}/search/metadata").mock(
+            return_value=httpx.Response(
+                200,
+                json={
+                    "assets": {
+                        "items": [
+                            {
+                                "id": "asset-1",
+                                "originalFileName": "img_1.jpg",
+                                "originalPath": "/external/lisbon/img_1.jpg",
+                            },
+                        ],
+                        "nextPage": None,
+                    },
+                },
+            ),
+        )
+
+        assets = client.get_library_assets("lib-1")
+
+        # libraryId scopes the metadata search to the external library.
+        assert json.loads(route.calls[0].request.content)["libraryId"] == "lib-1"
+        assert assets[0].id == "asset-1"
+        # originalPath (the container path) is surfaced for host↔container mapping.
+        assert assets[0].original_path == "/external/lisbon/img_1.jpg"

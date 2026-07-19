@@ -26,3 +26,6 @@ data/immich/
 # the rendered book/PDF are regenerable).
 tests/data/cat-album/book/
 tests/data/cat-album/assembled.pdf
+
+# macOS Finder metadata — noise, never tracked.
+.DS_Store

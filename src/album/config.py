@@ -30,10 +30,24 @@ class ImmichSettings(BaseModel):
     Env: ``IMMICH__BASE_URL``, ``IMMICH__API_KEY``. Defaults keep DB-only flows
     (alembic, migrate) working without Immich vars set; a real sync run needs
     ``IMMICH__API_KEY`` filled in from Immich's web UI.
+
+    ``ingest_mode`` picks how ``generate`` gets photos into Immich (build steps
+    36–38, knowledge/build/external-library-ingestion.md): ``"upload"`` (the
+    default — copy each file in via ``POST /assets``) or ``"external"`` (register
+    the directory as an Immich External Library and scan it *in place*, no copy).
+    External mode needs the photo root bind-mounted read-only into the Immich
+    server: ``external_host_root`` is the host prefix of that tree and
+    ``external_container_root`` is where it is mounted in the container (so a host
+    path can be translated to the ``originalPath`` Immich reports, and back). The
+    ``"upload"``/``"external"`` string is validated where the registrar is built
+    (step 37), not here — same reason ``captioner``/``scorer`` are.
     """
 
     base_url: str = "http://localhost:2283/api"
     api_key: str = ""
+    ingest_mode: str = "upload"  # "upload" | "external"; validated in the registrar builder
+    external_host_root: str = ""  # host prefix of the bind-mounted photo tree (external mode)
+    external_container_root: str = "/external"  # its mount point inside the Immich container
 
 
 class LuluSettings(BaseModel):

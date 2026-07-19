@@ -73,6 +73,35 @@ blindly fall back to `Album.timezone`:
 NULL). Open question #3's remaining risk — an album that spans zones *mid-segment*
 — is covered as far as Immich's data allows; the rest is validated on a live run.
 
+## External libraries (scan-in-place ingest, build steps 36–38)
+
+Added while building [external-library ingestion](/build/external-library-ingestion.md).
+An **External Library** points Immich at a directory that is bind-mounted into the
+server; Immich scans the files **in place** and creates assets that reference the
+on-disk originals — no copy into the upload store. The client surface (`client.py`):
+
+- `GET /users/me` → `id` — the `ownerId` a library is created under. External
+  libraries belong to a user; the API key must be the **admin's**.
+- `GET /libraries` → `LibraryResponseDto[]` — list, to reuse an existing library by
+  import path instead of creating a duplicate.
+- `POST /libraries` `{ownerId, name, importPaths}` → `LibraryResponseDto`. `importPaths`
+  are **container** paths (where the tree is mounted inside `immich-server`).
+- `POST /libraries/{id}/scan` → 204. **Async** — enqueues `library` jobs; the scanned
+  assets and their `originalPath` aren't queryable until that queue drains
+  (`GET /jobs`, the same readiness signal upload mode waits on).
+- Scanned assets are listed via `POST /search/metadata` `{libraryId}` (the same
+  paginated endpoint album listing uses); each `AssetResponseDto` carries
+  **`originalPath`** (the container path), which the registrar maps back to the host
+  photo.
+
+Modern Immich has **only external libraries** (the old `type: UPLOAD` library kind was
+removed), so there is no `type` field. **Version caveat:** the `/libraries` request/
+response shape has drifted across releases (the `scan` body's `refresh*` flags were
+deprecated; `ownerId` optionality varies). This surface is modelled on the documented
+API and **unit-tested against respx fixtures only** — re-verify against the live pinned
+`IMMICH_VERSION` on the first reachable Immich (tracked in the progress-tracker
+live-integration gap).
+
 ## Caveat
 
 These notes + the client's fixtures (`tests/fixtures/immich/`) derive from the OpenAPI

@@ -57,6 +57,11 @@ class ImmichAsset(BaseModel):
 
     id: str
     original_file_name: str = Field(alias="originalFileName")
+    # Absolute path of the asset's file as Immich sees it. For an external-library
+    # asset this is the *container* path (e.g. /external/lisbon/a.jpg); the external
+    # registrar maps it back to the host photo (build step 37). None on API shapes
+    # that omit it (e.g. the trimmed search fixtures) — only external mode needs it.
+    original_path: str | None = Field(default=None, alias="originalPath")
     # Local wall-clock capture time; a fallback for when exifInfo.dateTimeOriginal
     # is absent. `sync` combines it with the zone to normalize to UTC.
     local_date_time: datetime | None = Field(default=None, alias="localDateTime")
@@ -115,6 +120,19 @@ class ImmichJobCounts(BaseModel):
     waiting: int = 0
 
 
+class ImmichLibrary(BaseModel):
+    """The subset of Immich's ``LibraryResponseDto`` external-library ingestion
+    consumes (build step 36). Recent Immich has only external libraries (the old
+    ``type: UPLOAD`` kind is gone), so there is no ``type`` field to read.
+    """
+
+    model_config = ConfigDict(populate_by_name=True)
+
+    id: str
+    name: str
+    import_paths: list[str] = Field(default_factory=list, alias="importPaths")
+
+
 class ImmichClient:
     """Thin typed wrapper over the Immich REST API.
 
@@ -142,14 +160,17 @@ class ImmichClient:
         settings = get_settings()
         return cls(settings.immich.base_url, settings.immich.api_key)
 
-    def get_album_assets(self, immich_album_id: str) -> list[ImmichAsset]:
-        """Every asset in an Immich album, following pagination to completion."""
+    def _search_metadata(self, criteria: dict[str, Any]) -> list[ImmichAsset]:
+        """All assets matching ``criteria`` via paginated ``POST /search/metadata``,
+        following ``nextPage`` to completion. ``criteria`` supplies the scope
+        (``albumIds`` for an album, ``libraryId`` for an external library); this
+        helper owns only the pagination the two share."""
         assets: list[ImmichAsset] = []
         page: int | None = 1
         while page is not None:
             response = self._client.post(
                 "/search/metadata",
-                json={"albumIds": [immich_album_id], "page": page, "size": _SEARCH_PAGE_SIZE},
+                json={**criteria, "page": page, "size": _SEARCH_PAGE_SIZE},
             )
             response.raise_for_status()
             bucket = response.json()["assets"]
@@ -157,6 +178,10 @@ class ImmichClient:
             next_page = bucket.get("nextPage")
             page = int(next_page) if next_page is not None else None
         return assets
+
+    def get_album_assets(self, immich_album_id: str) -> list[ImmichAsset]:
+        """Every asset in an Immich album, following pagination to completion."""
+        return self._search_metadata({"albumIds": [immich_album_id]})
 
     def get_asset(self, asset_id: str) -> ImmichAsset:
         """A single asset with its EXIF, via ``GET /assets/{id}``."""
@@ -226,6 +251,65 @@ class ImmichClient:
         )
         response.raise_for_status()
         return response.json()["id"]
+
+    # --- External libraries (scan-in-place ingest, build steps 36–38) -----------
+    # These back the `external` ingest mode: register the bind-mounted photo tree as
+    # an Immich External Library and scan it in place instead of uploading a copy
+    # (knowledge/build/external-library-ingestion.md). Modelled on the documented
+    # Immich API; the exact `/libraries` shape must be live-verified on the first
+    # reachable Immich (folded into the progress-tracker live-integration gap).
+
+    def get_current_user_id(self) -> str:
+        """The authenticated user's id, via ``GET /users/me`` — the ``ownerId`` a
+        library is created under (external libraries belong to the admin, so the
+        API key must be the admin's).
+        """
+        response = self._client.get("/users/me")
+        response.raise_for_status()
+        return response.json()["id"]
+
+    def get_libraries(self) -> list[ImmichLibrary]:
+        """All external libraries, via ``GET /libraries`` — used to reuse an
+        existing library rather than create a duplicate for the same import path.
+        """
+        response = self._client.get("/libraries")
+        response.raise_for_status()
+        return [ImmichLibrary.model_validate(item) for item in response.json()]
+
+    def create_library(
+        self,
+        name: str,
+        import_paths: list[str],
+        *,
+        owner_id: str,
+    ) -> ImmichLibrary:
+        """Create an external library over ``import_paths``, via ``POST /libraries``.
+
+        ``import_paths`` are *container* paths (where the photos are mounted inside
+        the Immich server). Immich only scans on demand — call :meth:`scan_library`
+        after, then wait out the ``library`` job queue.
+        """
+        response = self._client.post(
+            "/libraries",
+            json={"ownerId": owner_id, "name": name, "importPaths": import_paths},
+        )
+        response.raise_for_status()
+        return ImmichLibrary.model_validate(response.json())
+
+    def scan_library(self, library_id: str) -> None:
+        """Trigger a scan of an external library, via ``POST /libraries/{id}/scan``.
+        Async: Immich enqueues ``library`` jobs that must drain before the scanned
+        assets (and their ``originalPath``) are queryable.
+        """
+        response = self._client.post(f"/libraries/{library_id}/scan")
+        response.raise_for_status()
+
+    def get_library_assets(self, library_id: str) -> list[ImmichAsset]:
+        """Every asset Immich scanned into an external library, each carrying its
+        ``originalPath`` — the external registrar maps those back to host photos
+        (build step 37), via paginated ``POST /search/metadata``.
+        """
+        return self._search_metadata({"libraryId": library_id})
 
     def get_jobs(self) -> dict[str, ImmichJobCounts]:
         """Each job queue's outstanding-work counts keyed by queue name, via

@@ -231,9 +231,12 @@ uv run poe migrate</code></pre>
       <div class="qs-num">3</div>
       <div class="qs-body">
         <h3>Generate the album</h3>
-        <p>One command uploads your photos, creates the Immich album, and runs every stage.</p>
+        <p>Point one command at a <b>directory of photos</b> — it uploads them, creates the Immich album, derives <span class="mono">album.yml</span>, and runs every stage.</p>
         <pre><code>uv run photobook-generator generate ./path/to/photos</code></pre>
         <span class="tip">Options: <span class="mono">--slug --title --timezone --force</span>, and <span class="mono">--source-document schedule.pdf</span> to extract chapters from an itinerary/run-sheet.</span>
+        <p style="margin-top:12px">Point it at a <b>tree of albums</b> and add <span class="mono">--manifest</span> to fan the folder into <b>N independent books</b> in one run — a root <span class="mono">ingest.yml</span> declares which subfolders are album vs. segment boundaries.</p>
+        <pre><code>uv run photobook-generator generate ./photos-root --manifest <span class="c"># default: ./photos-root/ingest.yml</span></code></pre>
+        <span class="tip">Fan-out is <b>opt-in</b> (a stray <span class="mono">ingest.yml</span> never changes plain <span class="mono">generate &lt;dir&gt;</span>); per-album fields live in the manifest, so <span class="mono">--slug/--title/--source-document/--lead-face</span> are rejected in this mode. A bad album is skipped and the run continues.</span>
       </div>
     </div>
 
@@ -405,6 +408,7 @@ uv run poe migrate</code></pre>
             <tr><td class="mono-cell">uv run poe makemigration -- -m "…"</td><td><code>alembic revision --autogenerate</code></td></tr>
             <tr><td class="mono-cell">uv run poe run -- --album &lt;slug&gt;</td><td>run the pipeline flow for one album</td></tr>
             <tr><td class="mono-cell">uv run poe generate -- &lt;dir&gt;</td><td>one-shot ingest: folder → Immich album → <code>album.yml</code> → run</td></tr>
+            <tr><td class="mono-cell">uv run poe generate -- &lt;dir&gt; --manifest</td><td>fan a folder tree into <b>N</b> albums via <code>ingest.yml</code> — one book each</td></tr>
           </tbody>
         </table>
       </div>

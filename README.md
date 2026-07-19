@@ -30,7 +30,8 @@ grab an API key (*Account Settings → API Keys → New*) and put it in `.env` a
 `IMMICH__API_KEY`.
 
 ```sh
-# 2. Generate the album — one command does upload, Immich album creation, and the run
+# 2. Generate the album — point it at a directory of photos; one command does
+#    upload, Immich album creation, album.yml, and the full pipeline run
 uv run photobook-generator generate ./path/to/photos
 ```
 

@@ -17,6 +17,13 @@ services:
     volumes:
       - ${UPLOAD_LOCATION}:/data
       - /etc/localtime:/etc/localtime:ro
+      # External-library (scan-in-place) ingest — opt-in, off by default
+      # (knowledge/build/external-library-ingestion.md). Uncomment and set
+      # PHOTOS_LOCATION in .env to your photo root, then set
+      # IMMICH__INGEST_MODE=external. The mount is read-only: Immich scans the
+      # originals in place instead of copying them, so no second copy on disk.
+      # The container side (/external) must equal IMMICH__EXTERNAL_CONTAINER_ROOT.
+      # - ${PHOTOS_LOCATION}:/external:ro
     env_file:
       - .env
     ports:

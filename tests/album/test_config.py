@@ -123,3 +123,37 @@ class TestCaptionerSetting:
         monkeypatch.setenv("CAPTIONER", "claude")
 
         assert get_settings().captioner == "claude"
+
+
+class TestIngestModeSetting:
+    """The external-library ingest switch (build steps 36–38): defaults to the
+    copy-in ``upload`` mode; ``external`` + its host/container roots bind from the
+    ``IMMICH__`` nested env, like the rest of the Immich group."""
+
+    @pytest.fixture(autouse=True)
+    def _env(self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> Iterator[None]:
+        monkeypatch.chdir(tmp_path)  # isolate from the repo .env
+        monkeypatch.setenv("DATABASE_URL", "postgresql+psycopg://u:p@host:5432/db")
+        for var in ("IMMICH__INGEST_MODE", "IMMICH__EXTERNAL_HOST_ROOT"):
+            monkeypatch.delenv(var, raising=False)
+        get_settings.cache_clear()
+        yield
+        get_settings.cache_clear()
+
+    def test_defaults_to_upload_mode(self) -> None:
+        immich = get_settings().immich
+
+        assert immich.ingest_mode == "upload"
+        assert immich.external_host_root == ""
+        assert immich.external_container_root == "/external"
+
+    def test_external_mode_binds_from_env(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("IMMICH__INGEST_MODE", "external")
+        monkeypatch.setenv("IMMICH__EXTERNAL_HOST_ROOT", "/home/devel/photos")
+        monkeypatch.setenv("IMMICH__EXTERNAL_CONTAINER_ROOT", "/mnt/photos")
+
+        immich = get_settings().immich
+
+        assert immich.ingest_mode == "external"
+        assert immich.external_host_root == "/home/devel/photos"
+        assert immich.external_container_root == "/mnt/photos"
