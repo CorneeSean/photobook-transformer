@@ -110,7 +110,14 @@ review chain, squash, merge, push) around it.
     pre-commit hook satisfied), then delete the branch. `main` now has both the
     step commit and the tracker/log commit.
 11. **Push.** Push `main` to `origin` (`git push origin main`) so the merged step
-    is published. Never force-push `main`.
+    is published. Never force-push `main`. **A `pre-push` hook runs the full
+    `uv run poe check` (all static gates + the entire test suite, incl. the
+    Docker-backed pgvector tests) before the push is accepted — so the push blocks
+    for minutes. Wait for it to complete; don't background it, and don't treat the
+    delay as a hang.** If a push seems to time out, it may already have landed:
+    `git fetch` and compare `HEAD` vs `origin/main` before retrying (a blind retry
+    can hit `remote rejected … cannot lock ref … is at <newsha> but expected
+    <oldsha>`, which just means the remote already has your commit).
 12. **Next.** Return to step 1 for the following build step.
 
 If a step cannot be completed cleanly, **stop and surface the problem** (mark it

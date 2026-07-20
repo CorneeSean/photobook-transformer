@@ -138,8 +138,20 @@ including subcommits on a step branch — so nothing slips through:
   the slower `pytest`/`poe check` tier.
 
 The full `pytest` suite is *not* run per-commit (too slow for fast subcommits); it
-runs in `uv run poe check` before a step is finalized, and in CI. Optionally add
-it as a `pre-push` hook.
+runs in `uv run poe check` before a step is finalized, and in CI.
+
+- **`pre-push`** — a `pre-push` hook runs the full **`uv run poe check`** (all
+  static gates **and the entire test suite**) before any push is accepted. This is
+  a hard gate on `origin`, not an optional add-on: a push with a failing check is
+  rejected, and a *passing* push **blocks for the whole suite to finish** (minutes,
+  incl. the Docker-backed pgvector integration tests). **Wait for it.** `git push`
+  is not fire-and-forget here — do not background it and move on, and do not treat a
+  ~2-minute "hang" as a failure or interrupt it; that's the hook running the tests.
+  A push that appears to time out may still have landed on the remote (the hook
+  passed and the ref updated) while the local `origin/main` tracking ref went stale
+  — `git fetch` then compare `HEAD`/`origin/main` before retrying, or a retry hits a
+  confusing `remote rejected … cannot lock ref … is at <newsha> but expected
+  <oldsha>` (the remote already has your commit).
 
 > **Landmine — ruff formatter under `py314`.** `ruff` 0.15.21's formatter with
 > `target-version = "py314"` rewrites a valid `except (A, B):` into the invalid
