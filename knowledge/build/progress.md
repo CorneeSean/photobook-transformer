@@ -25,15 +25,19 @@ accurate — it is part of the workflow, not optional tidiness.
 
 ## Outstanding (TODO)
 
-**Build complete — nothing outstanding.** Every build-order step (0–16) and every
-follow-on playbook — enrichment (17–20), TestContainers (21–25), single-command
-ingestion (26–28), offline analysis (29), folder-structure ingestion (32–35),
-external-library ingestion (36–38) — plus the lead-face CLI (30), the LAION scorer
-(31), and the CLI unification (39, incl. the `album/cli/` package split) is done and
-merged; see [Completed](#completed-done). The optional **step 23** was closed as
-subsumed (2026-07-19). All that remains is **live-integration verification** — no
-reachable Immich / `ANTHROPIC_API_KEY` / `darktable-cli` / Lulu creds in this sandbox
-— tracked in [Notes / blockers](#notes--blockers); nothing is blocked on code.
+| # | Step | Status | Branch | Notes |
+|---|------|--------|--------|-------|
+| 41 | Escalate total-failure stages + stage/progress logging | todo | — | User asked why a stage that hit an error still shows as completed. Root cause: `quality`/`enhance`/`render`/`caption`'s per-item failure isolation (architecture.md's "one bad photo in 3,000 must not sink the run") catches every per-photo exception, logs it, and increments `result.failed` — it never re-raises, so `Stage.run()` (`flow/stages/base.py`) always reaches its unconditional flush+commit. A *systemic* failure (Immich unreachable, `darktable-cli` missing, aesthetic model unavailable) where every attempted photo fails still reports "done"; nothing downstream (`_flow.py`) reads the discarded `failed` count either. **Planned fix:** a `Stage._failure_counts(result) -> tuple[failed, attempted] \| None` hook on the base class (default `None` = no-op, so `sync`/`cluster`/`select`/`assemble`/`fulfill` are untouched), overridden by the four stages; `Stage.run()` calls it before commit and raises `RuntimeError` iff `attempted > 0 and failed == attempted` — "attempted" excludes photos short-circuited before any work was tried (`skipped`/`unclustered`/`not_ready`), so one isolated bad photo among many still never trips it. **Also planned:** these four modules currently emit zero `_log.info`/`_log.debug` — add stage start/done logging hoisted onto `Stage.run()` (free for every stage, logs the dataclass's own `repr`) plus a time-throttled `ProgressLogger` (default 30s) wired into the four long per-photo loops, using stdlib `logging` (not Prefect's `get_run_logger()`, which would break calling `stage.run()` outside a Prefect context — these stages are deliberately Prefect-free logic). Needs: 4 new "all photos fail → raises" tests (one per stage, alongside each file's existing single-bad-photo isolation test, which must keep passing unmodified) + a `Stage.run()` logging test (`caplog`) + a `ProgressLogger` throttling test. **Also in scope (user-added):** replace `print()` with proper `logging` wherever it's used for diagnostics. Repo-wide grep found only 4 real `print()` calls in `src/` — all in `cli/runner.py`'s `BuildRunner._report`/`run()` (the `build` command's final "Book written to .../N book(s) written, M failed."/per-album-failure stdout+stderr report) — plus 3 in the standalone `scripts/build_cat_album.py` demo script. **Caveat/recommendation:** `runner.py`'s prints are the CLI's actual user-facing output contract (what a human or a wrapping script reads off stdout/stderr), not internal diagnostics — swapping to bare `logging` calls risks adding logger noise (timestamps/level/name) and collapsing the stdout/stderr split unless deliberately configured with a plain formatter and level-routed handlers to reproduce today's exact text and streams. Recommend converting them to a small dedicated CLI-output logger configured to preserve today's exact text/stream split (info→stdout, error→stderr, no prefix), so behavior is unchanged but verbosity becomes controllable; flag this for a quick confirm before implementing since it's the one CLI-contract-sensitive spot. `scripts/build_cat_album.py` is a standalone manual demo script (`uv run python scripts/...`) whose whole point is printed console output — recommend leaving it as `print()`, out of scope. |
+
+Every build-order step (0–16) and every follow-on playbook — enrichment (17–20),
+TestContainers (21–25), single-command ingestion (26–28), offline analysis (29),
+folder-structure ingestion (32–35), external-library ingestion (36–38) — plus the
+lead-face CLI (30), the LAION scorer (31), the CLI unification (39, incl. the
+`album/cli/` package split), and per-album curation tuning (40) is done and merged;
+see [Completed](#completed-done). The optional **step 23** was closed as subsumed
+(2026-07-19). Live-integration verification (no reachable Immich /
+`ANTHROPIC_API_KEY` / `darktable-cli` / Lulu creds in this sandbox) is tracked in
+[Notes / blockers](#notes--blockers); nothing else is blocked on code.
 
 ## Completed (DONE)
 
