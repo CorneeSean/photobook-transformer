@@ -4,6 +4,39 @@ Cross-commit narrative and decisions. Per-diff mechanics live in the commit
 bodies this log cites; keep entries tight (see
 [working-agreement · Be concise](/process/working-agreement.md#be-concise)).
 
+## 2026-07-21
+
+* **Caption one-sentence summary + configurable output language (step 42,
+  user-requested; commit `49b7c26`).** The opt-in `ClaudeCaptioner` ran too
+  verbose, and the user wanted its output language selectable, defaulting to
+  Polish. Its system prompt now demands **exactly ONE short summary sentence**
+  ("a concise summary, not a description; no lists, no line breaks, no preamble")
+  where it used to ask for "a short, natural caption" — the rest of the grounding
+  contract (use names, never invent one, never apologise for missing context) is
+  unchanged. Language became an argument end to end: `ClaudeCaptioner(language=…)`
+  (default `DEFAULT_CAPTION_LANGUAGE = "Polish"`) builds a **per-instance** agent
+  from a new `_caption_system_prompt(language)`, so a run captions in one language;
+  `Settings.caption_language` (flat, env `CAPTION_LANGUAGE`, mirrors `captioner`);
+  `build_captioner(name, *, language=None)` with language-aware registry factories
+  (`from_settings(*, language=None)` = flag > env > "Polish"); and a
+  `--caption-language LANGUAGE` flag on `build`, threaded through `_resolve_captioner`.
+  The offline default `TemplateCaptioner` composes from album metadata (names,
+  places, month) and ignores the language, so unset/face-free albums are unchanged.
+  * **Review (scaled down per the workflow for a modest, self-contained diff):**
+    inline adversarial + style pass, no sub-agent fan-out. No defects. Checked the
+    one structural risk — `captioner.py` now importing `album.config.get_settings`
+    is one-directional (config deliberately never imports the captioner registry)
+    and was already pulled in transitively via `agents/_model`; `from_settings` reads
+    only `caption_language`, still no `ANTHROPIC_API_KEY` needed to construct.
+  * **Verification:** new `capturing_caption_system_prompt` test double asserts what
+    the model actually receives — default-Polish, `language="French"` overrides,
+    the one-sentence enforcement is present, and `--caption-language` threads through
+    `build_captioner`. `poe check` green (469 passed, 6 skipped, incl. the Docker
+    pgvector testcontainers; a stale `testcontainers-ryuk` container-name conflict on
+    the first run — env, not code — was cleared and the container suite re-run clean).
+    Live-Claude Polish caption spot-check deferred (no key / reachable service) — folds
+    into the standing live-integration gap.
+
 ## 2026-07-20
 
 * **Total-failure escalation + stage/progress logging (step 41, user-requested;
