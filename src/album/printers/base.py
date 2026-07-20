@@ -2,18 +2,18 @@
 
 [`assemble`](../stages/assemble.py) decides the book's page layout (which photos
 land on which page, in what order, with which section breaks) and records it on
-the ``Photo`` rows (``page_number``) plus a print-ready master PDF. What happens
-to that finished book — a physical copy ordered from a print service, a browsable
-local webpage, a PDF dropped somewhere — is a separate, swappable concern. That's
-a :class:`Printer`.
+the ``Photo`` rows (``page_number``). What happens to that finished book — a
+physical copy ordered from a print service, a browsable local webpage, a PDF
+dropped somewhere — is a separate, swappable concern. That's a :class:`Printer`,
+which renders the concrete medium on demand from that layout.
 
 The [`fulfill`](../stages/fulfill.py) stage owns *no* delivery policy of its own:
 it just calls the injected printer and stores the printer-agnostic reference the
 printer returns on ``Album.output_ref``. Concrete printers live beside this
 module — :class:`~album.printers.html.HtmlPrinter` (the default; no external
 service, renders a webpage from the on-disk photos) and
-:class:`~album.printers.lulu.LuluPrinter` (opt-in; submits the master PDF to
-Lulu's Print API for a physical book).
+:class:`~album.printers.lulu.LuluPrinter` (opt-in; renders the master PDF and
+submits it to Lulu's Print API for a physical book).
 
 ``iter_book_pages`` is the shared reader that reconstructs the ordered pages from
 the DB, so every medium-rendering printer lays the book out the same way
@@ -73,9 +73,9 @@ class PrintResult:
 class Printer(Protocol):
     """Delivers a finished, assembled album in one medium.
 
-    Given the ``Album`` and an open ``Session`` (to read whatever it needs —
-    ``assembled_pdf_path`` for a print service, the placed photos for a
-    webpage), produce the deliverable and return a :class:`PrintResult`.
+    Given the ``Album`` and an open ``Session`` (to read the placed photos —
+    ``iter_book_pages`` — that a print service or a webpage renders from),
+    produce the deliverable and return a :class:`PrintResult`.
     Idempotency and the ``output_ref`` write are the ``fulfill`` stage's job,
     not the printer's — a printer just produces.
     """
@@ -86,9 +86,8 @@ class Printer(Protocol):
 class NotAssembledError(ValueError):
     """The album hasn't been laid out yet, so there's nothing to print.
 
-    Raised by printers that render the book from ``assemble``'s output when no
-    selected photo has a ``page_number`` (or, for the PDF-submitting printer, no
-    ``assembled_pdf_path``). Run ``assemble`` before ``fulfill``.
+    Raised by ``iter_book_pages`` (and the printers that render from it) when no
+    selected photo has a ``page_number``. Run ``assemble`` before ``fulfill``.
     """
 
 

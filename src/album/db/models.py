@@ -52,10 +52,11 @@ class Album(Base):
     # otherwise all survive; see stages/select.py.
     similarity_threshold: Mapped[float | None] = mapped_column(default=None)
 
-    # --- populated by `assemble` ---
-    # Path to the rendered print-ready PDF (e.g. "data/albums/<slug>/assembled.pdf").
-    # Integration contract with `fulfill`, which reads this to submit the print
-    # order — the name and semantics are agreed across both stages; don't rename.
+    # --- populated by `fulfill`'s LuluPrinter ---
+    # Path to the print-ready master PDF (e.g. "data/albums/<slug>/assembled.pdf"),
+    # recorded when a Lulu order renders it on demand. `assemble` records only the
+    # page layout (Photo.page_number); the PDF is rendered lazily on the Lulu path,
+    # not on every run — so this stays NULL for the default HtmlPrinter output.
     assembled_pdf_path: Mapped[str | None] = mapped_column(default=None)
 
     photos: Mapped[list[Photo]] = relationship(back_populates="album")

@@ -19,14 +19,17 @@ a second run is a no-op unless `force=True`). The output *medium* is swappable:
   advance) rendered from the on-disk photos, referenced by relative path. Needs **no
   external service or credentials**, so it's the default; deliberately *one static
   file* (CDN CSS + a little vanilla JS), not a web app.
-- **`LuluPrinter` (opt-in).** POSTs the assembled master PDF to Lulu's Print API for a
-  physical copy. Injected by the caller, because a real order needs live Lulu
-  credentials **and** a PDF hosted at a URL Lulu can fetch (see the `UnreachablePdfError`
-  gap). Tested against recorded fixtures; **manually verify** with a single-copy test
-  order first.
+- **`LuluPrinter` (opt-in).** Renders the master PDF on demand (Jinja2 + WeasyPrint,
+  from the same placed photos) and POSTs it to Lulu's Print API for a physical copy.
+  Injected by the caller, because a real order needs live Lulu credentials **and** a
+  PDF hosted at a URL Lulu can fetch — inject a `publish_pdf` hook (local path →
+  public URL); without one the rendered PDF is a local file and submission is refused
+  with `UnreachablePdfError` (the known gap). Tested against recorded fixtures;
+  **manually verify** with a single-copy test order first.
 
-Each printer validates its own precondition (a webpage needs the placed photos; a
-Lulu order needs the master PDF), which is what keeps `fulfill` medium-agnostic.
-`printers/base.py`'s `iter_book_pages` is the shared reader that reconstructs the
-book's pages from the DB the same way `assemble` paginated them, so every
-medium-rendering printer lays the book out consistently.
+Each printer renders its own medium on demand from the placed photos (a webpage, or
+the master PDF a Lulu order submits), which is what keeps `fulfill` medium-agnostic
+— `assemble` produces only the layout, not any file. `printers/base.py`'s
+`iter_book_pages` is the shared reader that reconstructs the book's pages from the
+DB the same way `assemble` paginated them, so every medium-rendering printer lays
+the book out consistently.

@@ -21,5 +21,5 @@ number — numbering drifts as stages get added or split. See
 * [enhance](/stages/enhance.md) - Estimate bounded tone deltas (classical/offline by default); classical code applies them via XMP.
 * [render](/stages/render.md) - Batch darktable-cli over the XMP sidecars.
 * [caption](/stages/caption.md) - Grounded captions from the shared analysis call.
-* [assemble](/stages/assemble.md) - Jinja2 layouts → print-ready PDF.
+* [assemble](/stages/assemble.md) - lay out selected photos into the book's page order (renders no file).
 * [fulfill](/stages/fulfill.md) - Deliver via a pluggable Printer — HTML book (default) or Lulu order.

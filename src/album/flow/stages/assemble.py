@@ -1,5 +1,5 @@
-"""``assemble`` — lay out selected photos into Jinja2 page templates and render
-a print-ready PDF via WeasyPrint, scoped by ``album_id``.
+"""``assemble`` — lay out selected photos into the book's page order, scoped by
+``album_id``.
 
 Reads ``selected=True`` [photos](/reference/data-model.md), ordered by segment position,
 then scene, then timestamp, and lays them into a handful of grid layouts
@@ -14,19 +14,23 @@ carrying the segment's ``label``/``place``; **an album with zero segments
 skips section pages entirely** and treats all its selected photos as one
 implicit group — the genericity fallback for this stage.
 
-Trim size, bleed, and spine width come from Lulu's print spec, resolved as
-[open question 4](/build/open-questions.md): Square 8.5x8.5in trim, 0.125in bleed on
-every edge (rendered page = trim + 2*bleed), spine width =
-``page_count / 444 + 0.06in`` (444 = Lulu's PPI constant for standard
-softcover perfect-bound paper stock). The spine width is computed and returned
-for the cover (a future step's concern — `assemble` itself only renders
-interior pages) but not laid into the interior PDF, which has no spine.
+This stage produces **only the layout**: it stamps each placed photo's
+``page_number`` (the reader [`printers.base.iter_book_pages`](../../printers/base.py)
+reconstructs the book from those stamps) and returns the page count + Lulu spine
+width. It renders **no** file — turning the layout into a concrete medium (a
+browsable webpage, a print-ready PDF) is a [`Printer`](../../printers/base.py)'s
+job, run on demand by [`fulfill`](fulfill.py). In particular the master PDF is now
+rendered inside :class:`~album.printers.lulu.LuluPrinter` only when a physical
+order is actually requested, rather than unconditionally here on every run.
 
-Idempotent: skips regeneration if ``Album.assembled_pdf_path`` is already set,
-unless ``force=True``. Writes the PDF to
-``<output_dir>/<slug>/assembled.pdf`` and stores that path on the ``Album``
-row — the integration contract [`fulfill`](/stages/fulfill.md) (built in
-parallel) reads to submit the print order. :class:`AssembleStage` is a
+Spine width comes from Lulu's print spec, resolved as
+[open question 4](/build/open-questions.md): spine width =
+``page_count / 444 + 0.06in`` (444 = Lulu's PPI constant for standard
+softcover perfect-bound paper stock). It is computed and returned for the cover
+(a future step's concern) but the interior has no spine.
+
+Idempotent: skips re-layout if the album's photos are already placed (any photo
+carries a ``page_number``), unless ``force=True``. :class:`AssembleStage` is a
 :class:`~album.flow.stages.base.Stage` (folder-structure.md rule) — it takes its
 ``album_id`` + ``session_factory`` at construction, opens the session inside
 ``run``, and is unit-testable without an orchestrator; it runs as a Prefect task via
@@ -36,48 +40,27 @@ the ``run_as_task`` / ``to_task`` glue inherited from ``TaskUnit``
 
 from __future__ import annotations
 
-import logging
 from dataclasses import dataclass
 from itertools import groupby
-from pathlib import Path
 from typing import Any, ClassVar
 
-from jinja2 import Environment, FileSystemLoader
 from sqlalchemy import select
-from weasyprint import HTML
 
 from album.db.models import Album, Photo, Segment
-from album.db.session import SessionFactory
 from album.flow.stages.base import Stage
 
-_log = logging.getLogger(__name__)
-
-# --- Lulu print spec (open question 4, resolved step 13) -------------------
-# Square 8.5x8.5in trim is a standard Lulu photo-book size. Bleed and PPI are
-# from Lulu's Print API docs (Book Creation Guide / PDF Creation Settings /
-# "How is spine width calculated?").
-TRIM_WIDTH_IN = 8.5
-TRIM_HEIGHT_IN = 8.5
-BLEED_IN = 0.125
-SAFETY_MARGIN_IN = 0.5
+# --- Lulu spine spec (open question 4, resolved step 13) -------------------
 # Softcover perfect-bound spine width: page_count / PPI + cover material offset.
 # PPI = pages that pack into one inch of Lulu's standard interior paper stock.
+# (Page geometry — trim, bleed, page box — lives with PDF rendering in
+# printers/lulu.py, the only consumer that needs it.)
 SPINE_PPI = 444.0
 SPINE_BASE_IN = 0.06
 
-PAGE_WIDTH_IN = TRIM_WIDTH_IN + 2 * BLEED_IN
-PAGE_HEIGHT_IN = TRIM_HEIGHT_IN + 2 * BLEED_IN
-
-# Placement heuristic: cycle through these layout capacities per (segment,
-# scene) group — densest first, so large scenes stay page-efficient while
-# small ones still land on a spacious layout. See module docstring.
-_LAYOUT_CYCLE: tuple[tuple[int, str], ...] = (
-    (3, "layout_3up.html"),
-    (2, "layout_2up.html"),
-    (1, "layout_1up.html"),
-)
-
-_TEMPLATES_DIR = Path(__file__).resolve().parent.parent.parent.parent.parent / "templates"
+# Placement heuristic: cycle through these per-page photo capacities per
+# (segment, scene) group — densest first, so large scenes stay page-efficient
+# while small ones still land on a spacious layout. See module docstring.
+_LAYOUT_CAPACITIES: tuple[int, ...] = (3, 2, 1)
 
 
 @dataclass
@@ -85,7 +68,6 @@ class AssembleResult:
     pages: int = 0
     photos_placed: int = 0
     spine_width_in: float = 0.0
-    output_path: str | None = None
     skipped: bool = False
 
 
@@ -95,53 +77,41 @@ def spine_width_in(page_count: int) -> float:
 
 
 class AssembleStage(Stage[AssembleResult]):
-    """`assemble` — lay out selected photos into page templates and render a
-    print-ready PDF via WeasyPrint. Idempotent.
+    """`assemble` — lay out selected photos into the book's page order. Idempotent.
 
-    No injected external boundary (it drives Jinja2/WeasyPrint directly); it's a
-    class because it owns several layout helpers plus the ``output_dir`` /
-    ``templates_dir`` configuration, alongside the ``album_id`` + ``session_factory``
-    the base :class:`~album.flow.stages.base.Stage` takes; ``run`` takes no arguments.
+    Stamps each placed photo's ``page_number`` and returns the page count + spine
+    width; it renders no file (a :class:`~album.printers.base.Printer` does, on
+    demand). No injected external boundary — it owns only the pure layout helpers
+    plus the ``album_id`` + ``session_factory`` the base
+    :class:`~album.flow.stages.base.Stage` takes; ``run`` takes no arguments.
     """
 
     task_name: ClassVar[str] = "assemble"
 
-    def __init__(
-        self,
-        output_dir: str | Path,
-        album_id: int,
-        session_factory: SessionFactory,
-        *,
-        force: bool = False,
-        templates_dir: Path = _TEMPLATES_DIR,
-    ) -> None:
-        super().__init__(album_id, session_factory, force=force)
-        self._output_dir = output_dir
-        self._templates_dir = templates_dir
-
     def _process(self) -> AssembleResult:
-        """Lay out ``self._album``'s selected photos and render a print PDF. Idempotent."""
+        """Lay out ``self._album``'s selected photos into page order. Idempotent."""
         album, session = self._album, self._session
-        if album.assembled_pdf_path is not None and not self._force:
-            return AssembleResult(output_path=album.assembled_pdf_path, skipped=True)
-
         all_photos = list(session.scalars(select(Photo).where(Photo.album_id == album.id)))
+
+        placed_numbers = [p.page_number for p in all_photos if p.page_number is not None]
+        if not self._force and placed_numbers:
+            pages = max(placed_numbers)
+            return AssembleResult(
+                pages=pages,
+                photos_placed=len(placed_numbers),
+                spine_width_in=spine_width_in(pages),
+                skipped=True,
+            )
+
         self._reset_page_numbers(all_photos)
         photos = self._select_for_placement(all_photos, album.id)
 
-        html_pages, page_number, photos_placed = self._lay_out(album, photos)
-
-        output_path = Path(self._output_dir) / album.slug / "assembled.pdf"
-        output_path.parent.mkdir(parents=True, exist_ok=True)
-        self._render_pdf(html_pages, output_path)
-
-        album.assembled_pdf_path = str(output_path)
+        page_number, photos_placed = self._lay_out(album, photos)
 
         return AssembleResult(
             pages=page_number,
             photos_placed=photos_placed,
             spine_width_in=spine_width_in(page_number),
-            output_path=str(output_path),
         )
 
     @staticmethod
@@ -167,70 +137,34 @@ class AssembleStage(Stage[AssembleResult]):
                 "rendered_path yet — run `render` before `assemble`",
             )
 
-    def _lay_out(self, album: Album, photos: list[Photo]) -> tuple[list[str], int, int]:
-        """Render each (segment, scene) group to page HTML, stamping each placed
-        photo's ``page_number``. Returns ``(html_pages, page_count, photos_placed)``."""
-        env = Environment(loader=FileSystemLoader(self._templates_dir), autoescape=True)
-        base_ctx = {
-            "album_title": album.title,
-            "page_width_in": PAGE_WIDTH_IN,
-            "page_height_in": PAGE_HEIGHT_IN,
-            "bleed_in": BLEED_IN,
-            "safety_margin_in": SAFETY_MARGIN_IN,
-        }
-
+    def _lay_out(self, album: Album, photos: list[Photo]) -> tuple[int, int]:
+        """Stamp each placed photo's ``page_number``, grouping by (segment, scene).
+        Returns ``(page_count, photos_placed)`` — page count includes section pages."""
         page_number = 0
         photos_placed = 0
-        html_pages: list[str] = []
         for segment, group in self._group_photos(album, photos):
-            group_pages, page_number, group_placed = self._render_group(
-                env,
-                base_ctx,
-                segment,
-                group,
-                page_number,
-            )
-            html_pages.extend(group_pages)
+            page_number, group_placed = self._place_group(segment, group, page_number)
             photos_placed += group_placed
-        return html_pages, page_number, photos_placed
+        return page_number, photos_placed
 
-    def _render_group(
+    def _place_group(
         self,
-        env: Environment,
-        base_ctx: dict[str, Any],
         segment: Segment | None,
         group: list[Photo],
         page_number: int,
-    ) -> tuple[list[str], int, int]:
-        """Render one (segment, scene) group's section header (if any) and its
-        photo pages. Returns ``(html_pages, page_number, photos_placed)``."""
-        html_pages: list[str] = []
+    ) -> tuple[int, int]:
+        """Advance ``page_number`` over one (segment, scene) group's section header
+        (if any) and its photo pages, stamping each placed photo. Returns
+        ``(page_number, photos_placed)``."""
         if segment is not None:
-            page_number += 1
-            html_pages.append(
-                env.get_template("section.html").render(
-                    **base_ctx,
-                    label=segment.label,
-                    place=segment.place,
-                ),
-            )
+            page_number += 1  # section-header page
         photos_placed = 0
         for chunk in self._chunk_by_scene(group):
             page_number += 1
-            html_pages.append(
-                env.get_template(self._layout_for_size(len(chunk))).render(
-                    **base_ctx,
-                    photos=[self._photo_ctx(p) for p in chunk],
-                ),
-            )
             for photo in chunk:
                 photo.page_number = page_number
                 photos_placed += 1
-        return html_pages, page_number, photos_placed
-
-    @staticmethod
-    def _photo_ctx(photo: Photo) -> dict[str, Any]:
-        return {"image_path": photo.rendered_path, "caption": photo.caption}
+        return page_number, photos_placed
 
     def _group_photos(
         self,
@@ -268,46 +202,15 @@ class AssembleStage(Stage[AssembleResult]):
     @staticmethod
     def _chunk_by_scene(photos: list[Photo]) -> list[list[Photo]]:
         """Split one segment's (already sorted) photos into page-sized chunks,
-        per-scene, cycling through the layout capacities in ``_LAYOUT_CYCLE``."""
+        per-scene, cycling through the layout capacities in ``_LAYOUT_CAPACITIES``."""
         chunks: list[list[Photo]] = []
         for _scene_id, group_iter in groupby(photos, key=lambda p: p.scene_id):
             scene_photos = list(group_iter)
             cycle_pos = 0
             i = 0
             while i < len(scene_photos):
-                capacity, _ = _LAYOUT_CYCLE[cycle_pos % len(_LAYOUT_CYCLE)]
+                capacity = _LAYOUT_CAPACITIES[cycle_pos % len(_LAYOUT_CAPACITIES)]
                 chunks.append(scene_photos[i : i + capacity])
                 i += capacity
                 cycle_pos += 1
         return chunks
-
-    @staticmethod
-    def _layout_for_size(size: int) -> str:
-        """``_chunk_by_scene`` only ever slices chunks to one of ``_LAYOUT_CYCLE``'s
-        capacities, so every real chunk size has an exact match here — a mismatch
-        means the chunker's invariant broke, which should fail loudly rather than
-        silently fall back to a guessed layout."""
-        for capacity, template_name in _LAYOUT_CYCLE:
-            if size == capacity:
-                return template_name
-        raise ValueError(f"no layout template for a chunk of size {size}")
-
-    @staticmethod
-    def _render_pdf(html_pages: list[str], output_path: Path) -> None:
-        # base_url="." resolves each page's <img src> (Photo.rendered_path) against
-        # the process's working directory, matching how that path is stored — not
-        # the templates dir, which holds no photos.
-        if not html_pages:
-            empty_doc = (
-                f"<html><head><style>@page {{ size: {PAGE_WIDTH_IN}in {PAGE_HEIGHT_IN}in; "
-                "margin: 0; }}</style></head><body></body></html>"
-            )
-            HTML(string=empty_doc, base_url=".").write_pdf(str(output_path))
-            return
-        documents = [HTML(string=html, base_url=".").render() for html in html_pages]
-        all_pages = [page for doc in documents for page in doc.pages]
-        # weasyprint's inferred stub types `pages` as `str` (from its `='all'`
-        # default) even though `Document.copy` actually accepts any iterable of
-        # `Page` objects (see its docstring) — a third-party stub gap, not a real
-        # type error.
-        documents[0].copy(all_pages).write_pdf(str(output_path))  # pyright: ignore[reportArgumentType]

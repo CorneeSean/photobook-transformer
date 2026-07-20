@@ -8,8 +8,8 @@ physical Lulu order opt-in) and records the printer-agnostic reference the print
 returns on ``Album.output_ref``. That column's presence is what makes this
 idempotent: a second run is a no-op unless ``force=True``.
 
-Each printer validates its own precondition (a webpage needs the placed photos; a
-Lulu order needs the master PDF), so this stage stays medium-agnostic.
+Each printer renders its own medium from the placed photos on demand (a webpage,
+or the master PDF a Lulu order submits), so this stage stays medium-agnostic.
 :class:`FulfillStage` stays Prefect-free logic — so it's unit-testable without an
 orchestrator via ``run`` — and runs as a Prefect task through the ``run_as_task`` /
 ``to_task`` glue it inherits from :class:`~album.flow.stages.base.TaskUnit`

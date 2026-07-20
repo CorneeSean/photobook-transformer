@@ -111,13 +111,12 @@ def build_cat_album(output_dir: Path = _DATA.parent) -> Path:
             f"undated={len(cluster_result.undated)})",
         )
 
-        # assemble writes <output_dir>/<slug>/assembled.pdf and sets page_number;
-        # HtmlPrinter writes <output_dir>/<slug>/book/index.html.
-        assemble_result = AssembleStage(output_dir, album_id, factory).run()
+        # assemble lays out the book (stamps page_number); no file is written —
+        # HtmlPrinter renders <output_dir>/<slug>/book/index.html from that layout.
+        assemble_result = AssembleStage(album_id, factory).run()
         session.commit()
         print(
-            f"assemble: {assemble_result.photos_placed} photos on "
-            f"{assemble_result.pages} pages → {assemble_result.output_path}",
+            f"assemble: {assemble_result.photos_placed} photos on {assemble_result.pages} pages",
         )
 
         album = session.get(Album, album_id)

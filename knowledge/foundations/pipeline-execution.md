@@ -92,7 +92,7 @@ at `sync` (the boundary — see [architecture](/foundations/architecture.md)).
 | [`enhance`](/stages/enhance.md) | 2 | Estimate bounded tone deltas; classical code writes XMP sidecars. | XMP sidecars |
 | [`render`](/stages/render.md) | 2 | Batch `darktable-cli` over the sidecars → corrected JPEGs. | JPEG files |
 | [`caption`](/stages/caption.md) | 2 | Every selected photo gets a caption (shared analysis call). | `Photo.caption` |
-| [`assemble`](/stages/assemble.md) | seq | Jinja2 grid layouts → print-ready PDF via WeasyPrint. | book PDF |
+| [`assemble`](/stages/assemble.md) | seq | Lay selected photos into the book's page order (grid capacities per segment/scene). Renders no file. | `Photo.page_number` |
 | [`fulfill`](/stages/fulfill.md) | seq | Deliver via a pluggable `Printer` — HTML (default) or Lulu. | deliverable |
 
 ## Session ownership & invariants

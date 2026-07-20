@@ -384,7 +384,7 @@ class Pipeline:
         self._run_group_2(album_id, client)
         db_session.expire_all()  # re-read render's/caption's committed writes
 
-        AssembleStage(_ALBUMS_DIR, album_id, shared, force=self._force).run_as_task()
+        AssembleStage(album_id, shared, force=self._force).run_as_task()
         FulfillStage(self._printer, album_id, shared, force=self._force).run_as_task()
 
     def _run_group_1(self, album_id: int, client: ImmichClient, album_slug: str) -> None:

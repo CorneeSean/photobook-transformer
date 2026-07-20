@@ -2,43 +2,24 @@
 
 Covers page count and photo placement given fixture data, **including a
 segment-less album** (the genericity fallback for this stage — no section pages,
-one implicit group). Structural PDF assertions (page count, page-box dimensions
-matching the resolved Lulu trim+bleed spec) stand in for the build-order's
-"manually verify the PDF opens with correct trim/bleed" line — see
-knowledge/process/working-agreement.md's per-stage testing table.
+one implicit group). ``assemble`` now produces only the layout (each placed
+photo's ``page_number`` + the page count); the concrete master PDF is rendered
+on demand by :class:`~album.printers.lulu.LuluPrinter` and is covered in
+test_lulu_printer.py.
 """
 
 from __future__ import annotations
 
 from collections.abc import Callable
 from datetime import UTC, datetime
-from pathlib import Path
 
-import pypdf
 import pytest
 from sqlalchemy import select as sa_select
 from sqlalchemy.orm import Session
 
 from album.db.models import Album, Photo, Segment
 from album.db.session import reuse
-from album.flow.stages.assemble import (
-    BLEED_IN,
-    PAGE_HEIGHT_IN,
-    PAGE_WIDTH_IN,
-    TRIM_HEIGHT_IN,
-    TRIM_WIDTH_IN,
-    AssembleResult,
-    AssembleStage,
-    spine_width_in,
-)
-
-_FIXTURE_IMAGE = str(
-    Path(__file__).parent.parent.parent.parent / "fixtures" / "images" / "sharp.jpg",
-)
-
-# PDF points per inch (a "PDF point" is always 1/72in — this is a unit
-# conversion for the assertion, not a Lulu-specific constant).
-_POINTS_PER_IN = 72.0
+from album.flow.stages.assemble import AssembleResult, AssembleStage, spine_width_in
 
 
 def _dt(hour: int, minute: int = 0, day: int = 2) -> datetime:
@@ -46,7 +27,7 @@ def _dt(hour: int, minute: int = 0, day: int = 2) -> datetime:
 
 
 class TestAssembleStage:
-    """`AssembleStage.run`: placement, section pages, idempotency, PDF structure."""
+    """`AssembleStage.run`: placement, section pages, idempotency."""
 
     def _persist(self, session: Session, album: Album) -> int:
         session.add(album)
@@ -61,7 +42,7 @@ class TestAssembleStage:
         def _make(album: Album, asset: str, **overrides: object) -> Photo:
             defaults: dict[str, object] = {
                 "selected": True,
-                "rendered_path": _FIXTURE_IMAGE,
+                "rendered_path": "tests/fixtures/images/sharp.jpg",
                 "timestamp": _dt(12),
                 "caption": f"caption for {asset}",
             }
@@ -72,16 +53,15 @@ class TestAssembleStage:
 
     def test_raises_for_unknown_album(self, session: Session) -> None:
         with pytest.raises(ValueError, match="no album"):
-            AssembleStage("unused", 999, reuse(session)).run()
+            AssembleStage(999, reuse(session)).run()
 
     def test_segment_less_album_assembles_with_one_implicit_group(
         self,
         session: Session,
-        tmp_path: Path,
         make_album: Callable[..., Album],
         selected_photo: Callable[..., Photo],
     ) -> None:
-        """Genericity guard: zero segments must still assemble correctly, with no
+        """Genericity guard: zero segments must still lay out correctly, with no
         section-header pages."""
         album = make_album()
         album.photos = [
@@ -94,13 +74,11 @@ class TestAssembleStage:
         ]
         album_id = self._persist(session, album)
 
-        result = AssembleStage(tmp_path, album_id, reuse(session)).run()
+        result = AssembleStage(album_id, reuse(session)).run()
 
         assert isinstance(result, AssembleResult)
         assert result.photos_placed == 4
         assert not result.skipped
-        assert result.output_path is not None
-        assert Path(result.output_path).exists()
 
         # 3 photos in scene 1 -> one 3-up page; 1 photo in scene 2 -> one page.
         # No section pages: 2 total.
@@ -114,13 +92,9 @@ class TestAssembleStage:
         assert placed["a4"] == 2
         assert placed["a5"] is None  # unselected photo never placed
 
-        reader = pypdf.PdfReader(result.output_path)
-        assert len(reader.pages) == 2
-
     def test_segments_produce_section_header_pages_in_position_order(
         self,
         session: Session,
-        tmp_path: Path,
         make_album: Callable[..., Album],
         make_segment: Callable[..., Segment],
         selected_photo: Callable[..., Photo],
@@ -149,7 +123,7 @@ class TestAssembleStage:
         ]
         album_id = self._persist(session, album)
 
-        result = AssembleStage(tmp_path, album_id, reuse(session)).run()
+        result = AssembleStage(album_id, reuse(session)).run()
 
         # section(day1) + photo page(day1) + section(day2) + photo page(day2) = 4
         assert result.pages == 4
@@ -166,7 +140,6 @@ class TestAssembleStage:
     def test_photo_outside_any_segment_still_placed_in_fallback_group(
         self,
         session: Session,
-        tmp_path: Path,
         make_album: Callable[..., Album],
         make_segment: Callable[..., Segment],
         selected_photo: Callable[..., Photo],
@@ -182,7 +155,7 @@ class TestAssembleStage:
         ]
         album_id = self._persist(session, album)
 
-        result = AssembleStage(tmp_path, album_id, reuse(session)).run()
+        result = AssembleStage(album_id, reuse(session)).run()
 
         assert result.photos_placed == 2
         placed = {
@@ -195,7 +168,6 @@ class TestAssembleStage:
     def test_idempotent_skips_when_already_assembled(
         self,
         session: Session,
-        tmp_path: Path,
         make_album: Callable[..., Album],
         selected_photo: Callable[..., Photo],
     ) -> None:
@@ -203,17 +175,18 @@ class TestAssembleStage:
         album.photos = [selected_photo(album, "d1", scene_id=1)]
         album_id = self._persist(session, album)
 
-        first = AssembleStage(tmp_path, album_id, reuse(session)).run()
+        first = AssembleStage(album_id, reuse(session)).run()
         assert not first.skipped
+        assert first.photos_placed == 1
 
-        second = AssembleStage(tmp_path, album_id, reuse(session)).run()
+        second = AssembleStage(album_id, reuse(session)).run()
         assert second.skipped
-        assert second.output_path == first.output_path
+        assert second.pages == first.pages
+        assert second.photos_placed == first.photos_placed
 
     def test_force_regenerates(
         self,
         session: Session,
-        tmp_path: Path,
         make_album: Callable[..., Album],
         selected_photo: Callable[..., Photo],
     ) -> None:
@@ -221,16 +194,15 @@ class TestAssembleStage:
         album.photos = [selected_photo(album, "e1", scene_id=1)]
         album_id = self._persist(session, album)
 
-        first = AssembleStage(tmp_path, album_id, reuse(session)).run()
-        second = AssembleStage(tmp_path, album_id, reuse(session), force=True).run()
+        first = AssembleStage(album_id, reuse(session)).run()
+        second = AssembleStage(album_id, reuse(session), force=True).run()
 
         assert not second.skipped
-        assert second.output_path == first.output_path
+        assert second.pages == first.pages
 
     def test_force_clears_stale_page_number_for_deselected_photo(
         self,
         session: Session,
-        tmp_path: Path,
         make_album: Callable[..., Album],
         selected_photo: Callable[..., Photo],
     ) -> None:
@@ -241,38 +213,19 @@ class TestAssembleStage:
         album.photos = [photo]
         album_id = self._persist(session, album)
 
-        AssembleStage(tmp_path, album_id, reuse(session)).run()
+        AssembleStage(album_id, reuse(session)).run()
         assert photo.page_number is not None
 
         photo.selected = False
         session.flush()
 
-        AssembleStage(tmp_path, album_id, reuse(session), force=True).run()
+        AssembleStage(album_id, reuse(session), force=True).run()
 
         assert photo.page_number is None
 
-    def test_output_path_matches_album_slug_and_is_stored_on_album(
+    def test_no_selected_photos_places_nothing(
         self,
         session: Session,
-        tmp_path: Path,
-        make_album: Callable[..., Album],
-        selected_photo: Callable[..., Photo],
-    ) -> None:
-        album = make_album(slug="wedding-2026")
-        album.photos = [selected_photo(album, "f1", scene_id=1)]
-        album_id = self._persist(session, album)
-
-        result = AssembleStage(tmp_path, album_id, reuse(session)).run()
-
-        assert result.output_path == str(tmp_path / "wedding-2026" / "assembled.pdf")
-        stored = session.get(Album, album_id)
-        assert stored is not None
-        assert stored.assembled_pdf_path == result.output_path
-
-    def test_no_selected_photos_still_produces_a_valid_zero_page_pdf(
-        self,
-        session: Session,
-        tmp_path: Path,
         make_album: Callable[..., Album],
         selected_photo: Callable[..., Photo],
     ) -> None:
@@ -280,26 +233,15 @@ class TestAssembleStage:
         album.photos = [selected_photo(album, "g1", scene_id=1, selected=False)]
         album_id = self._persist(session, album)
 
-        result = AssembleStage(tmp_path, album_id, reuse(session)).run()
+        result = AssembleStage(album_id, reuse(session)).run()
 
         assert result.pages == 0
         assert result.photos_placed == 0
-        assert result.output_path is not None
-        assert Path(result.output_path).exists()
-
-        # The degenerate zero-page PDF must still use the Lulu trim+bleed page
-        # size, not WeasyPrint's built-in default (e.g. A4).
-        reader = pypdf.PdfReader(result.output_path)
-        page = reader.pages[0]
-        width_in = float(page.mediabox.width) / _POINTS_PER_IN
-        height_in = float(page.mediabox.height) / _POINTS_PER_IN
-        assert width_in == pytest.approx(PAGE_WIDTH_IN, abs=0.02)
-        assert height_in == pytest.approx(PAGE_HEIGHT_IN, abs=0.02)
+        assert not result.skipped
 
     def test_raises_when_a_selected_photo_has_no_rendered_path(
         self,
         session: Session,
-        tmp_path: Path,
         make_album: Callable[..., Album],
         selected_photo: Callable[..., Photo],
     ) -> None:
@@ -311,74 +253,25 @@ class TestAssembleStage:
         album_id = self._persist(session, album)
 
         with pytest.raises(ValueError, match="rendered_path"):
-            AssembleStage(tmp_path, album_id, reuse(session)).run()
+            AssembleStage(album_id, reuse(session)).run()
 
-    def test_photo_with_relative_rendered_path_resolves_against_cwd(
+    def test_page_count_reflects_layout_capacity_cycle(
         self,
         session: Session,
-        tmp_path: Path,
-        monkeypatch: pytest.MonkeyPatch,
         make_album: Callable[..., Album],
         selected_photo: Callable[..., Photo],
     ) -> None:
-        """`_render_pdf`'s `base_url` must resolve `Photo.rendered_path` against the
-        process's working directory, not the templates directory."""
-        repo_root = Path(__file__).parent.parent.parent.parent.parent
-        monkeypatch.chdir(repo_root)
-        relative_image = "tests/fixtures/images/sharp.jpg"
-
-        album = make_album()
-        album.photos = [selected_photo(album, "k1", scene_id=1, rendered_path=relative_image)]
-        album_id = self._persist(session, album)
-
-        result = AssembleStage(tmp_path, album_id, reuse(session)).run()
-
-        assert result.pages == 1
-        assert result.output_path is not None
-        assert Path(result.output_path).stat().st_size > 0
-
-    def test_pdf_page_box_matches_trim_plus_bleed(
-        self,
-        session: Session,
-        tmp_path: Path,
-        make_album: Callable[..., Album],
-        selected_photo: Callable[..., Photo],
-    ) -> None:
-        album = make_album()
-        album.photos = [selected_photo(album, "h1", scene_id=1)]
-        album_id = self._persist(session, album)
-
-        result = AssembleStage(tmp_path, album_id, reuse(session)).run()
-        assert result.output_path is not None
-        reader = pypdf.PdfReader(result.output_path)
-
-        assert PAGE_WIDTH_IN == pytest.approx(TRIM_WIDTH_IN + 2 * BLEED_IN)
-        assert PAGE_HEIGHT_IN == pytest.approx(TRIM_HEIGHT_IN + 2 * BLEED_IN)
-
-        page = reader.pages[0]
-        width_in = float(page.mediabox.width) / _POINTS_PER_IN
-        height_in = float(page.mediabox.height) / _POINTS_PER_IN
-        assert width_in == pytest.approx(PAGE_WIDTH_IN, abs=0.02)
-        assert height_in == pytest.approx(PAGE_HEIGHT_IN, abs=0.02)
-
-    def test_pdf_page_count_matches_result(
-        self,
-        session: Session,
-        tmp_path: Path,
-        make_album: Callable[..., Album],
-        selected_photo: Callable[..., Photo],
-    ) -> None:
+        """7 photos in one scene cycle as 3 + 2 + 1 + 1 -> 4 pages."""
         album = make_album()
         album.photos = [
             selected_photo(album, f"i{n}", scene_id=1, timestamp=_dt(9, n)) for n in range(7)
         ]
         album_id = self._persist(session, album)
 
-        result = AssembleStage(tmp_path, album_id, reuse(session)).run()
-        assert result.output_path is not None
-        reader = pypdf.PdfReader(result.output_path)
+        result = AssembleStage(album_id, reuse(session)).run()
 
-        assert len(reader.pages) == result.pages
+        assert result.photos_placed == 7
+        assert result.pages == 4
 
 
 class TestSpineWidth:

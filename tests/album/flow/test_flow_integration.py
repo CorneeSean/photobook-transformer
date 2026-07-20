@@ -211,6 +211,8 @@ class TestPipelineConcurrentPerTaskSessions:
                 assert photo.rendered_path is not None
                 assert Path(photo.rendered_path).exists()
                 assert photo.caption is not None
+                # assemble (shared session) laid the photo out onto a page.
+                assert photo.page_number is not None
 
             # Exactly one shared analysis per selected photo — not two
             # (one from `enhance`, one from a concurrently-racing `caption`).
@@ -218,6 +220,7 @@ class TestPipelineConcurrentPerTaskSessions:
 
             refreshed_album = session.get(Album, album_id)
             assert refreshed_album is not None
-            assert refreshed_album.assembled_pdf_path is not None
-            assert Path(refreshed_album.assembled_pdf_path).exists()
+            # The default HtmlPrinter renders a webpage, not a PDF — assemble only
+            # lays out (asserted above), so no master PDF is produced on this path.
+            assert refreshed_album.assembled_pdf_path is None
             assert refreshed_album.output_ref is not None  # `fulfill` (HtmlPrinter) ran
