@@ -12,6 +12,7 @@ from __future__ import annotations
 from datetime import datetime
 from pathlib import Path
 
+from pydantic_ai import BinaryContent
 from pydantic_ai.messages import ModelMessage, ModelResponse, TextPart, UserPromptPart
 from pydantic_ai.models.function import AgentInfo, FunctionModel
 from pydantic_ai.models.test import TestModel
@@ -124,6 +125,29 @@ def capturing_caption_model(
         return ModelResponse(parts=[TextPart(content=caption)])
 
     return FunctionModel(handler), prompts
+
+
+def capturing_caption_media_types(
+    caption: str = "A candid moment.",
+) -> tuple[FunctionModel, list[str]]:
+    """A :class:`FunctionModel` plus a list capturing the ``media_type`` of every
+    :class:`BinaryContent` image ``ClaudeCaptioner`` sends, so a test can assert the
+    declared type matches the actual bytes (Immich thumbnails may be JPEG or WebP)."""
+    media_types: list[str] = []
+
+    def handler(
+        messages: list[ModelMessage],
+        info: AgentInfo,
+    ) -> ModelResponse:  # pragma: no cover - exercised via FunctionModel
+        for message in messages:
+            for part in message.parts:
+                if isinstance(part, UserPromptPart) and not isinstance(part.content, str):
+                    media_types.extend(
+                        item.media_type for item in part.content if isinstance(item, BinaryContent)
+                    )
+        return ModelResponse(parts=[TextPart(content=caption)])
+
+    return FunctionModel(handler), media_types
 
 
 class DatingIngestClient:

@@ -24,7 +24,16 @@ from album.analysis.captioner import (
     captioner_names,
 )
 from album.analysis.context import PhotoContext
-from tests.doubles import caption_test_model, capturing_caption_model
+from tests.doubles import (
+    caption_test_model,
+    capturing_caption_media_types,
+    capturing_caption_model,
+)
+
+# Minimal valid magic-byte prefixes — enough for the sniffer, which reads only the header.
+_JPEG_BYTES = b"\xff\xd8\xff\xe0" + b"\x00" * 16
+_WEBP_BYTES = b"RIFF\x00\x00\x00\x00WEBPVP8 " + b"\x00" * 16
+_PNG_BYTES = b"\x89PNG\r\n\x1a\n" + b"\x00" * 16
 
 _IMAGE = b"fake-thumbnail-bytes"
 _WHEN = datetime(2026, 5, 17, 12, 0, tzinfo=UTC)
@@ -119,6 +128,23 @@ class TestClaudeCaptioner:
         # Building the opt-in captioner must not require ANTHROPIC_API_KEY — only a
         # real caption() call would (same posture as agents/_model.default_model).
         assert isinstance(ClaudeCaptioner.from_settings(), ClaudeCaptioner)
+
+    @pytest.mark.parametrize(
+        ("image", "expected_type"),
+        [
+            (_JPEG_BYTES, "image/jpeg"),
+            (_WEBP_BYTES, "image/webp"),
+            (_PNG_BYTES, "image/png"),
+        ],
+        ids=["jpeg", "webp", "png"],
+    )
+    def test_media_type_matches_actual_bytes(self, image: bytes, expected_type: str) -> None:
+        # Immich thumbnails come back JPEG *or* WebP; declaring a wrong media_type makes
+        # the Anthropic API reject the request (image/jpeg vs actual image/webp), so the
+        # type must be sniffed from the bytes, not hardcoded.
+        model, media_types = capturing_caption_media_types()
+        ClaudeCaptioner(model=model).caption(image, PhotoContext())
+        assert media_types == [expected_type]
 
     def test_blank_model_output_raises(self) -> None:
         # The Captioner contract is a non-empty caption (the retired AnalysisResult

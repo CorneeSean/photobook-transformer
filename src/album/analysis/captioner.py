@@ -31,6 +31,25 @@ from album.analysis.context import PhotoContext, format_context, format_when
 _GENERIC_CAPTION = "A moment worth remembering."
 
 
+# (magic-byte predicate, IANA media type), first match wins. JPEG is also the
+# fallback, so it needs no entry — an unrecognised header defaults to it.
+_MAGIC_BYTES: tuple[tuple[Callable[[bytes], bool], str], ...] = (
+    (lambda b: b[:8] == b"\x89PNG\r\n\x1a\n", "image/png"),
+    (lambda b: b[:4] == b"RIFF" and b[8:12] == b"WEBP", "image/webp"),
+    (lambda b: b[:6] in (b"GIF87a", b"GIF89a"), "image/gif"),
+)
+
+
+def _sniff_media_type(image: bytes) -> str:
+    """The image's real IANA media type from its magic bytes.
+
+    Immich thumbnails come back as JPEG *or* WebP depending on server config, so we
+    can't hardcode ``image/jpeg`` — the Anthropic API rejects the request when the
+    declared type doesn't match the bytes. Falls back to JPEG for the (unexpected)
+    unrecognised case rather than failing the caption outright."""
+    return next((mt for matches, mt in _MAGIC_BYTES if matches(image)), "image/jpeg")
+
+
 # runtime_checkable: ``flow/_flow.py``'s ``pipeline`` (@flow) takes a ``Captioner``
 # in its signature, and Prefect builds a Pydantic parameter schema for that signature
 # (even with validate_parameters=False), which runs ``isinstance`` on each annotation
@@ -116,7 +135,8 @@ class ClaudeCaptioner:
         return cls()
 
     def caption(self, image: bytes, context: PhotoContext) -> str:
-        prompt = [format_context(context), BinaryContent(data=image, media_type="image/jpeg")]
+        photo = BinaryContent(data=image, media_type=_sniff_media_type(image))
+        prompt = [format_context(context), photo]
         result = _caption_agent.run_sync(prompt, model=self._model or default_model())
         caption = result.output.strip()
         if not caption:
