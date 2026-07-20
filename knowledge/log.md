@@ -6,6 +6,48 @@ bodies this log cites; keep entries tight (see
 
 ## 2026-07-20
 
+* **Total-failure escalation + stage/progress logging (step 41, user-requested;
+  commit `0a66842`).** The user asked why a stage that hit an error still showed as
+  "done". Root cause: the four isolating stages (`quality`/`enhance`/`render`/
+  `caption`) deliberately catch every per-photo exception, count it as `failed`, and
+  never re-raise (architecture.md's "one bad photo in 3,000 must not sink the run"),
+  so `Stage.run()` always reached its unconditional commit — a *systemic* outage
+  (Immich down, `darktable-cli` missing, aesthetic model unavailable) that fails every
+  attempted photo still reported success, and nothing downstream read the discarded
+  `failed` count. Fix: a `Stage._failure_counts(result) -> (failed, attempted) | None`
+  hook on the base (default `None`, so the five non-isolating stages are untouched);
+  `Stage.run()` raises `StageTotalFailure` (a `RuntimeError` subclass) iff
+  `attempted > 0 and failed == attempted`. `attempted` deliberately excludes photos
+  short-circuited before any work (`skipped`/`unclustered`/`not_ready`) so an isolated
+  bad photo never trips it.
+  * **Two defects caught by the review panel, both fixed before merge:**
+    (1) *caption false positive* — in the DAG `caption` runs after `enhance`, which has
+    already analyzed every clustered photo through the shared `PhotoAnalyzer`, so
+    caption's `skipped` means "captioned elsewhere", not a short-circuit. The first
+    formula (`captioned + failed`) let a single failing *unclustered* photo escalate a
+    99%-captioned album; caption now counts `skipped` toward non-failure
+    (`captioned + failed + skipped`), and since `skipped>0` strictly implies ≥1 photo
+    already has a caption, it escalates only when nothing anywhere got one.
+    (2) *isolation regression* — a bare `RuntimeError` escaped `run_pipelines`'
+    per-album isolation and aborted the whole fan-out with a traceback; the dedicated
+    `StageTotalFailure` subclass is now caught there, so a systemic per-album failure
+    is reported per album (healthy siblings still build) while genuine bugs still
+    surface.
+  * **Logging:** stage start/done INFO logging hoisted onto `Stage.run()` (logs the
+    result `repr`); a time-throttled `ProgressLogger` (stdlib `logging`, injected clock,
+    30 s — *not* Prefect's `get_run_logger`, so stages stay runnable outside a Prefect
+    context) wired into the four long per-photo loops. The user-added `print()`→logging
+    ask: the 4 real `print()`s (all in `cli/runner.py`, the `build` command's output
+    contract) route through a dedicated non-propagating `album.cli.output` logger
+    (INFO→stdout, WARNING+→stderr, no prefix, streams resolved at emit time so `capsys`
+    still captures) — behavior identical, verbosity now controllable; confirmed the
+    dedicated-logger approach with the user first. `scripts/build_cat_album.py` (a
+    standalone demo whose point is console output) left as `print()`, out of scope.
+  * Review: 4 broad-scope agents (2 adversarial correctness, style/reuse, architecture)
+    then a focused fix re-review. `poe check` green (465/6, incl. the Docker pgvector
+    suite). Live systemic-failure re-verify deferred (no reachable Immich here) — folds
+    into the standing live-integration gap.
+
 * **Per-album `select` near-duplicate threshold (step 40, user-requested).** The
   user reported a portrait-session album (`zdjecia-sesja-goszcz`) still landing
   near-identical frames in the book despite dedup. Inspecting the DB row-by-row:
