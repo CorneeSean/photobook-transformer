@@ -27,6 +27,7 @@ with ``_process() -> SyncResult``.
 
 from __future__ import annotations
 
+import logging
 from abc import ABC, abstractmethod
 from typing import ClassVar
 
@@ -35,6 +36,17 @@ from sqlalchemy.orm import Session
 
 from album.db.models import Album
 from album.db.session import SessionFactory
+
+_log = logging.getLogger(__name__)
+
+
+class StageTotalFailure(RuntimeError):
+    """Raised by :meth:`Stage.run` when every *attempted* item in a stage failed —
+    a systemic failure (Immich down, ``darktable-cli`` missing, model unavailable)
+    rather than an isolated bad photo. A dedicated subclass so callers can isolate a
+    systemic stage failure (e.g. ``cli.runner.run_pipelines`` reports it per album)
+    without also swallowing genuine ``RuntimeError`` bugs.
+    """
 
 
 class TaskUnit[ResultT](ABC):
@@ -92,14 +104,54 @@ class Stage[ResultT](TaskUnit[ResultT]):
         self._force = force
 
     def run(self) -> ResultT:
-        """Open the session, resolve + guard the album, run ``_process``, commit."""
+        """Open the session, resolve + guard the album, run ``_process``, commit.
+
+        Before committing, :meth:`_escalate_if_total_failure` turns a *systemic*
+        failure (every attempted photo failed — Immich down, model missing) into a
+        raised ``RuntimeError`` rather than a silently "done" stage; the raise leaves
+        the session uncommitted (a fan-out stage's own ``new_session`` rolls back on
+        exit), so nothing partial is persisted. Start/done INFO logging is hoisted
+        here so every stage gets it for free.
+        """
+        _log.info("%s: starting (album_id=%s)", self.task_name, self._album_id)
         with self._session_factory() as session:
             self._session = session
             self._album = self._load_album(self._album_id, session)
             result = self._process()
+            self._escalate_if_total_failure(result)
             session.flush()
             session.commit()
+            _log.info("%s: done (album_id=%s) — %r", self.task_name, self._album_id, result)
             return result
+
+    def _escalate_if_total_failure(self, result: ResultT) -> None:
+        """Raise ``RuntimeError`` iff every *attempted* item failed.
+
+        Reads :meth:`_failure_counts`; ``None`` (the default) means the stage has no
+        per-item failure isolation and is never escalated. ``attempted`` excludes
+        items short-circuited before any work (``skipped``/``unclustered``/
+        ``not_ready``), so one bad photo among many never trips this — only a run
+        where nothing that was actually attempted succeeded.
+        """
+        counts = self._failure_counts(result)
+        if counts is None:
+            return
+        failed, attempted = counts
+        if attempted > 0 and failed == attempted:
+            raise StageTotalFailure(
+                f"{self.task_name}: failed for all {attempted} attempted photo(s) — "
+                f"treating as a systemic failure, not a completed stage ({result!r})",
+            )
+
+    def _failure_counts(self, result: ResultT) -> tuple[int, int] | None:
+        """``(failed, attempted)`` for a stage with per-photo failure isolation, or
+        ``None`` (the default) to opt out of total-failure escalation entirely.
+
+        Overridden by the four isolating stages (``quality``/``enhance``/``render``/
+        ``caption``); left at ``None`` for ``sync``/``cluster``/``select``/
+        ``assemble``/``fulfill``, which have no per-photo ``failed`` count.
+        """
+        return None
 
     @staticmethod
     def _load_album(album_id: int, session: Session) -> Album:

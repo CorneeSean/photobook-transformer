@@ -40,6 +40,7 @@ from album.db.models import Photo
 from album.db.queries import selected_photos
 from album.db.session import SessionFactory
 from album.flow.photo_analyzer import PhotoAnalyzer
+from album.flow.stages._progress import ProgressLogger
 from album.flow.stages.base import Stage
 
 _log = logging.getLogger(__name__)
@@ -86,10 +87,21 @@ class CaptionStage(Stage[CaptionResult]):
         """
         result = CaptionResult()
         photos = selected_photos(self._album.id, self._session)
+        progress = ProgressLogger(_log, f"caption album={self._album.slug}", total=len(photos))
         for photo in photos:
             self._caption_photo(photo, self._session, self._force, result)
+            progress.tick()
 
         return result
+
+    def _failure_counts(self, result: CaptionResult) -> tuple[int, int]:
+        # Unlike the other stages, caption's `skipped` is a success *elsewhere*, not a
+        # short-circuit: in the real DAG caption runs after `enhance`, which already
+        # analyzed (and captioned) every clustered photo via the shared analyzer, so
+        # those come back `skipped` here. Counting them keeps a single failing
+        # unclustered photo from tripping escalation on an otherwise-captioned album;
+        # a true total failure (nothing captioned anywhere) still has skipped == 0.
+        return result.failed, result.captioned + result.failed + result.skipped
 
     def _caption_photo(
         self,

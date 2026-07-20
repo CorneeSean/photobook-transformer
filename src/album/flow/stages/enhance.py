@@ -85,6 +85,7 @@ from album.db.models import Photo
 from album.db.queries import selected_photos
 from album.db.session import SessionFactory
 from album.flow.photo_analyzer import PhotoAnalyzer, ThumbnailSource
+from album.flow.stages._progress import ProgressLogger
 from album.flow.stages.base import Stage
 
 _log = logging.getLogger(__name__)
@@ -341,10 +342,21 @@ class EnhanceStage(Stage[EnhanceResult]):
                 )
                 result.unclustered += 1
 
+        # Only clustered photos are ticked (below); unclustered ones are flagged above
+        # and never processed here, so the heartbeat total counts just the clustered set.
+        clustered_total = sum(len(scene) for scene in by_scene.values())
+        progress = ProgressLogger(_log, f"enhance album={album.slug}", total=clustered_total)
         for scene_id in sorted(by_scene):
-            self._enhance_scene(by_scene[scene_id], session, album.slug, self._force, result)
+            self._enhance_scene(
+                by_scene[scene_id], session, album.slug, self._force, result, progress
+            )
 
         return result
+
+    def _failure_counts(self, result: EnhanceResult) -> tuple[int, int]:
+        # attempted = enhanced + failed; skipped (already xmp_written) and unclustered
+        # (no scene) photos are short-circuited before any work is tried.
+        return result.failed, result.enhanced + result.failed
 
     def _enhance_scene(
         self,
@@ -353,11 +365,13 @@ class EnhanceStage(Stage[EnhanceResult]):
         album_slug: str,
         force: bool,
         result: EnhanceResult,
+        progress: ProgressLogger,
     ) -> None:
         reference = min(scene_photos, key=lambda p: (p.timestamp is None, p.timestamp, p.id))
         reference_image: bytes | None = None
 
         for photo in scene_photos:
+            progress.tick()
             if photo.xmp_written and not force:
                 result.skipped += 1
                 continue

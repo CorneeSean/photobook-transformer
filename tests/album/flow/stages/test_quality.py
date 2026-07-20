@@ -10,11 +10,13 @@ from __future__ import annotations
 from collections.abc import Callable
 from pathlib import Path
 
+import pytest
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from album.db.models import Album, Photo
 from album.db.session import reuse
+from album.flow.stages.base import StageTotalFailure
 from album.flow.stages.quality import QualityResult, QualityStage, compute_blur_score
 from tests.doubles import ConstantAesthetic, ConstantEmbedder
 
@@ -39,6 +41,20 @@ class FakeThumbnails:
 class RaisingAesthetic:
     def score(self, image: bytes) -> float:
         raise RuntimeError("model unavailable")
+
+
+class RaiseForImage:
+    """Scores every image except one poison payload, for which it raises — so a
+    single photo can fail among others that succeed (avoiding total-failure
+    escalation, which is covered separately)."""
+
+    def __init__(self, poison: bytes) -> None:
+        self._poison = poison
+
+    def score(self, image: bytes) -> float:
+        if image == self._poison:
+            raise RuntimeError("model unavailable for this image")
+        return 0.7
 
 
 class SharedQualityModel:
@@ -167,22 +183,41 @@ class TestQuality:
         make_photo: Callable[..., Photo],
     ) -> None:
         # If aesthetic scoring raises *after* blur is computed, neither score is
-        # persisted — the write is atomic per photo.
+        # persisted — the write is atomic per photo. A second, succeeding photo keeps
+        # this from being a total failure (that path is covered by
+        # test_all_photos_failing_escalates).
         album = make_album(immich_album_id="immich-abc")
-        album.photos = [make_photo(album, immich_asset_id="a1")]
+        album.photos = [
+            make_photo(album, immich_asset_id="good", filename="good.jpg"),
+            make_photo(album, immich_asset_id="bad", filename="bad.jpg"),
+        ]
+        album_id = self._persist(session, album)
+        thumbs = FakeThumbnails({"good": _SHARP, "bad": _BLURRY})
+
+        result = QualityStage(thumbs, RaiseForImage(_BLURRY), album_id, reuse(session)).run()
+
+        assert result == QualityResult(scored=1, failed=1)
+        bad = session.scalars(select(Photo).where(Photo.immich_asset_id == "bad")).one()
+        assert bad.blur_score is None
+        assert bad.aesthetic_score is None
+
+    def test_all_photos_failing_escalates(
+        self,
+        session: Session,
+        make_album: Callable[..., Album],
+        make_photo: Callable[..., Photo],
+    ) -> None:
+        # A systemic failure (aesthetic model unavailable for every photo) must
+        # escalate rather than report a completed stage — see step 41.
+        album = make_album(immich_album_id="immich-abc")
+        album.photos = [
+            make_photo(album, immich_asset_id="a1", filename="a1.jpg"),
+            make_photo(album, immich_asset_id="a2", filename="a2.jpg"),
+        ]
         album_id = self._persist(session, album)
 
-        result = QualityStage(
-            FakeThumbnails({}),
-            RaisingAesthetic(),
-            album_id,
-            reuse(session),
-        ).run()
-
-        assert result == QualityResult(failed=1)
-        photo = session.scalars(select(Photo)).one()
-        assert photo.blur_score is None
-        assert photo.aesthetic_score is None
+        with pytest.raises(StageTotalFailure, match="quality: failed for all 2 attempted"):
+            QualityStage(FakeThumbnails({}), RaisingAesthetic(), album_id, reuse(session)).run()
 
     def test_computes_embedding_when_embedder_given(
         self,

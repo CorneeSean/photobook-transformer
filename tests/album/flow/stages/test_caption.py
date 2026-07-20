@@ -26,6 +26,7 @@ from album.analysis.captioner import Captioner
 from album.db.models import Album, Photo, Segment
 from album.db.session import SessionFactory, reuse
 from album.flow.photo_analyzer import PhotoAnalyzer, ThumbnailSource
+from album.flow.stages.base import StageTotalFailure
 from album.flow.stages.caption import CaptionResult, CaptionStage
 from tests.doubles import FakeThumbnails, RecordingCaptioner, ZeroToneEstimator
 
@@ -235,6 +236,64 @@ class TestCaptionStage:
         photos = {p.immich_asset_id: p for p in session.scalars(sa_select(Photo))}
         assert photos["good"].caption
         assert photos["bad"].caption is None
+
+    def test_all_photos_failing_escalates(
+        self,
+        session: Session,
+        make_album: Callable[..., Album],
+        make_photo: Callable[..., Photo],
+    ) -> None:
+        # A systemic failure (every thumbnail fetch fails) must escalate rather than
+        # report a completed stage — see step 41.
+        class AllRaisingThumbnails:
+            def get_thumbnail(self, asset_id: str, *, size: str = "thumbnail") -> bytes:
+                raise RuntimeError("immich unreachable")
+
+        album = make_album(slug="test-album")
+        album.photos = [
+            make_photo(album, immich_asset_id="a1", filename="a1.jpg", selected=True),
+            make_photo(album, immich_asset_id="a2", filename="a2.jpg", selected=True),
+        ]
+        album_id = self._persist(session, album)
+
+        with pytest.raises(StageTotalFailure, match="caption: failed for all 2 attempted"):
+            self._stage(
+                AllRaisingThumbnails(),
+                RecordingCaptioner(),
+                album_id,
+                reuse(session),
+            ).run()
+
+    def test_one_failure_does_not_escalate_when_enhance_already_captioned_the_rest(
+        self,
+        session: Session,
+        make_album: Callable[..., Album],
+        make_photo: Callable[..., Photo],
+    ) -> None:
+        # In the real DAG caption runs after enhance, which already analyzed every
+        # clustered photo — so caption sees them as `skipped` (a success elsewhere),
+        # not a short-circuit. One failing unclustered photo among many enhance-captioned
+        # ones must NOT trip total-failure escalation (the "one bad photo in 3,000"
+        # invariant). Regression for the caption-specific false positive.
+        album = make_album(slug="test-album")
+        album.photos = [
+            make_photo(album, immich_asset_id="done", filename="done.jpg", selected=True),
+            make_photo(album, immich_asset_id="bad", filename="bad.jpg", selected=True),
+        ]
+        album_id = self._persist(session, album)
+        # "done" is already analyzed (as enhance would have left it) -> caption skips it.
+        done = session.scalars(sa_select(Photo).where(Photo.immich_asset_id == "done")).one()
+        self._mark_analyzed(done, "already captioned by enhance")
+        session.flush()
+
+        result = self._stage(
+            RaisingThumbnails(),  # raises only for "bad"
+            RecordingCaptioner(),
+            album_id,
+            reuse(session),
+        ).run()
+
+        assert result == CaptionResult(captioned=0, skipped=1, failed=1)
 
     def test_scoped_to_album(
         self,

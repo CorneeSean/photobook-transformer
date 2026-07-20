@@ -32,6 +32,7 @@ from sqlalchemy import select
 
 from album.db.models import Photo
 from album.db.session import SessionFactory
+from album.flow.stages._progress import ProgressLogger
 from album.flow.stages.base import Stage
 
 _log = logging.getLogger(__name__)
@@ -107,10 +108,17 @@ class QualityStage(Stage[QualityResult]):
         """Score every photo in ``self._album``. Idempotent unless ``force``."""
         result = QualityResult()
         photos = self._session.scalars(select(Photo).where(Photo.album_id == self._album.id))
+        progress = ProgressLogger(_log, f"quality album={self._album.slug}")
         for photo in photos:
             self._score_photo(photo, result, force=self._force)
+            progress.tick()
 
         return result
+
+    def _failure_counts(self, result: QualityResult) -> tuple[int, int]:
+        # attempted = actually scored + failed; already-scored photos are skipped
+        # before any work, so they don't count toward a systemic-failure verdict.
+        return result.failed, result.scored + result.failed
 
     def _score_photo(self, photo: Photo, result: QualityResult, *, force: bool) -> None:
         """Score one photo, updating ``result`` in place. Skips if already scored

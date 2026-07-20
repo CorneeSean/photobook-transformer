@@ -19,6 +19,7 @@ import pytest
 
 from album.analysis.captioner import ClaudeCaptioner, TemplateCaptioner
 from album.cli import main
+from album.flow.stages.base import StageTotalFailure
 from album.ingest import AlbumOutcome, IngestError
 from album.manifest import AlbumSpec, Manifest
 
@@ -409,6 +410,27 @@ class TestBuildManifest:
         captured = capsys.readouterr()
         assert str(Path("data/albums/fine/book/index.html")) in captured.out
         assert "pipeline blew up" in captured.err
+
+    def test_stage_total_failure_is_isolated_per_album(
+        self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        # A systemic stage failure (every attempted photo failed) escalates as a
+        # StageTotalFailure; run_pipelines must isolate it per album so a healthy
+        # sibling still builds, rather than crashing the whole fan-out (step 41 review).
+        self._patch_manifest(monkeypatch, [self._outcome("a", "down"), self._outcome("b", "fine")])
+
+        def _pipeline(**kwargs: object) -> None:
+            if kwargs["album_slug"] == "down":
+                raise StageTotalFailure("quality: failed for all 120 attempted photo(s)")
+
+        monkeypatch.setattr("album.cli.runner.pipeline", _pipeline)
+        _argv(monkeypatch, "./photos", "--manifest")
+
+        main()  # sibling produced a book → exit zero
+
+        captured = capsys.readouterr()
+        assert str(Path("data/albums/fine/book/index.html")) in captured.out
+        assert "failed for all 120 attempted" in captured.err
 
     def test_total_failure_exits_nonzero(
         self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]

@@ -21,6 +21,7 @@ from sqlalchemy.orm import Session
 
 from album.db.models import Album, Photo
 from album.db.session import reuse
+from album.flow.stages.base import StageTotalFailure
 from album.flow.stages.render import RenderResult, RenderStage
 
 
@@ -329,34 +330,41 @@ class TestRenderStage:
         make_album: Callable[..., Album],
         make_photo: Callable[..., Photo],
     ) -> None:
-        class RaisingOriginals:
+        # The fetch raises only for "bad"; a second, succeeding photo keeps this from
+        # being a total failure (that path is covered by test_all_photos_failing_escalates).
+        class RaisingForBad:
+            def __init__(self) -> None:
+                self._ok = FakeOriginals({})
+
             def get_original(self, asset_id: str) -> bytes:
-                raise RuntimeError("immich unreachable")
+                if asset_id == "bad":
+                    raise RuntimeError("immich unreachable")
+                return self._ok.get_original(asset_id)
 
         album = make_album(slug="test-album")
         album.photos = [
             make_photo(
-                album,
-                immich_asset_id="a1",
-                filename="a1.jpg",
-                selected=True,
-                xmp_written=True,
+                album, immich_asset_id="good", filename="good.jpg", selected=True, xmp_written=True
+            ),
+            make_photo(
+                album, immich_asset_id="bad", filename="bad.jpg", selected=True, xmp_written=True
             ),
         ]
         album_id = self._persist(session, album)
-        self._make_xmp(tmp_path, "test-album", "a1.jpg")
+        self._make_xmp(tmp_path, "test-album", "good.jpg")
+        self._make_xmp(tmp_path, "test-album", "bad.jpg")
 
         result = RenderStage(
-            RaisingOriginals(),
+            RaisingForBad(),
             FakeRenderer(),
             album_id,
             reuse(session),
             data_root=tmp_path,
         ).run()
 
-        assert result == RenderResult(failed=1)
-        photo = session.scalars(select(Photo)).one()
-        assert photo.rendered_path is None
+        assert result == RenderResult(rendered=1, failed=1)
+        bad = session.scalars(select(Photo).where(Photo.immich_asset_id == "bad")).one()
+        assert bad.rendered_path is None
 
     def test_fails_photo_when_renderer_reports_success_but_no_output_written(
         self,
@@ -367,35 +375,39 @@ class TestRenderStage:
     ) -> None:
         # A Renderer that doesn't raise but also doesn't produce output_path must
         # not be treated as a successful render — a crashed/killed darktable-cli
-        # process could in principle exit 0 without writing the file.
-        class SilentNoOpRenderer:
+        # process could in principle exit 0 without writing the file. It's silent only
+        # for "bad"; the succeeding "good" photo keeps this from being a total failure.
+        class SilentForBadRenderer:
             def render(self, input_path: Path, xmp_path: Path, output_path: Path) -> None:
-                pass  # deliberately doesn't write output_path
+                if input_path.name == "bad.jpg":
+                    return  # deliberately doesn't write output_path
+                output_path.parent.mkdir(parents=True, exist_ok=True)
+                output_path.write_bytes(b"rendered-jpeg-bytes")
 
         album = make_album(slug="test-album")
         album.photos = [
             make_photo(
-                album,
-                immich_asset_id="a1",
-                filename="a1.jpg",
-                selected=True,
-                xmp_written=True,
+                album, immich_asset_id="good", filename="good.jpg", selected=True, xmp_written=True
+            ),
+            make_photo(
+                album, immich_asset_id="bad", filename="bad.jpg", selected=True, xmp_written=True
             ),
         ]
         album_id = self._persist(session, album)
-        self._make_xmp(tmp_path, "test-album", "a1.jpg")
+        self._make_xmp(tmp_path, "test-album", "good.jpg")
+        self._make_xmp(tmp_path, "test-album", "bad.jpg")
 
         result = RenderStage(
             FakeOriginals({}),
-            SilentNoOpRenderer(),
+            SilentForBadRenderer(),
             album_id,
             reuse(session),
             data_root=tmp_path,
         ).run()
 
-        assert result == RenderResult(failed=1)
-        photo = session.scalars(select(Photo)).one()
-        assert photo.rendered_path is None
+        assert result == RenderResult(rendered=1, failed=1)
+        bad = session.scalars(select(Photo).where(Photo.immich_asset_id == "bad")).one()
+        assert bad.rendered_path is None
 
     def test_deletes_staged_original_after_successful_render(
         self,
@@ -463,31 +475,64 @@ class TestRenderStage:
         make_photo: Callable[..., Photo],
     ) -> None:
         # A failed render's staged original is left alone so a retry doesn't need
-        # to re-fetch it.
+        # to re-fetch it. A second, succeeding photo keeps this from being a total
+        # failure (covered by test_all_photos_failing_escalates).
         album = make_album(slug="test-album")
         album.photos = [
             make_photo(
-                album,
-                immich_asset_id="a1",
-                filename="a1.jpg",
-                selected=True,
-                xmp_written=True,
+                album, immich_asset_id="good", filename="good.jpg", selected=True, xmp_written=True
+            ),
+            make_photo(
+                album, immich_asset_id="bad", filename="bad.jpg", selected=True, xmp_written=True
             ),
         ]
         album_id = self._persist(session, album)
-        self._make_xmp(tmp_path, "test-album", "a1.jpg")
-        input_path = tmp_path / "test-album" / "originals" / "a1.jpg"
-        renderer = FakeRenderer(raise_for={input_path})
+        self._make_xmp(tmp_path, "test-album", "good.jpg")
+        self._make_xmp(tmp_path, "test-album", "bad.jpg")
+        bad_input = tmp_path / "test-album" / "originals" / "bad.jpg"
+        renderer = FakeRenderer(raise_for={bad_input})
 
         RenderStage(
-            FakeOriginals({"a1": b"raw-bytes"}),
+            FakeOriginals({"good": b"raw-bytes", "bad": b"raw-bytes"}),
             renderer,
             album_id,
             reuse(session),
             data_root=tmp_path,
         ).run()
 
-        assert input_path.exists()
+        assert bad_input.exists()
+
+    def test_all_photos_failing_escalates(
+        self,
+        session: Session,
+        tmp_path: Path,
+        make_album: Callable[..., Album],
+        make_photo: Callable[..., Photo],
+    ) -> None:
+        # A systemic failure (darktable-cli missing / every render fails) must
+        # escalate rather than report a completed stage — see step 41.
+        album = make_album(slug="test-album")
+        album.photos = [
+            make_photo(
+                album, immich_asset_id="a1", filename="a1.jpg", selected=True, xmp_written=True
+            ),
+            make_photo(
+                album, immich_asset_id="a2", filename="a2.jpg", selected=True, xmp_written=True
+            ),
+        ]
+        album_id = self._persist(session, album)
+        self._make_xmp(tmp_path, "test-album", "a1.jpg")
+        self._make_xmp(tmp_path, "test-album", "a2.jpg")
+        inputs = {tmp_path / "test-album" / "originals" / n for n in ("a1.jpg", "a2.jpg")}
+
+        with pytest.raises(StageTotalFailure, match="render: failed for all 2 attempted"):
+            RenderStage(
+                FakeOriginals({}),
+                FakeRenderer(raise_for=inputs),
+                album_id,
+                reuse(session),
+                data_root=tmp_path,
+            ).run()
 
     def test_scoped_to_album(
         self,

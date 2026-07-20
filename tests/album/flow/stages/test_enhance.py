@@ -28,7 +28,8 @@ from sqlalchemy.orm import Session
 from album.analysis.tone import ToneParams
 from album.db.models import Album, Photo
 from album.db.session import SessionFactory, reuse
-from album.flow.photo_analyzer import PhotoAnalyzer
+from album.flow.photo_analyzer import PhotoAnalyzer, ThumbnailSource
+from album.flow.stages.base import StageTotalFailure
 from album.flow.stages.enhance import (
     _NAMESPACES,  # pyright: ignore[reportPrivateUsage]
     EnhanceResult,
@@ -179,7 +180,7 @@ class TestEnhanceStage:
 
     def _stage(
         self,
-        thumbnails: FakeThumbnails,
+        thumbnails: ThumbnailSource,
         tmp_path: Path,
         album_id: int,
         session_factory: SessionFactory,
@@ -359,6 +360,31 @@ class TestEnhanceStage:
         photos = {p.immich_asset_id: p for p in session.scalars(sa_select(Photo))}
         assert photos["good"].xmp_written is True
         assert photos["bad"].xmp_written is False
+
+    def test_all_photos_failing_escalates(
+        self,
+        session: Session,
+        tmp_path: Path,
+        make_album: Callable[..., Album],
+        make_photo: Callable[..., Photo],
+    ) -> None:
+        # A systemic failure (every thumbnail fetch fails) must escalate rather than
+        # report a completed stage — see step 41.
+        album = make_album(slug="test-album")
+        album.photos = [
+            make_photo(album, immich_asset_id="a1", filename="a1.jpg", selected=True, scene_id=1),
+            make_photo(album, immich_asset_id="a2", filename="a2.jpg", selected=True, scene_id=1),
+        ]
+        album_id = self._persist(session, album)
+
+        class RaisingThumbnails:
+            def get_thumbnail(self, asset_id: str, *, size: str = "thumbnail") -> bytes:
+                raise RuntimeError("immich unreachable")
+
+        # The shared analysis fetches a thumbnail for every photo, so a total outage
+        # fails all of them (including the scene reference).
+        with pytest.raises(StageTotalFailure, match="enhance: failed for all 2 attempted"):
+            self._stage(RaisingThumbnails(), tmp_path, album_id, reuse(session)).run()
 
     def test_scoped_to_album(
         self,

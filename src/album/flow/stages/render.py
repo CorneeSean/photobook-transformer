@@ -54,6 +54,7 @@ from typing import ClassVar, Protocol, runtime_checkable
 from album.db.models import Photo
 from album.db.queries import selected_photos
 from album.db.session import SessionFactory
+from album.flow.stages._progress import ProgressLogger
 from album.flow.stages.base import Stage
 
 _log = logging.getLogger(__name__)
@@ -154,10 +155,17 @@ class RenderStage(Stage[RenderResult]):
         photos = selected_photos(album.id, self._session)
 
         result = RenderResult()
+        progress = ProgressLogger(_log, f"render album={album.slug}", total=len(photos))
         for photo in photos:
             self._render_or_skip_photo(photo, album.slug, result, force=self._force)
+            progress.tick()
 
         return result
+
+    def _failure_counts(self, result: RenderResult) -> tuple[int, int]:
+        # attempted = rendered + failed; skipped (already rendered) and not_ready
+        # (no XMP sidecar yet) photos are short-circuited before any render is tried.
+        return result.failed, result.rendered + result.failed
 
     def _render_or_skip_photo(
         self,
