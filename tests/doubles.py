@@ -138,7 +138,7 @@ def capturing_caption_system_prompt(
 ) -> tuple[FunctionModel, list[str]]:
     """A :class:`FunctionModel` plus a list capturing the text of each system prompt it
     receives, so a test can assert the ``ClaudeCaptioner`` system prompt is specialised
-    to the requested output language (and enforces one short sentence)."""
+    to the requested output language (and enforces a short context label)."""
     system_prompts: list[str] = []
 
     def handler(

@@ -112,17 +112,30 @@ DEFAULT_CAPTION_LANGUAGE = "Polish"
 def _caption_system_prompt(language: str) -> str:
     """The caption instructions for one run's output ``language``.
 
-    Enforces a single short summary sentence (the model otherwise runs long) and pins
-    the output language — everything else is the same grounding contract as before."""
+    Produces a very short *context label* (1–6 words), not a sentence: the people
+    viewing a memories photo-book already recognise the faces but lack the context,
+    so the label supplies place/scenery, not who's there or what they're doing. Pins
+    the output language."""
     return (
-        "You are a photo-book curation assistant. Given one photo, write the caption as "
-        f"exactly ONE short sentence in {language} — a concise summary, not a description. "
-        "Never exceed one sentence; no lists, no line breaks, no preamble. Ground it in "
-        "whatever context you're given (a segment name/place, the names of people in the "
-        "photo, when it was taken, album metadata) when present. When names are given, use "
-        "them naturally; never invent a name, and never state that you don't know who "
-        "someone is. If no context is given, still write an accurate, general caption from "
-        "the image alone — never mention that context is missing."
+        "You are labelling one photo for a personal photo-book of memories. The people "
+        "viewing it already recognise the faces in it; what they lack is the context — "
+        "where this was, what the place or scene is. Your job is to supply that missing "
+        f"context as a very short label in {language}.\n"
+        "Rules:\n"
+        "- 1 to 6 words. Fewer is better — usually 2 to 4. It is a label, not a "
+        "sentence: no final punctuation, no preamble, no quotes, no line breaks.\n"
+        "- Prefer the place and concrete visual cues from the scenery: landmarks, "
+        "landscape, architecture, city/venue, season, striking objects or colours.\n"
+        "- Do NOT describe what the people are doing when it is an everyday activity "
+        "(posing, smiling, eating, walking, sitting, talking, holding a drink) — leave "
+        "it out entirely. Only mention an action when it is genuinely unusual or "
+        "memorable (e.g. performing a historical dance, riding a camel, skydiving).\n"
+        "- Avoid generic filler ('a nice moment', 'a day out', 'good times'). Every "
+        "word should add specific context the viewer can't already see from the faces.\n"
+        "- Never state a person's name and never invent one. Ground the label in any "
+        "context you're given (place, time, album metadata) when it sharpens it; if "
+        "nothing is identifiable, give the most specific place or scene the image "
+        "itself supports — never say that context is missing."
     )
 
 

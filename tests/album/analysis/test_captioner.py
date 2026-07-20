@@ -161,11 +161,12 @@ class TestClaudeCaptioner:
         assert any("French" in prompt for prompt in system_prompts)
         assert not any("Polish" in prompt for prompt in system_prompts)
 
-    def test_prompt_enforces_one_short_sentence(self) -> None:
-        # The rich caption used to run long; the prompt now pins a single short sentence.
+    def test_prompt_enforces_a_short_context_label(self) -> None:
+        # The rich caption used to run long, then to a sentence; the prompt now pins a
+        # very short context label (1–6 words) focused on place/scenery, not people.
         model, system_prompts = capturing_caption_system_prompt()
         ClaudeCaptioner(model=model).caption(_IMAGE, PhotoContext())
-        assert any("ONE short sentence" in prompt for prompt in system_prompts)
+        assert any("1 to 6 words" in prompt for prompt in system_prompts)
 
     def test_build_captioner_threads_language(self) -> None:
         # The --caption-language flag flows through build_captioner into the prompt.
