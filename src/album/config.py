@@ -130,6 +130,12 @@ class Settings(BaseSettings):
     # this module to avoid importing the captioner registry (an import cycle).
     captioner: str = "template"
 
+    # Output language for prose captions (the "claude" captioner). Flat like
+    # ``captioner`` (a single value, env ``CAPTION_LANGUAGE``); a ``--caption-language``
+    # CLI flag overrides it per run. The offline template captioner composes from the
+    # album's own metadata and ignores this.
+    caption_language: str = "Polish"
+
     immich: ImmichSettings = ImmichSettings()
     lulu: LuluSettings = LuluSettings()
     quality: QualitySettings = QualitySettings()

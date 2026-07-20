@@ -13,7 +13,13 @@ from datetime import datetime
 from pathlib import Path
 
 from pydantic_ai import BinaryContent
-from pydantic_ai.messages import ModelMessage, ModelResponse, TextPart, UserPromptPart
+from pydantic_ai.messages import (
+    ModelMessage,
+    ModelResponse,
+    SystemPromptPart,
+    TextPart,
+    UserPromptPart,
+)
 from pydantic_ai.models.function import AgentInfo, FunctionModel
 from pydantic_ai.models.test import TestModel
 
@@ -125,6 +131,27 @@ def capturing_caption_model(
         return ModelResponse(parts=[TextPart(content=caption)])
 
     return FunctionModel(handler), prompts
+
+
+def capturing_caption_system_prompt(
+    caption: str = "A candid moment.",
+) -> tuple[FunctionModel, list[str]]:
+    """A :class:`FunctionModel` plus a list capturing the text of each system prompt it
+    receives, so a test can assert the ``ClaudeCaptioner`` system prompt is specialised
+    to the requested output language (and enforces one short sentence)."""
+    system_prompts: list[str] = []
+
+    def handler(
+        messages: list[ModelMessage],
+        info: AgentInfo,
+    ) -> ModelResponse:  # pragma: no cover - exercised via FunctionModel
+        for message in messages:
+            for part in message.parts:
+                if isinstance(part, SystemPromptPart):
+                    system_prompts.append(part.content)
+        return ModelResponse(parts=[TextPart(content=caption)])
+
+    return FunctionModel(handler), system_prompts
 
 
 def capturing_caption_media_types(

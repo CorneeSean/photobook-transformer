@@ -28,6 +28,7 @@ from tests.doubles import (
     caption_test_model,
     capturing_caption_media_types,
     capturing_caption_model,
+    capturing_caption_system_prompt,
 )
 
 # Minimal valid magic-byte prefixes — enough for the sniffer, which reads only the header.
@@ -145,6 +146,35 @@ class TestClaudeCaptioner:
         model, media_types = capturing_caption_media_types()
         ClaudeCaptioner(model=model).caption(image, PhotoContext())
         assert media_types == [expected_type]
+
+    def test_defaults_to_polish(self) -> None:
+        # By default the rich caption is written in Polish, and the language is pinned
+        # in the system prompt the model actually receives.
+        model, system_prompts = capturing_caption_system_prompt()
+        ClaudeCaptioner(model=model).caption(_IMAGE, PhotoContext())
+        assert any("Polish" in prompt for prompt in system_prompts)
+
+    def test_language_is_configurable(self) -> None:
+        # The output language is an argument; passing it reaches the system prompt.
+        model, system_prompts = capturing_caption_system_prompt()
+        ClaudeCaptioner(model=model, language="French").caption(_IMAGE, PhotoContext())
+        assert any("French" in prompt for prompt in system_prompts)
+        assert not any("Polish" in prompt for prompt in system_prompts)
+
+    def test_prompt_enforces_one_short_sentence(self) -> None:
+        # The rich caption used to run long; the prompt now pins a single short sentence.
+        model, system_prompts = capturing_caption_system_prompt()
+        ClaudeCaptioner(model=model).caption(_IMAGE, PhotoContext())
+        assert any("ONE short sentence" in prompt for prompt in system_prompts)
+
+    def test_build_captioner_threads_language(self) -> None:
+        # The --caption-language flag flows through build_captioner into the prompt.
+        captioner = build_captioner("claude", language="Spanish")
+        assert isinstance(captioner, ClaudeCaptioner)
+        model, system_prompts = capturing_caption_system_prompt()
+        captioner._model = model  # swap in a double for the assertion (no API key)
+        captioner.caption(_IMAGE, PhotoContext())
+        assert any("Spanish" in prompt for prompt in system_prompts)
 
     def test_blank_model_output_raises(self) -> None:
         # The Captioner contract is a non-empty caption (the retired AnalysisResult

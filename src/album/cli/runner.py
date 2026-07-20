@@ -103,7 +103,7 @@ class BuildRunner:
             # Resolve the captioner up front, inside the guard, so a misconfigured
             # CAPTIONER env fails cleanly *before* any ingest — not with a raw traceback
             # after N albums are already in Immich.
-            captioner = _resolve_captioner(self.args.captioner)
+            captioner = _resolve_captioner(self.args.captioner, self.args.caption_language)
             prepared = select_source(self.args, self.parser).prepare()
         except (FileNotFoundError, ValueError, IngestError) as exc:
             # Expected, user-fixable errors get a clean message + non-zero exit; anything
@@ -152,10 +152,11 @@ def run_pipelines(
     return books, failures
 
 
-def _resolve_captioner(name: str | None) -> Captioner:
+def _resolve_captioner(name: str | None, language: str | None) -> Captioner:
     """The CLI-selected captioner: the ``--captioner`` flag if given, else the
-    ``CAPTIONER`` env default. ``build_captioner`` validates either."""
-    return build_captioner(name or get_settings().captioner)
+    ``CAPTIONER`` env default. ``language`` is the ``--caption-language`` flag (else
+    the ``CAPTION_LANGUAGE`` env default). ``build_captioner`` validates the name."""
+    return build_captioner(name or get_settings().captioner, language=language)
 
 
 def _book_path(slug: str) -> Path:

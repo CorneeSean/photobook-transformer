@@ -103,6 +103,11 @@ def _add_build_parser(subparsers: argparse._SubParsersAction[argparse.ArgumentPa
         help="Caption source (default: the CAPTIONER env var, else 'template')",
     )
     parser.add_argument(
+        "--caption-language",
+        metavar="LANGUAGE",
+        help="Output language for prose captions (default: CAPTION_LANGUAGE env, else 'Polish')",
+    )
+    parser.add_argument(
         "--lead-face",
         dest="lead_faces",
         metavar="IMAGE",

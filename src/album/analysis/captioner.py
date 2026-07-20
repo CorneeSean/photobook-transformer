@@ -27,6 +27,7 @@ from pydantic_ai.models import Model
 
 from album.agents._model import default_model
 from album.analysis.context import PhotoContext, format_context, format_when
+from album.config import get_settings
 
 _GENERIC_CAPTION = "A moment worth remembering."
 
@@ -105,16 +106,24 @@ def _fallback(context: PhotoContext) -> str:
     return _GENERIC_CAPTION
 
 
-_CAPTION_SYSTEM_PROMPT = """\
-You are a photo-book curation assistant. Given one photo, write a short, natural
-caption. Ground it in whatever context you're given (a segment name/place, the
-names of people in the photo, when it was taken, album metadata) when present. When
-names are given, use them naturally; never invent a name, and never state that you
-don't know who someone is. If no context is given, still write an accurate, general
-caption from the image alone — never mention that context is missing.
-"""
+DEFAULT_CAPTION_LANGUAGE = "Polish"
 
-_caption_agent = Agent(output_type=str, system_prompt=_CAPTION_SYSTEM_PROMPT)
+
+def _caption_system_prompt(language: str) -> str:
+    """The caption instructions for one run's output ``language``.
+
+    Enforces a single short summary sentence (the model otherwise runs long) and pins
+    the output language — everything else is the same grounding contract as before."""
+    return (
+        "You are a photo-book curation assistant. Given one photo, write the caption as "
+        f"exactly ONE short sentence in {language} — a concise summary, not a description. "
+        "Never exceed one sentence; no lists, no line breaks, no preamble. Ground it in "
+        "whatever context you're given (a segment name/place, the names of people in the "
+        "photo, when it was taken, album metadata) when present. When names are given, use "
+        "them naturally; never invent a name, and never state that you don't know who "
+        "someone is. If no context is given, still write an accurate, general caption from "
+        "the image alone — never mention that context is missing."
+    )
 
 
 class ClaudeCaptioner:
@@ -122,22 +131,33 @@ class ClaudeCaptioner:
 
     ``model`` defaults to real Claude (built inside ``default_model`` from
     ``config.py``); tests inject PydanticAI's ``TestModel``/``FunctionModel``.
+    ``language`` selects the output language of the caption (default Polish); the
+    system prompt — and thus the agent — is specialised to it per instance.
     """
 
-    def __init__(self, *, model: Model | None = None) -> None:
+    def __init__(
+        self,
+        *,
+        model: Model | None = None,
+        language: str = DEFAULT_CAPTION_LANGUAGE,
+    ) -> None:
         self._model = model
+        self._agent = Agent(output_type=str, system_prompt=_caption_system_prompt(language))
 
     @classmethod
-    def from_settings(cls) -> ClaudeCaptioner:
+    def from_settings(cls, *, language: str | None = None) -> ClaudeCaptioner:
         """The production captioner. Building it never requires ``ANTHROPIC_API_KEY``
         — only a real ``caption`` call does (the key is read lazily by
-        ``default_model``), so the registry can construct it unconditionally."""
-        return cls()
+        ``default_model``), so the registry can construct it unconditionally.
+
+        ``language`` (the ``--caption-language`` flag) overrides the ``CAPTION_LANGUAGE``
+        env default when given."""
+        return cls(language=language or get_settings().caption_language)
 
     def caption(self, image: bytes, context: PhotoContext) -> str:
         photo = BinaryContent(data=image, media_type=_sniff_media_type(image))
         prompt = [format_context(context), photo]
-        result = _caption_agent.run_sync(prompt, model=self._model or default_model())
+        result = self._agent.run_sync(prompt, model=self._model or default_model())
         caption = result.output.strip()
         if not caption:
             # Preserve the Captioner "non-empty" contract the retired AnalysisResult
@@ -147,22 +167,25 @@ class ClaudeCaptioner:
         return caption
 
 
-# name -> zero-arg factory for per-run selection (CAPTIONER env / --captioner flag).
-# A local VLM would slot in as one more entry here — no other code changes.
-_CAPTIONERS: dict[str, Callable[[], Captioner]] = {
-    "template": TemplateCaptioner,
+# name -> language-aware factory for per-run selection (CAPTIONER env / --captioner
+# flag). ``language`` is the output language of the caption; the template captioner
+# composes from the album's own metadata and ignores it. A local VLM would slot in as
+# one more entry here — no other code changes.
+_CAPTIONERS: dict[str, Callable[..., Captioner]] = {
+    "template": lambda *, language=None: TemplateCaptioner(),
     "claude": ClaudeCaptioner.from_settings,
 }
 
 
-def build_captioner(name: str) -> Captioner:
+def build_captioner(name: str, *, language: str | None = None) -> Captioner:
     """Resolve a captioner name to a concrete :class:`Captioner`, or raise a clear
-    error naming the valid choices."""
+    error naming the valid choices. ``language`` (the ``--caption-language`` flag)
+    overrides the ``CAPTION_LANGUAGE`` env default for captioners that emit prose."""
     try:
         factory = _CAPTIONERS[name]
     except KeyError:
         raise ValueError(f"unknown captioner {name!r}; choose from {captioner_names()}") from None
-    return factory()
+    return factory(language=language)
 
 
 def captioner_names() -> list[str]:
