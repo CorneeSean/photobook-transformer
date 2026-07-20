@@ -155,10 +155,11 @@ class RenderStage(Stage[RenderResult]):
         photos = selected_photos(album.id, self._session)
 
         result = RenderResult()
-        progress = ProgressLogger(_log, f"render album={album.slug}", total=len(photos))
-        for photo in photos:
-            self._render_or_skip_photo(photo, album.slug, result, force=self._force)
-            progress.tick()
+        label = f"render album={album.slug}"
+        with ProgressLogger(_log, label, total=len(photos)) as progress:
+            for photo in photos:
+                self._render_or_skip_photo(photo, album.slug, result, force=self._force)
+                progress.tick()
 
         return result
 

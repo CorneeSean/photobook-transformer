@@ -345,11 +345,12 @@ class EnhanceStage(Stage[EnhanceResult]):
         # Only clustered photos are ticked (below); unclustered ones are flagged above
         # and never processed here, so the heartbeat total counts just the clustered set.
         clustered_total = sum(len(scene) for scene in by_scene.values())
-        progress = ProgressLogger(_log, f"enhance album={album.slug}", total=clustered_total)
-        for scene_id in sorted(by_scene):
-            self._enhance_scene(
-                by_scene[scene_id], session, album.slug, self._force, result, progress
-            )
+        label = f"enhance album={album.slug}"
+        with ProgressLogger(_log, label, total=clustered_total) as progress:
+            for scene_id in sorted(by_scene):
+                self._enhance_scene(
+                    by_scene[scene_id], session, album.slug, self._force, result, progress
+                )
 
         return result
 

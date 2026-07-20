@@ -107,11 +107,12 @@ class QualityStage(Stage[QualityResult]):
     def _process(self) -> QualityResult:
         """Score every photo in ``self._album``. Idempotent unless ``force``."""
         result = QualityResult()
-        photos = self._session.scalars(select(Photo).where(Photo.album_id == self._album.id))
-        progress = ProgressLogger(_log, f"quality album={self._album.slug}")
-        for photo in photos:
-            self._score_photo(photo, result, force=self._force)
-            progress.tick()
+        photos = list(self._session.scalars(select(Photo).where(Photo.album_id == self._album.id)))
+        label = f"quality album={self._album.slug}"
+        with ProgressLogger(_log, label, total=len(photos)) as progress:
+            for photo in photos:
+                self._score_photo(photo, result, force=self._force)
+                progress.tick()
 
         return result
 

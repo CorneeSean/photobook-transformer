@@ -72,3 +72,45 @@ class TestProgressLogger:
             progress.tick()  # 10s since last emit -> emit #2
 
         assert len(caplog.records) == 2
+
+    def test_brackets_the_loop_with_markers_and_touchpoints(
+        self, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        clock = _FakeClock()
+        with caplog.at_level(logging.INFO, logger="test.progress"):
+            # A loop that finishes well inside one throttle window: no `tick` ever
+            # emits, but the markers and the 0/total, total/total touchpoints must.
+            with ProgressLogger(
+                _log, "render album=demo", total=3, interval_s=30.0, clock=clock
+            ) as progress:
+                for _ in range(3):
+                    progress.tick()
+
+        messages = [r.message for r in caplog.records]
+        assert messages == [
+            "render album=demo: --- LOG STARTED ---",
+            "render album=demo: 0/3 processed",
+            "render album=demo: 3/3 processed",
+            "render album=demo: --- LOG FINISHED ---",
+        ]
+
+    def test_emits_finished_marker_even_when_the_loop_raises(
+        self, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        clock = _FakeClock()
+        with caplog.at_level(logging.INFO, logger="test.progress"):
+            with pytest.raises(RuntimeError, match="boom"):
+                with ProgressLogger(
+                    _log, "caption album=demo", total=5, interval_s=30.0, clock=clock
+                ) as progress:
+                    progress.tick()
+                    raise RuntimeError("boom")
+
+        messages = [r.message for r in caplog.records]
+        # Start marker + 0/5 on entry, then 1/5 + finished marker on the raising exit.
+        assert messages == [
+            "caption album=demo: --- LOG STARTED ---",
+            "caption album=demo: 0/5 processed",
+            "caption album=demo: 1/5 processed",
+            "caption album=demo: --- LOG FINISHED ---",
+        ]

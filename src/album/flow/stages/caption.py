@@ -87,10 +87,11 @@ class CaptionStage(Stage[CaptionResult]):
         """
         result = CaptionResult()
         photos = selected_photos(self._album.id, self._session)
-        progress = ProgressLogger(_log, f"caption album={self._album.slug}", total=len(photos))
-        for photo in photos:
-            self._caption_photo(photo, self._session, self._force, result)
-            progress.tick()
+        label = f"caption album={self._album.slug}"
+        with ProgressLogger(_log, label, total=len(photos)) as progress:
+            for photo in photos:
+                self._caption_photo(photo, self._session, self._force, result)
+                progress.tick()
 
         return result
 

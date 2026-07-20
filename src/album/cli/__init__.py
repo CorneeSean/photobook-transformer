@@ -24,13 +24,36 @@ ingestion or pipeline logic lives here.
 
 from __future__ import annotations
 
+import logging
+import os
+
 from album.cli.parser import build_parser
 from album.cli.runner import BuildRunner
 
 __all__ = ["main"]
 
 
+def _configure_diagnostics_logging() -> None:
+    """Let the app's diagnostic logs (stage start/done, the per-photo
+    ``ProgressLogger`` heartbeat) reach Prefect's console handler.
+
+    These come from the ``album.flow.stages.*`` stdlib loggers. Prefect installs a
+    ``PrefectConsoleHandler`` on the *root* logger but leaves root at WARNING, and
+    ``album.*`` sets no level of its own — so its effective level inherits WARNING
+    and every INFO record was filtered out before reaching that handler. Nothing
+    showed in a real run.
+
+    Fix: lower the ``album`` logger to INFO (``LOG_LEVEL`` overrides). The records
+    then pass and propagate to Prefect's root handler, which colorizes by level and
+    already owns the terminal — so app diagnostics get Prefect's exact colored
+    format for free, with no second handler and no duplicate line. Idempotent (a
+    plain ``setLevel``), so repeated ``main()`` calls are harmless.
+    """
+    logging.getLogger("album").setLevel(os.environ.get("LOG_LEVEL", "INFO").upper())
+
+
 def main() -> None:
+    _configure_diagnostics_logging()
     parser = build_parser()
     args = parser.parse_args()
     BuildRunner(args, args.parser).run()
