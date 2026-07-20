@@ -26,6 +26,7 @@ from album.flow.stages.select import SelectResult, SelectStage
 # Unit-ish vectors chosen so cosine similarity is easy to reason about:
 _A = [1.0, 0.0, 0.0]
 _A_NEAR = [0.99, 0.14, 0.0]  # cosine sim to _A ~0.99 — a near-duplicate
+_A_MID = [0.85, 0.5267827, 0.0]  # unit vector, cosine sim to _A == 0.85
 _B = [0.0, 1.0, 0.0]  # orthogonal to _A — cosine sim 0.0
 _C = [0.0, 0.0, 1.0]  # orthogonal to both — cosine sim 0.0
 
@@ -132,6 +133,54 @@ class TestSelect:
         assert photos["best"].selected is True
         assert photos["near_dup"].selected is False
         assert result.selected == 1
+
+    def test_album_similarity_threshold_overrides_stage_default(
+        self,
+        session: Session,
+        make_album: Callable[..., Album],
+        photo: Callable[..., Photo],
+    ) -> None:
+        # `mid` sits at exactly 0.85 cosine to `best` — between the album's 0.82
+        # cutoff and the stage's 0.9 default. Under the default it would survive
+        # (0.85 < 0.9); the album tightening to 0.82 makes it a near-dup (0.85 >
+        # 0.82) and drops it. So the outcome pins that the album's value, not the
+        # constructor default (left at 0.9), is the cutoff in force.
+        album = make_album(immich_album_id="immich-abc", similarity_threshold=0.82)
+        best = photo(album, "best", scene_id=1, aesthetic_score=0.9, clip_embedding=_A)
+        mid = photo(album, "mid", scene_id=1, aesthetic_score=0.8, clip_embedding=_A_MID)
+        album.photos = [best, mid]
+        album_id = self._persist(session, album)
+
+        # Constructor threshold left at its 0.9 default — the album's 0.82 must win.
+        result = SelectStage(StubSimilarity(), album_id, reuse(session)).run()
+
+        photos = self._by_asset(session)
+        assert photos["best"].selected is True
+        assert photos["mid"].selected is False  # dropped only because the album tightened
+        assert result.selected == 1
+
+    def test_absent_album_threshold_falls_back_to_stage_default(
+        self,
+        session: Session,
+        make_album: Callable[..., Album],
+        photo: Callable[..., Photo],
+    ) -> None:
+        # Same 0.85-similar pair, but the album leaves similarity_threshold unset
+        # (NULL). The stage default (0.9) then governs and 0.85 < 0.9, so `mid`
+        # survives — the mirror of the override test, proving the NULL fallback.
+        album = make_album(immich_album_id="immich-abc")
+        assert album.similarity_threshold is None
+        best = photo(album, "best", scene_id=1, aesthetic_score=0.9, clip_embedding=_A)
+        mid = photo(album, "mid", scene_id=1, aesthetic_score=0.8, clip_embedding=_A_MID)
+        album.photos = [best, mid]
+        album_id = self._persist(session, album)
+
+        result = SelectStage(StubSimilarity(), album_id, reuse(session)).run()
+
+        photos = self._by_asset(session)
+        assert photos["best"].selected is True
+        assert photos["mid"].selected is True
+        assert result.selected == 2
 
     def test_immich_flagged_duplicates_skipped(
         self,

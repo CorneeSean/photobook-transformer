@@ -9,7 +9,10 @@ unless:
 - it's an Immich-flagged duplicate (``duplicate_group_id``) of an already-picked
   photo in the same scene, or
 - its CLIP cosine similarity to any already-picked photo in the scene exceeds
-  ``threshold`` (near-duplicate).
+  the active near-duplicate cutoff. That cutoff is the album's own
+  ``Album.similarity_threshold`` (from ``album.yml``) when set, else the stage's
+  ``threshold`` default — so a dense burst/session album can tighten dedup
+  without a code change (see ``_active_threshold``).
 
 **People-awareness** (Immich faces, step 17; enrichment playbook step 18) adds
 three additive, opt-in behaviors that all reduce to today's MMR when a scene has
@@ -279,7 +282,15 @@ class SelectStage(Stage[SelectResult]):
             candidate.clip_embedding,
             [p.id for p in against],
         )
-        return max_sim > self._threshold
+        return max_sim > self._active_threshold
+
+    @property
+    def _active_threshold(self) -> float:
+        """The near-duplicate cutoff in force: the album's own
+        ``similarity_threshold`` when set, else the stage default. Lets a dense
+        burst/session album tighten dedup via ``album.yml`` without a code change."""
+        album_threshold = self._album.similarity_threshold
+        return album_threshold if album_threshold is not None else self._threshold
 
     @staticmethod
     def _people_in(photos: list[Photo]) -> set[str]:

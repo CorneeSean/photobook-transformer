@@ -151,6 +151,56 @@ class TestSelectAgainstRealPgvector:
         assert rerun == result
         assert {p.immich_asset_id for p in album.photos if p.selected} == {"nd-best", "nd-distinct"}
 
+    def test_album_similarity_threshold_honored_by_real_cosine_query(
+        self,
+        migrated_session: Session,
+        make_album: Callable[..., Album],
+        make_photo: Callable[..., Photo],
+    ) -> None:
+        # `mid` sits at exactly 0.85 cosine to `best` — between the album's 0.82
+        # cutoff and the 0.9 stage default. The album carries
+        # similarity_threshold=0.82 and the SelectStage constructor `threshold` is
+        # left at its 0.9 default, so a *drop* here can only happen if the REAL
+        # pgvector cosine query is compared against the album's value, not the
+        # constructor default (0.9 would keep 0.85). This is the real-embedding
+        # counterpart to test_select.py's stubbed override test.
+        album = make_album(
+            slug="int-thr",
+            immich_album_id="immich-int-thr",
+            similarity_threshold=0.82,
+        )
+        best = make_photo(
+            album,
+            immich_asset_id="thr-best",
+            filename="best.jpg",
+            scene_id=1,
+            aesthetic_score=0.9,
+            clip_embedding=_vector((0, 1.0)),
+        )
+        mid = make_photo(
+            album,
+            immich_asset_id="thr-mid",
+            filename="mid.jpg",
+            scene_id=1,
+            aesthetic_score=0.8,
+            clip_embedding=_vector((0, 0.85), (1, 0.5267827)),  # cosine 0.85 to best
+        )
+        album.photos = [best, mid]
+        migrated_session.add(album)
+        migrated_session.commit()
+
+        # Constructor threshold left at its 0.9 default — the album's 0.82 must win.
+        result = SelectStage(
+            PgVectorSimilarity(),
+            album.id,
+            reuse(migrated_session),
+        ).run()
+
+        photos = self._by_asset(album)
+        assert photos["thr-best"].selected is True
+        assert photos["thr-mid"].selected is False  # 0.85 > 0.82 album cutoff
+        assert result.selected == 1
+
     def test_lead_coverage_against_real_query_and_person_ids_json(
         self,
         migrated_session: Session,

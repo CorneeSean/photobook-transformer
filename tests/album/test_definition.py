@@ -70,6 +70,30 @@ class TestAlbumDefinition:
         with pytest.raises(ValidationError, match="does not exist"):
             AlbumDefinition().load(FIXTURES / "dst_gap.yml")
 
+    def test_similarity_threshold_is_parsed_onto_the_album(self, tmp_path: Path) -> None:
+        yml = tmp_path / "album.yml"
+        yml.write_text(
+            "slug: sesja\ntitle: Sesja\nimmich_album_id: abc\nsimilarity_threshold: 0.82\n",
+        )
+
+        album = AlbumDefinition().load(yml)
+
+        assert album.similarity_threshold == 0.82
+
+    def test_absent_similarity_threshold_defaults_to_none(self) -> None:
+        # A segment-less album omits the field entirely — it must load as NULL so
+        # `select` falls back to its stage default (genericity: the knob is opt-in).
+        album = AlbumDefinition().load(FIXTURES / "no_segments.yml")
+
+        assert album.similarity_threshold is None
+
+    def test_out_of_range_similarity_threshold_raises(self, tmp_path: Path) -> None:
+        yml = tmp_path / "album.yml"
+        yml.write_text("slug: sesja\ntitle: Sesja\nsimilarity_threshold: 1.5\n")
+
+        with pytest.raises(ValidationError, match="similarity_threshold"):
+            AlbumDefinition().load(yml)
+
     def test_loaded_album_can_be_persisted(self, session: Session) -> None:
         album = AlbumDefinition().load(FIXTURES / "trip.yml")
 

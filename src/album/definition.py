@@ -81,6 +81,10 @@ class AlbumYAML(BaseModel):
     meta: dict[str, Any] = Field(default_factory=dict)
     segments: list[SegmentYAML] = Field(default_factory=list)
     lead_faces: LeadFacesYAML | None = None
+    # Per-album near-duplicate cutoff for `select` (CLIP cosine, 0–1). Omit to use
+    # the stage default (0.9); lower it for dense burst/session albums where many
+    # near-identical frames sit just under the default. See stages/select.py.
+    similarity_threshold: float | None = Field(default=None, gt=0.0, le=1.0)
 
     @model_validator(mode="after")
     def _normalize_and_validate_segments(self) -> AlbumYAML:
@@ -165,6 +169,7 @@ class AlbumDefinition(Definition[Album]):
             immich_album_id=parsed.immich_album_id,
             timezone=parsed.timezone,
             meta=parsed.meta,
+            similarity_threshold=parsed.similarity_threshold,
         )
         album.segments = [
             Segment(

@@ -45,6 +45,13 @@ class Album(Base):
     # e.g. {"occasion": "honeymoon", "names": ["Alex", "Sam"]}
     meta: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
 
+    # Per-album near-duplicate cutoff for `select`: a candidate whose CLIP cosine
+    # similarity to an already-picked photo in the same scene exceeds this is
+    # dropped. NULL ⇒ the stage's default (0.9). Lower it for dense burst/session
+    # albums where many near-identical frames sit just under the default and would
+    # otherwise all survive; see stages/select.py.
+    similarity_threshold: Mapped[float | None] = mapped_column(default=None)
+
     # --- populated by `assemble` ---
     # Path to the rendered print-ready PDF (e.g. "data/albums/<slug>/assembled.pdf").
     # Integration contract with `fulfill`, which reads this to submit the print

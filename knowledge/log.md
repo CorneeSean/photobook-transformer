@@ -4,6 +4,34 @@ Cross-commit narrative and decisions. Per-diff mechanics live in the commit
 bodies this log cites; keep entries tight (see
 [working-agreement · Be concise](/process/working-agreement.md#be-concise)).
 
+## 2026-07-20
+
+* **Per-album `select` near-duplicate threshold (step 40, user-requested).** The
+  user reported a portrait-session album (`zdjecia-sesja-goszcz`) still landing
+  near-identical frames in the book despite dedup. Inspecting the DB row-by-row:
+  118 photos collapsed into **one** scene (segment-less, no >90-min gaps), **zero**
+  Immich `duplicate_group_id`s, and **64** selected — but every *surviving* pair sat
+  at 0.85–0.899 CLIP cosine while every *dropped* photo exceeded 0.9 (avg 0.93). So
+  `select`'s near-dup guard was firing correctly; the hard-wired `0.9` cutoff was
+  simply too lenient for burst/session content, where consecutive frames differ only
+  slightly. The fix makes the cutoff **opt-in per album** rather than lowering the
+  global default: `Album.similarity_threshold` (migration `f1a8b6d34c92`, nullable
+  `Float`) ← `AlbumYAML.similarity_threshold` (`Field(gt=0, le=1)`); `select` resolves
+  it through a new `_active_threshold` property that falls back to the constructor
+  default when NULL, so an album that doesn't set it is byte-for-byte unchanged
+  (genericity guard). Set `0.82` in the session album's `album.yml`; re-running
+  `select` alone against real pgvector cut **64 → 22** picks (max surviving pair
+  0.8196, zero over 0.82). Tests use pairs at *exactly* 0.85 cosine so the override
+  and the NULL-fallback give opposite outcomes (proving the album value, not the
+  default, is honored), plus a **real-pgvector integration test**
+  (`test_pgvector_integration.py`) that repeats the override on real 768-d vectors
+  through the actual cosine query in a migrated Postgres container — so the new
+  path is covered against real embeddings, not just the numpy stub. Caveat carried
+  in the tracker: `get_or_create_album` doesn't
+  re-import `album.yml` for an already-seen slug, so the existing row was patched
+  directly — a changed `album.yml` for an imported album still needs deliberate
+  re-import. `poe check` green (449/6).
+
 ## 2026-07-19
 
 * **Housekeeping — cat-album demo un-rotted and brought under the gate**
