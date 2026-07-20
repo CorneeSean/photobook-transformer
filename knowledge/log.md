@@ -6,6 +6,28 @@ bodies this log cites; keep entries tight (see
 
 ## 2026-07-21
 
+* **PDF rendered on demand in `LuluPrinter`, not on every run (step 43,
+  user-requested; commit `0405e0f`).** The user asked why the print-ready PDF
+  was generated on every pipeline run when the default output is a browsable
+  webpage. Root cause: `assemble` unconditionally rendered the master PDF via
+  WeasyPrint, but only an opt-in Lulu order reads it — the default `HtmlPrinter`
+  renders from the on-disk photos and never touches it. **Change:** `assemble` is
+  now layout-only — it stamps each placed photo's `page_number` (the signal
+  `printers/base.py:iter_book_pages` reads) and computes the Lulu spine width,
+  rendering no file; its idempotency now keys off "photos already placed" rather
+  than a written `assembled_pdf_path`. `LuluPrinter` renders the PDF on demand
+  from `iter_book_pages` (rebuilding assemble's section pages from
+  `starts_segment`, so the page count still matches the spine width), records
+  `Album.assembled_pdf_path`, and gates submission on a new injectable
+  `publish_pdf` hook (local path → public URL) — default `None` keeps the known
+  hosting gap, refusing with `UnreachablePdfError` after rendering. Net: the
+  default path never invokes WeasyPrint and `assembled_pdf_path` stays NULL there.
+  * **Review:** the multi-agent fork panel was unavailable inside the worktree
+    harness, so this ran as an adversarial + style **self-review** — no defects;
+    verified assemble's page numbering and `LuluPrinter`'s section-page
+    reconstruction yield the same page count, and removed a dead `_log`. `poe
+    check` green (469/6, incl. Docker pgvector). Live Lulu order still gapped on
+    PDF hosting.
 * **Caption one-sentence summary + configurable output language (step 42,
   user-requested; commit `49b7c26`).** The opt-in `ClaudeCaptioner` ran too
   verbose, and the user wanted its output language selectable, defaulting to
