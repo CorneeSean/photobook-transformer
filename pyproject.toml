@@ -117,6 +117,10 @@ max-complexity = 5
 # assertions) is legitimately branchier than any single production method, and
 # splitting it to hit CC 5 would harm rather than help readability.
 "tests/**" = ["C901"]
+# selection_gallery.py is dominated by one big HTML/CSS/JS template string, where a
+# 100-col limit is meaningless (and would force ugly mid-tag breaks). E501 is ignored
+# for this one file; its Python logic is short and stays readable regardless.
+"scripts/selection_gallery.py" = ["E501"]
 
 [tool.basedpyright]
 include = ["src", "tests", "scripts"]
@@ -165,6 +169,11 @@ down = "docker compose down"
 migrate = "alembic upgrade head"
 makemigration = "alembic revision --autogenerate"
 build = "photobook-generator build"
+# Render a static HTML gallery of an album's photos + current selected set (green ✓
+# vs red ✕), read from the DB, to eyeball the curation locally (open the file://).
+# Optional album slug (defaults to the only album with photos), e.g.
+# `uv run poe gallery zdjecia-sesja-goszcz`; extra args pass through to the script.
+gallery = "python scripts/selection_gallery.py"
 # One-time, internet-touching setup for the offline Immich ML test: bake the ML
 # model image + pre-pull the other stack images. Delegates to the test harness so
 # the command + version pin live in exactly one place.
