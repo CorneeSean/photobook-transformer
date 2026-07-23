@@ -104,6 +104,9 @@ function refreshCounts() {
 
 function buildCard(x) {
   const card = cardTpl.content.firstElementChild.cloneNode(true);
+  // fix the card's aspect from the thumbnail so its width is known before the (lazy)
+  // image decodes — the justified grid needs correct widths up front
+  card.style.aspectRatio = String(x.aspect || 1);
   x._card = card;
   x._badge = card.querySelector('.badge');
   paintSelection(x);   // sets .selected/.unselected/.staged + badge glyph/colour/title
@@ -444,7 +447,6 @@ const lbCap = document.getElementById('lbCap');
 const lbPrev = document.getElementById('lbPrev');
 const lbNext = document.getElementById('lbNext');
 const lbCmp = document.getElementById('lbCmp');
-const cmpIdx = document.getElementById('cmpIdx');
 const singleEls = [lbImg, lbCap, lbPrev, lbNext];
 let lbIndex = -1;
 let cmpMode = false;
@@ -454,7 +456,6 @@ function setSingleMode() {
   cmpMode = false;
   cmpOtherId = null;
   lbCmp.hidden = true;
-  cmpIdx.hidden = true;
   singleEls.forEach(el => { el.hidden = false; });
 }
 
@@ -504,14 +505,13 @@ function openCompare(focus, other) {
   document.getElementById('cmpAcap').innerHTML = cmpCap(focus, true);
   document.getElementById('cmpBcap').innerHTML = cmpCap(other, false);
   const d = 1 - cosine(focus.emb, other.emb);
-  // similarity is the headline metric; cosine distance is secondary
-  document.getElementById('cmpMid').innerHTML =
-    `<span class="big">${(1 - d).toFixed(3)}</span><span>similarity</span><span>dist ${d.toFixed(3)}</span>`;
-  // right-bottom counter: which neighbour of the similar set we're viewing (e.g. 2 / 10)
+  // which neighbour of the similar set we're viewing (e.g. 2 / 10)
   const others = visibleRows.filter(v => v.id !== focus.id);
   const pos = others.findIndex(v => v.id === other.id);
-  cmpIdx.hidden = pos < 0;
-  if (pos >= 0) cmpIdx.textContent = `${pos + 1} / ${others.length}`;
+  // similarity is the headline metric; cosine distance secondary; neighbour counter last
+  document.getElementById('cmpMid').innerHTML =
+    `<span class="big">${(1 - d).toFixed(3)}</span><span>similarity</span><span>dist ${d.toFixed(3)}</span>`
+    + (pos >= 0 ? `<span class="cmpcount">${pos + 1} / ${others.length}</span>` : '');
   lightbox.classList.add('open');
   syncUrl();
 }

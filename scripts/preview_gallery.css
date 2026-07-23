@@ -54,9 +54,15 @@
     border: 1px solid var(--line); padding: 6px 8px; border-radius: 9px; width: 58px;
   }
 
+  /* Justified rows: every card is the same HEIGHT and its width follows the photo's
+     natural aspect (portraits narrow, landscapes wide). Uniform heights make the grid
+     read smoothly; flex-wrap packs each row left-to-right. Tune the row height via
+     --row-h. */
+  :root { --row-h: 340px; }
   .grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(231px, 1fr));
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
     gap: 16px;
     padding: 22px;
   }
@@ -84,14 +90,18 @@
   details.section > .grid { padding: 16px 22px 22px; }
   .card {
     position: relative;
+    flex: 0 0 auto;
+    height: var(--row-h);   /* fixed height; width comes from the image's aspect */
     border-radius: var(--radius);
     overflow: hidden;
     background: var(--panel);
-    aspect-ratio: 3 / 2;
     animation: pop .4s var(--ease) both;
     transition: transform .2s var(--ease), box-shadow .2s var(--ease), opacity .3s var(--ease);
   }
   @keyframes pop { from { opacity: 0; transform: translateY(10px) scale(.98); } }
+  /* the card's aspect-ratio (set per-card from the thumbnail) already matches the photo,
+     so object-fit: cover fills it with no meaningful crop — and the card is correctly
+     sized even before the lazy image decodes */
   .card img {
     width: 100%; height: 100%; object-fit: cover; display: block;
     transition: transform .35s var(--ease), filter .3s var(--ease);
@@ -282,9 +292,8 @@
     white-space: nowrap;
   }
   .cmpmid .big { font-size: 26px; font-weight: 700; color: var(--accent); }
-
-  /* compare index counter, bottom-right of the lightbox (e.g. "2 / 10") */
-  .cmpidx {
-    position: absolute; bottom: 18px; right: 22px;
-    color: var(--muted); font-size: 14px; font-variant-numeric: tabular-nums;
+  /* neighbour counter (e.g. "2 / 10"), stacked under the metrics in the centre column */
+  .cmpmid .cmpcount {
+    margin-top: 10px; padding-top: 8px; border-top: 1px solid var(--line);
+    color: var(--text); font-size: 15px; font-weight: 600; font-variant-numeric: tabular-nums;
   }

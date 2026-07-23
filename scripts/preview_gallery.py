@@ -54,12 +54,14 @@ def _resolve_path(photo: Photo, originals_root: Path | None) -> str | None:
     return None
 
 
-def _thumb_data_uri(path: str, max_px: int = 640) -> str | None:
-    """A small, EXIF-oriented JPEG thumbnail as a ``data:`` URI, or None on failure.
+def _thumb_data_uri(path: str, max_px: int = 640) -> tuple[str, float] | None:
+    """A small, EXIF-oriented JPEG thumbnail as ``(data_uri, aspect)``, or None on failure.
 
-    The source photos are ~24 MP; decoding one to paint a 277px grid cell — and
-    re-rasterizing it on hover — stalls the browser. The grid uses these ~0.4 MP
-    thumbnails instead; the lightbox still points at the full-res original.
+    The source photos are ~24 MP; decoding one to paint a grid cell — and re-rasterizing
+    it on hover — stalls the browser. The grid uses these ~0.4 MP thumbnails instead; the
+    lightbox still points at the full-res original. ``aspect`` is the EXIF-rotated
+    width/height; the grid sets each card's ``aspect-ratio`` from it so card widths are
+    correct for the justified (uniform-height) layout *before* the lazy image decodes.
     """
     try:
         with Image.open(path) as im:
@@ -67,11 +69,13 @@ def _thumb_data_uri(path: str, max_px: int = 640) -> str | None:
             im.thumbnail((max_px, max_px))
             if im.mode not in ("RGB", "L"):
                 im = im.convert("RGB")
+            width, height = im.size
             buf = io.BytesIO()
             im.save(buf, format="JPEG", quality=80)
     except Exception:  # best-effort thumbnail; any decode/encode failure → fall back to src
         return None
-    return "data:image/jpeg;base64," + base64.b64encode(buf.getvalue()).decode("ascii")
+    uri = "data:image/jpeg;base64," + base64.b64encode(buf.getvalue()).decode("ascii")
+    return uri, round(width / height, 4) if height else 1.0
 
 
 def _normalize(vec: list[float] | None) -> list[float] | None:
@@ -133,11 +137,14 @@ def _build_items(
         # when the shot was taken, not the stored UTC instant. All None when the
         # photo has no timestamp (→ a trailing "Undated" section when grouping).
         local = _localize(photo.timestamp, tz)
+        thumb = _thumb_data_uri(path)  # (data URI, aspect) — used by the grid
+        thumb_uri, aspect = thumb if thumb else (None, 1.0)
         items.append(
             {
                 "filename": photo.filename,
                 "src": Path(path).as_uri(),  # full-res original, used only by the lightbox
-                "thumb": _thumb_data_uri(path),  # small embedded thumbnail, used by the grid
+                "thumb": thumb_uri,
+                "aspect": aspect,  # width/height → the card's aspect-ratio in the grid
                 "selected": bool(photo.selected),
                 "aesthetic": photo.aesthetic_score,
                 "emb": _normalize(photo.clip_embedding),
@@ -243,8 +250,9 @@ _TEMPLATE = """<!doctype html>
   - Compare: in similar mode there's no single-shot lightbox — clicking any photo opens
     the side-by-side compare (anchor left, clicked photo right; clicking the anchor itself
     compares it against its closest neighbour). The headline metric is similarity, with
-    cosine distance shown secondary; a bottom-right counter (e.g. "2 / 10") tracks which
-    neighbour you're on. ← / → cycle the right-hand photo through the similar set (the left
+    cosine distance shown secondary and a neighbour counter (e.g. "2 / 10") stacked under
+    them in the centre column, tracking which neighbour you're on. ← / → cycle the
+    right-hand photo through the similar set (the left
     stays the anchor). Either photo's pill stages a selection toggle; "◎ Focus this" (or
     press "f") promotes the compared photo to the anchor and re-compares it against its
     nearest neighbour — walking the similarity graph. "⇄ Swap & focus" does the same but
@@ -364,7 +372,6 @@ _TEMPLATE = """<!doctype html>
       </div>
     </figure>
   </div>
-  <div class="cmpidx" id="cmpIdx" hidden></div>
 </div>
 <script>const DATA = {data_json};</script>
 <script src="{js_src}"></script>
