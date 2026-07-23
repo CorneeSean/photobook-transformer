@@ -158,26 +158,19 @@
     position: absolute; top: 8px; right: 8px; z-index: 3;
     display: flex; flex-direction: column; align-items: flex-end; gap: 6px;
   }
-  .focus, .compare {
+  .focus {
     display: inline-flex; align-items: center; gap: 5px;
     padding: 4px 8px; border-radius: 20px;
     background: rgba(10,12,16,.62); backdrop-filter: blur(4px);
-    font-size: 11px; font-weight: 600; cursor: pointer;
+    font-size: 11px; font-weight: 600; cursor: pointer; color: #d7dbe3; opacity: 0;
     transition: opacity .2s var(--ease), background .2s var(--ease);
   }
-  .focus { color: #d7dbe3; opacity: 0; }
   .card:hover .focus, .focus.on { opacity: 1; }
   .focus.on { background: var(--accent); color: #0b1020; }
   .focus input { accent-color: var(--accent); margin: 0; cursor: pointer; }
   /* no-embedding photos: always-visible, greyed, non-interactive marker */
   .focus.unfocusable { opacity: .85; color: #7c828d; cursor: not-allowed; }
   .focus.unfocusable input { display: none; }
-
-  /* compare — only in focus mode, on the non-focused photos */
-  .compare { display: none; color: #ffd9a6; }
-  .grid.focusing .card:not(.focused) .compare { display: inline-flex; }
-  .compare:hover { background: rgba(255,170,60,.85); color: #241400; }
-  .compare input { accent-color: #ffab3c; margin: 0; cursor: pointer; }
 
   /* similarity score revealed under each photo while focus mode is active */
   .simchip {

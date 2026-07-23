@@ -123,8 +123,6 @@ function buildCard(x) {
 
   x._focusLabel = card.querySelector('.focus');
   x._focusInput = x._focusLabel.querySelector('input');
-  const cmpLabel = card.querySelector('.compare');
-  x._cmpInput = cmpLabel.querySelector('input');
   x._sv = card.querySelector('.simchip .sv');
 
   // a photo with no CLIP embedding can't anchor or be scored in focus mode —
@@ -138,11 +136,6 @@ function buildCard(x) {
 
   x._focusLabel.addEventListener('click', (e) => e.stopPropagation());
   x._focusInput.addEventListener('change', (e) => setFocus(e.target.checked ? x.id : null));
-  cmpLabel.addEventListener('click', (e) => e.stopPropagation());
-  x._cmpInput.addEventListener('change', (e) => {
-    if (e.target.checked) openCompare(DATA[focusId], x);
-    else closeLightbox();
-  });
   card.addEventListener('click', () => {
     // in similar mode a click always opens a compare view (never the single lightbox)
     if (focusId != null && DATA[focusId] && DATA[focusId].emb) {
@@ -296,12 +289,44 @@ function renderGrouped() {
     }
     details.appendChild(g);
     frag.appendChild(details);
+    layoutTargets.push({ container: g, items: group });   // justify this section's rows
   }
   sectionsEl.appendChild(frag);
   grid.hidden = true;
   sectionsEl.hidden = false;
   domGrouped = true;
 }
+
+// Justified rows (Google-Photos style): pack the ordered items into rows and scale each
+// FULL row's height so its cards fill the container width exactly — an aligned right edge
+// with no cropping (width still follows each photo's aspect). The last, partial row keeps
+// the target height (left-aligned). render() rebuilds `layoutTargets` (the flat grid, or
+// one entry per grouped section); applyJustify() runs it here and on resize.
+let layoutTargets = [];
+const ROW_TARGET_H = 320;
+function justify(container, items) {
+  if (!items.length) return;
+  const cs = getComputedStyle(container);
+  const gap = parseFloat(cs.columnGap || cs.gap) || 16;
+  // 2px slack + floored widths keep a filled row's total strictly under the container,
+  // so per-card sub-pixel rounding can never push the last card onto an orphan line
+  const avail = container.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight) - 2;
+  if (avail <= 0) return;
+  const size = (row, h) => row.forEach(it => {
+    it._card.style.height = h + 'px';
+    it._card.style.width = Math.floor(h * (it.aspect || 1)) + 'px';
+  });
+  let row = [], aspectSum = 0;
+  for (const it of items) {
+    row.push(it); aspectSum += (it.aspect || 1);
+    if (aspectSum * ROW_TARGET_H + gap * (row.length - 1) >= avail) {  // row is full
+      size(row, (avail - gap * (row.length - 1)) / aspectSum);         // scale to fill width
+      row = []; aspectSum = 0;
+    }
+  }
+  if (row.length) size(row, ROW_TARGET_H);   // trailing partial row: natural height
+}
+function applyJustify() { layoutTargets.forEach(t => justify(t.container, t.items)); }
 
 function render() {
   // a photo with no embedding can't anchor focus mode — treat it as no focus
@@ -311,6 +336,7 @@ function render() {
   const grouping = !focus && groupSel.value !== 'none';
 
   visibleRows = [];
+  layoutTargets = [];
 
   if (focus) {
     ensureFlatDom();
@@ -352,7 +378,11 @@ function render() {
   // flat views reorder WITHOUT moving nodes: set each visible card's CSS `order` to its
   // rank (grid items honour `order`) — one cheap style recalc, no reparent. Grouped view
   // already placed nodes in section order, so its ordering is the DOM order itself.
-  if (!grouping) visibleRows.forEach((x, i) => { x._card.style.order = i; });
+  if (!grouping) {
+    visibleRows.forEach((x, i) => { x._card.style.order = i; });
+    layoutTargets.push({ container: grid, items: visibleRows });
+  }
+  applyJustify();   // size cards into justified rows (grouped targets came from renderGrouped)
 
   shownEl.textContent = visibleRows.length;
   document.getElementById('empty').hidden = visibleRows.length > 0;
@@ -521,7 +551,6 @@ function closeLightbox() {
   lbIndex = -1;
   if (cmpMode) {
     setSingleMode();
-    document.querySelectorAll('.compare input:checked').forEach(i => { i.checked = false; });
     syncUrl();  // drop ?compare
   }
 }
@@ -546,8 +575,6 @@ function focusCompared() {
   setFocus(anchor.id, false);          // re-focus the grid behind the lightbox, but don't scroll it
   if (nn) {
     openCompare(anchor, nn);
-    document.querySelectorAll('.compare input:checked').forEach(i => { i.checked = false; });
-    if (nn._cmpInput) nn._cmpInput.checked = true;
   } else {
     const i = visibleRows.indexOf(anchor);   // no scorable neighbour → single view of anchor
     openLightbox(i >= 0 ? i : 0);
@@ -564,10 +591,8 @@ function openCompareFor(clicked) {
     const right = others[0] || nearestNeighbor(anchor);   // closest similar, else global NN
     if (!right) { openLightbox(visibleRows.indexOf(anchor)); return; }  // truly alone
     openCompare(anchor, right);
-    if (right._cmpInput) right._cmpInput.checked = true;
   } else {
     openCompare(anchor, clicked);
-    if (clicked._cmpInput) clicked._cmpInput.checked = true;
   }
 }
 
@@ -607,8 +632,6 @@ function cmpStep(delta) {
   const cur = others.findIndex(x => x.id === cmpOtherId);
   const other = others[((cur < 0 ? 0 : cur + delta) + others.length) % others.length];
   openCompare(focus, other);   // updates cmpB/cmpMid/cmpOtherId + URL
-  document.querySelectorAll('.compare input:checked').forEach(i => { i.checked = false; });
-  if (other._cmpInput) other._cmpInput.checked = true;
 }
 function next() { cmpMode ? cmpStep(1) : showAt(lbIndex + 1); }
 function prev() { cmpMode ? cmpStep(-1) : showAt(lbIndex - 1); }
@@ -637,6 +660,15 @@ document.addEventListener('keydown', (e) => {
     toggleFromLightbox(cmpMode ? DATA[cmpOtherId] : visibleRows[lbIndex]);
   else if ((e.key === 'f' || e.key === 'F') && cmpMode) focusCompared();
 });
+
+// re-justify on resize (debounced) and when a collapsed section is expanded (its cards
+// couldn't be measured while it had zero width). `toggle` doesn't bubble → listen in capture.
+let resizeTimer = null;
+window.addEventListener('resize', () => {
+  clearTimeout(resizeTimer);
+  resizeTimer = setTimeout(applyJustify, 150);
+});
+sectionsEl.addEventListener('toggle', applyJustify, true);
 
 sortSel.addEventListener('change', render);
 groupSel.addEventListener('change', () => {
@@ -709,5 +741,4 @@ const pendingCompare = applyUrlState();
 render();
 if (pendingCompare) {
   openCompare(DATA[focusId], pendingCompare);
-  if (pendingCompare._cmpInput) pendingCompare._cmpInput.checked = true;
 }

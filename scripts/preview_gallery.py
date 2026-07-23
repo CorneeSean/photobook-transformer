@@ -213,8 +213,12 @@ _TEMPLATE = """<!doctype html>
       uv run python scripts/preview_gallery.py [album-slug]
 
   FEATURES
-  - Grid of every photo. Selected = green ✓ badge, full colour; unselected = red ✕
-    badge, very slightly dimmed + grayscaled, lifting on hover.
+  - Justified grid of every photo (Google-Photos style): photos keep their natural aspect
+    (no cropping) and each row is scaled to fill the width, so the right edge lines up. A
+    small JS row-packer (`justify()`) does this — pure CSS can't scale rows to fit without
+    cropping — and re-runs on resize and when a collapsed date section is expanded.
+    Selected = green ✓ badge, full colour; unselected = red ✕ badge, slightly dimmed +
+    grayscaled, lifting on hover.
   - Staging: click a photo's badge to toggle its selection (selected→unselect,
     unselected→select). It's a browser-only *suggestion* until exported + saved to the
     DB, so a staged badge is softened (lower opacity + halo) and its card gets a dashed
@@ -257,8 +261,7 @@ _TEMPLATE = """<!doctype html>
     press "f") promotes the compared photo to the anchor and re-compares it against its
     nearest neighbour — walking the similarity graph. "⇄ Swap & focus" does the same but
     first flips BOTH photos' selection (the "the right shot wins — swap my pick and keep
-    going" move). Non-focused photos still expose a "compare" checkbox as an alternate way
-    in. Outside similar mode, clicking a photo opens the usual single lightbox.
+    going" move). Outside similar mode, clicking a photo opens the usual single lightbox.
   - Section order: a toolbar toggle flips the date sections between oldest-first and
     newest-first (the "Undated" bucket always trails); within-section order still follows
     the Sort control.
@@ -342,7 +345,6 @@ _TEMPLATE = """<!doctype html>
   <div class="card">
     <div class="badge"></div>
     <div class="tools">
-      <label class="compare" title="Compare with focused photo"><input type="checkbox">compare</label>
       <label class="focus" title="Show photos similar to this"><input type="checkbox">similar</label>
     </div>
     <img loading="lazy" alt="">
