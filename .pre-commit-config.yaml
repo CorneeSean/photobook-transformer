@@ -4,6 +4,13 @@
 # UNLESS it opts into another stage — without it, installing the pre-push hook type
 # would also fire `no-commit-to-branch` at push and block pushing `main` (its own
 # published branch).
+#
+# Monorepo scoping: the Python project lives in pipeline/, and rust-client/ is a
+# separate stack that must NOT be gated by the Python toolchain. Every Python hook
+# is scoped with `files: ^pipeline/`, so pre-commit skips it entirely unless the
+# changeset (staged files at commit, pushed range at push) touches pipeline/. A
+# commit or push that only changes rust-client/ therefore runs none of them.
+# `no-commit-to-branch` stays unscoped — it guards every branch regardless.
 default_stages: [pre-commit]
 
 repos:
@@ -18,34 +25,43 @@ repos:
     hooks:
       - id: ruff
         args: ["--fix"]
+        files: ^pipeline/
       - id: ruff-format
+        files: ^pipeline/
 
   - repo: local
     hooks:
+      # The Python hooks invoke `uv run` inside pipeline/ (cd first) and are scoped
+      # to pipeline/ changes. `pass_filenames: false` means they check the whole
+      # project, not the staged paths; `files: ^pipeline/` gates *whether* they run.
       - id: basedpyright
         name: basedpyright
-        entry: uv run basedpyright
+        entry: bash -c 'cd pipeline && uv run basedpyright'
         language: system
         types: [python]
+        files: ^pipeline/
         pass_filenames: false
       - id: xenon
         name: xenon (complexity gate)
         # Fast, import-free static metric check, so it belongs with the per-commit
         # static gates (ruff/basedpyright) rather than the pre-push/`poe check`
         # tier where pytest lives. Same thresholds as the `check` poe task.
-        entry: uv run xenon --max-absolute A --max-modules A --max-average A src
+        entry: bash -c 'cd pipeline && uv run xenon --max-absolute A --max-modules A --max-average A src'
         language: system
         types: [python]
+        files: ^pipeline/
         pass_filenames: false
 
       # The heavy tier: the full `poe check` (ruff + ruff-format + basedpyright +
       # xenon + the whole pytest suite, integration included) runs once at push —
       # before code reaches origin/main — not on every commit. Install with
       # `pre-commit install -t pre-push` (or `pre-commit install --install-hooks`).
+      # `files: ^pipeline/` (instead of `always_run`) scopes it to pushes that touch
+      # pipeline/, so a rust-client-only push skips the whole suite.
       - id: poe-check
         name: poe check (all checks + all tests)
-        entry: uv run poe check
+        entry: bash -c 'cd pipeline && uv run poe check'
         language: system
+        files: ^pipeline/
         pass_filenames: false
-        always_run: true
         stages: [pre-push]

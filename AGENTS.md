@@ -9,6 +9,22 @@ is the detail. **If the two ever conflict, the bundle wins — and fix this file
 The bundle is an [Open Knowledge Format](https://github.com/GoogleCloudPlatform/knowledge-catalog/blob/main/okf/SPEC.md)
 directory: start at [`knowledge/index.md`](./knowledge/index.md).
 
+## Repository layout (monorepo)
+
+This repo is a monorepo with two sibling projects:
+
+- **`pipeline/`** — the Python batch pipeline (everything this file describes: `src/`,
+  `tests/`, `alembic/`, `pyproject.toml`, Docker, `.env`). **All pipeline commands run
+  from `pipeline/`** — e.g. `cd pipeline && uv run poe check`, `cd pipeline && uv run
+  photobook-generator build <dir>`. The pre-commit `local` hooks already `cd pipeline`.
+- **`rust-client/`** — a greenfield client-side WASM spike (Svelte + Rust/WASM); the
+  first non-Python stack, deliberately **outside** the Python gate. See its own README
+  and [`knowledge/build/drafts/rust-client.md`](./knowledge/build/drafts/rust-client.md).
+
+`knowledge/`, `AGENTS.md`, `CLAUDE.md`, `.pre-commit-config.yaml`, and `.gitignore`
+stay at the repo root and are monorepo-level. The `knowledge/` OKF bundle remains the
+single source of truth for the pipeline.
+
 ## What this project is
 
 A batch pipeline that turns a raw dump of photos into a curated, enhanced,
