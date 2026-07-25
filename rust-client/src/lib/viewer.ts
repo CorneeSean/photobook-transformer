@@ -7,6 +7,7 @@
 // (App.svelte) only ever talks to the `Viewer` interface.
 
 import initViewer, { create_viewer, type PhotoViewer } from '../wasm/viewer/rust_client_viewer'
+import { webgpuUsable } from './gpu'
 
 export interface Viewer {
   /** Load an image (object URL or Blob) and fit it to the canvas. */
@@ -85,6 +86,27 @@ async function decodeToRGBA(
   return { data: new Uint8Array(data.buffer), width, height }
 }
 
+function srgbToLinear(c: number): number {
+  return c <= 0.04045 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4)
+}
+
+/** Read an element's background as linear RGB (0..1) for use as the wgpu clear colour.
+ *  The surface is sRGB, so the clear value is treated as linear — hence the convert.
+ *  getComputedStyle may return the colour in any CSS Color 4 form (our theme uses
+ *  oklch), so we rasterize it via a 1×1 2D canvas to get normalized sRGB bytes. */
+function backgroundLinear(el: Element): [number, number, number] {
+  const color = getComputedStyle(el).backgroundColor
+  const c = document.createElement('canvas')
+  c.width = c.height = 1
+  const ctx = c.getContext('2d')
+  if (!ctx) return [1, 1, 1]
+  ctx.fillStyle = color
+  ctx.fillRect(0, 0, 1, 1)
+  const [r, g, b, a] = ctx.getImageData(0, 0, 1, 1).data
+  if (a === 0) return [1, 1, 1] // transparent → default to white
+  return [srgbToLinear(r / 255), srgbToLinear(g / 255), srgbToLinear(b / 255)]
+}
+
 /** Physical backing size for a canvas, DPR-aware but capped so the surface stays sane. */
 function backingSize(canvas: HTMLCanvasElement): [number, number] {
   const dpr = Math.min(window.devicePixelRatio || 1, 2)
@@ -132,8 +154,11 @@ let viewerModuleReady: Promise<void> | null = null
  * else the Canvas2D fallback. Returns the `Viewer` interface either way.
  */
 export async function createViewer(canvas: HTMLCanvasElement): Promise<Viewer> {
-  const hasWebGPU = typeof navigator !== 'undefined' && 'gpu' in navigator
-  if (hasWebGPU) {
+  // Probe for a *usable* adapter before touching the canvas. If we skipped this and
+  // just tried wgpu, a dead GPU would still let create_surface claim the canvas's
+  // 'webgpu' context before the device request failed — leaving the Canvas2D
+  // fallback unable to get a '2d' context. Probing first keeps the canvas pristine.
+  if (await webgpuUsable()) {
     try {
       if (!viewerModuleReady) viewerModuleReady = initViewer().then(() => {})
       await viewerModuleReady
@@ -142,10 +167,11 @@ export async function createViewer(canvas: HTMLCanvasElement): Promise<Viewer> {
       canvas.width = w
       canvas.height = h
       const pv = await create_viewer(canvas)
+      // Match the viewer's letterbox to the page's card background (theme-aware).
+      const [r, g, b] = backgroundLinear(canvas.parentElement ?? canvas)
+      pv.set_background(r, g, b)
       return new WgpuViewer(canvas, pv)
     } catch (err) {
-      // GPU init failed — fall back. Note: the canvas may already hold a webgpu
-      // context, so Canvas2D fallback is best-effort here.
       console.warn('[viewer] wgpu init failed, falling back to Canvas2D', err)
     }
   }

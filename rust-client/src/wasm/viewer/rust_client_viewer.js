@@ -26,6 +26,16 @@ export class PhotoViewer {
         wasm.photoviewer_resize(this.__wbg_ptr, width, height);
     }
     /**
+     * Set the letterbox/clear colour (linear RGB, 0..1) — the shell passes the
+     * theme's card colour so the canvas matches the page background.
+     * @param {number} r
+     * @param {number} g
+     * @param {number} b
+     */
+    set_background(r, g, b) {
+        wasm.photoviewer_set_background(this.__wbg_ptr, r, g, b);
+    }
+    /**
      * Exposure in stops; linear gain = 2**stops. Cheap — updates a uniform + redraws.
      * @param {number} stops
      */

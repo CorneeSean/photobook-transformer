@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte'
-  import { loadClip, embedImage, embeddingDim, embeddingBackend, hasWebGPU } from './lib/clip'
+  import { loadClip, embedImage, embeddingDim, embeddingBackend } from './lib/clip'
+  import { webgpuUsable } from './lib/gpu'
   import { initStore, insert, knn, count } from './lib/store'
   import { createViewer, type Viewer } from './lib/viewer'
 
@@ -21,6 +22,7 @@
   let dim = $state(512)
   let clipBackend = $state('')
   let viewerBackend = $state('')
+  let gpuOk = $state(false)
   let dragOver = $state(false)
 
   let nextId = 0
@@ -31,6 +33,7 @@
   const selected = $derived(photos.find((p) => p.id === selectedId) ?? null)
 
   onMount(async () => {
+    gpuOk = await webgpuUsable()
     dim = embeddingDim()
     await initStore(dim)
     viewer = await createViewer(canvasEl)
@@ -106,7 +109,7 @@
     <div class="ml-auto flex items-center gap-2 text-[11px] text-muted-foreground">
       <span class="rounded-md bg-secondary px-2 py-1">CLIP: {clipBackend || '…'}</span>
       <span class="rounded-md bg-secondary px-2 py-1">viewer: {viewerBackend || '…'}</span>
-      <span class="rounded-md bg-secondary px-2 py-1">WebGPU: {hasWebGPU() ? 'yes' : 'no'}</span>
+      <span class="rounded-md bg-secondary px-2 py-1">WebGPU: {gpuOk ? 'yes' : 'no'}</span>
     </div>
   </header>
 

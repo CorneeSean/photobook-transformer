@@ -33,6 +33,9 @@ pub struct PhotoViewer {
     /// (texture bind group, width, height) — None until an image is set.
     image: Option<(wgpu::BindGroup, u32, u32)>,
     uniforms: Uniforms,
+    /// Letterbox / clear colour (linear RGB), set by JS to the theme's card colour
+    /// so the canvas background matches the page (and tracks light/dark).
+    clear: wgpu::Color,
 }
 
 /// Create a viewer bound to `canvas`. Async: requests the GPU adapter + device.
@@ -202,6 +205,12 @@ pub async fn create_viewer(canvas: HtmlCanvasElement) -> Result<PhotoViewer, JsV
         ubo_bind_group,
         image: None,
         uniforms,
+        clear: wgpu::Color {
+            r: 1.0,
+            g: 1.0,
+            b: 1.0,
+            a: 1.0,
+        },
     };
     viewer.render();
     Ok(viewer)
@@ -261,6 +270,18 @@ impl PhotoViewer {
         self.render();
     }
 
+    /// Set the letterbox/clear colour (linear RGB, 0..1) — the shell passes the
+    /// theme's card colour so the canvas matches the page background.
+    pub fn set_background(&mut self, r: f32, g: f32, b: f32) {
+        self.clear = wgpu::Color {
+            r: r as f64,
+            g: g as f64,
+            b: b as f64,
+            a: 1.0,
+        };
+        self.render();
+    }
+
     /// Exposure in stops; linear gain = 2**stops. Cheap — updates a uniform + redraws.
     pub fn set_exposure(&mut self, stops: f32) {
         self.uniforms.exposure = stops.exp2();
@@ -315,12 +336,9 @@ impl PhotoViewer {
                     view: &view,
                     resolve_target: None,
                     ops: wgpu::Operations {
-                        load: wgpu::LoadOp::Clear(wgpu::Color {
-                            r: 0.05,
-                            g: 0.05,
-                            b: 0.06,
-                            a: 1.0,
-                        }),
+                        // Letterbox filled with the theme's card colour (set by JS),
+                        // so the viewer matches the page background like Canvas2D did.
+                        load: wgpu::LoadOp::Clear(self.clear),
                         store: wgpu::StoreOp::Store,
                     },
                 })],

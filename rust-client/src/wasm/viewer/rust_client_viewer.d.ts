@@ -10,6 +10,11 @@ export class PhotoViewer {
      */
     resize(width: number, height: number): void;
     /**
+     * Set the letterbox/clear colour (linear RGB, 0..1) — the shell passes the
+     * theme's card colour so the canvas matches the page background.
+     */
+    set_background(r: number, g: number, b: number): void;
+    /**
      * Exposure in stops; linear gain = 2**stops. Cheap — updates a uniform + redraws.
      */
     set_exposure(stops: number): void;
@@ -31,6 +36,7 @@ export interface InitOutput {
     readonly __wbg_photoviewer_free: (a: number, b: number) => void;
     readonly create_viewer: (a: any) => any;
     readonly photoviewer_set_image: (a: number, b: number, c: number, d: number, e: number) => void;
+    readonly photoviewer_set_background: (a: number, b: number, c: number, d: number) => void;
     readonly photoviewer_set_exposure: (a: number, b: number) => void;
     readonly photoviewer_resize: (a: number, b: number, c: number) => void;
     readonly wasm_bindgen__convert__closures_____invoke__h2b15141265791625: (a: number, b: number, c: any) => [number, number];

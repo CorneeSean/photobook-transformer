@@ -77,6 +77,14 @@ crates build with `npm run wasm`.
 - **COOP/COEP headers** are left off (see `vite.config.ts`) so transformers.js can
   fetch weights from the HF CDN; that means no SharedArrayBuffer / wasm threads for now.
 - **wgpu ≥ 23 required.** wgpu 22 requests the `maxInterStageShaderComponents` limit
-  that current Chrome removed from the WebGPU spec, so `requestDevice` rejects it. The
-  Canvas2D fallback also had to be made context-tolerant: a failed wgpu attempt leaves
-  a `webgpu` context on the canvas, so `getContext('2d')` then returns null.
+  that current Chrome removed from the WebGPU spec, so `requestDevice` rejects it.
+- **Graceful GPU degradation.** `lib/gpu.ts` probes `requestAdapter()` once at startup;
+  both CLIP and the viewer key off it. If there's no usable adapter (GPU disabled /
+  blocklisted / hardware accel off), CLIP runs on the WASM backend and the viewer uses
+  Canvas2D — and because the probe runs *before* anything touches the canvas, the
+  fallback gets a pristine canvas (a half-initialised wgpu surface would otherwise
+  leave a `webgpu` context that blocks `getContext('2d')`).
+- **Theme-aware viewer background.** The wgpu clear colour is set from the page's card
+  colour (read via `getComputedStyle`, rasterized through a 1×1 2D canvas to normalize
+  oklch → sRGB, then converted to linear for the sRGB surface), so the letterbox
+  matches the surrounding UI in both light and dark themes.

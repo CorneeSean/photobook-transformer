@@ -14,6 +14,7 @@ import {
   type Processor,
   type PreTrainedModel,
 } from '@huggingface/transformers'
+import { webgpuUsable } from './gpu'
 
 // Spike default (R3): 512-d. For 768-d parity use 'Xenova/clip-vit-large-patch14'.
 const CLIP_MODEL = 'Xenova/clip-vit-base-patch32'
@@ -29,16 +30,11 @@ export function embeddingBackend(): Backend {
   return backend
 }
 
-/** True if the browser exposes WebGPU. */
-export function hasWebGPU(): boolean {
-  return typeof navigator !== 'undefined' && 'gpu' in navigator
-}
-
 /** Load the CLIP model once. `onProgress` receives transformers.js download events. */
 export function loadClip(onProgress?: (msg: string) => void): Promise<void> {
   if (loading) return loading
   loading = (async () => {
-    backend = hasWebGPU() ? 'webgpu' : 'wasm'
+    backend = (await webgpuUsable()) ? 'webgpu' : 'wasm'
     onProgress?.(`loading ${CLIP_MODEL} on ${backend}…`)
     processor = await AutoProcessor.from_pretrained(CLIP_MODEL)
     try {
