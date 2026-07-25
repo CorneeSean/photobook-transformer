@@ -4,8 +4,9 @@ __pycache__/
 *.pyc
 .env
 
-# JetBrains IDE project files (per-developer, not shared).
+# IDE / editor project files (per-developer, not shared).
 .idea/
+.vscode/
 
 # Aesthetic-scorer weights cache (step 31): the ViT-L/14 CLIP checkpoint (~0.9 GB) +
 # the LAION head, downloaded by `poe fetch-aesthetic-weights`. Regenerable, never

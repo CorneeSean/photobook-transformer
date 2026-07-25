@@ -18,9 +18,7 @@ dist-ssr
 # `*`-only .gitignore wasm-pack writes into each out-dir for the same reason.
 target/
 
-# Editor directories and files
-.vscode/*
-!.vscode/extensions.json
+# Editor directories and files (.vscode/ + .idea/ are ignored repo-wide at the root)
 .idea
 .DS_Store
 *.suo
