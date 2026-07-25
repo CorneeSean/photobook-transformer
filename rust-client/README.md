@@ -27,8 +27,12 @@ Svelte + shadcn-svelte tokens (Vite + TS)     ← chrome, gallery, controls, sta
   codebase, two backends: **WebGPU** preferred, **WebGL2** fallback (naga transpiles
   the WGSL to GLSL). The Canvas2D viewer in `lib/viewer.ts` is a last resort for
   browsers with neither.
-- **`src/wasm/`** — generated wasm-pack output, **committed on purpose** (tiny;
-  keeps `npm run check` / dev build-free). Regenerate with `npm run wasm`.
+- **`rawpdf/`** — Rust crate → WASM: a proof that a camera **RAW** can be decoded
+  (`rawloader`), crudely developed, and assembled into a **PDF** (`printpdf`) entirely
+  in the browser. Exposed at the **`/rawpdf.html`** page (`src/RawPdf.svelte`).
+- **`src/wasm/`** — generated wasm-pack output. The small JS glue + `.d.ts` are
+  committed (so `npm run check` resolves imports build-free); the `.wasm` **binaries
+  are not** (rawpdf's is ~8 MB) — run `npm run wasm` after cloning to produce them.
 
 ## Prerequisites
 
@@ -43,8 +47,8 @@ Svelte + shadcn-svelte tokens (Vite + TS)     ← chrome, gallery, controls, sta
 
 ```sh
 npm install
-npm run wasm     # build the Rust/WASM crates into src/wasm/ (only needed if changed)
-npm run dev      # http://localhost:5173
+npm run wasm     # REQUIRED after clone — builds the Rust/WASM crates into src/wasm/
+npm run dev      # http://localhost:5173  (RAW→PDF proof at /rawpdf.html)
 ```
 
 Then **drop image files** onto the gallery (or click **+ Add**). Each is embedded

@@ -274,6 +274,17 @@ knobs → corrected JPEG). Findings:
   canonical RAW→print render (darktable). Note GPU floats aren't cross-device
   deterministic — a print path would want a deterministic CPU Rust renderer.
 
+### RAW→PDF: proven in-browser (rawpdf crate, `/rawpdf.html`)
+
+Vertical slice built + verified live: a real iPhone DNG (4032×3024, lossy-JPEG DNG)
+→ **`rawloader` decode in wasm32** → crude half-res demosaic (WB + gamma, correct
+colour — a ColorChecker renders right) → **`printpdf` one-page PDF** (valid `%PDF-1.3`,
+1.76 MB), **~840 ms** end to end. Both ecosystem risks retired: pure-Rust RAW decode
+and PDF generation both compile *and run* in the browser. Crudeness noted (half-res,
+no EXIF orientation → image is flipped, no ICC) — production would use imagepipe/rawler
++ moxcms. Verified crate list from the ecosystem sweep — rawloader/rawler (LGPL),
+moxcms (permissive CMYK/ICC), fast_image_resize (WASM-proven), printpdf (WASM-proven).
+
 ## Out of scope (this spike)
 Face detection, aesthetic scoring, classifiers, captioning VLM, neural/RAW
 enhancement, any connection to the Python pipeline / Postgres / Immich, ANN/HNSW

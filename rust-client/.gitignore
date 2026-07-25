@@ -12,11 +12,20 @@ dist
 dist-ssr
 *.local
 
-# Rust build cache only. The generated wasm pkg under src/wasm/ is committed on
-# purpose (tiny, and keeps `npm run check` / dev build-free): its .d.ts must stay
-# visible to svelte-check, which honors .gitignore. `npm run wasm` also deletes the
-# `*`-only .gitignore wasm-pack writes into each out-dir for the same reason.
+# Rust build cache.
 target/
+
+# Generated wasm-pack *binaries* are build artifacts and too big to commit (rawpdf
+# is ~8 MB). Run `npm run wasm` after cloning to produce them. The small JS glue +
+# .d.ts under src/wasm/ ARE committed, so `npm run check` resolves the imports
+# build-free (svelte-check honors .gitignore, so ignore only the *_bg.wasm, never
+# the .d.ts). `npm run wasm` also deletes the `*`-only .gitignore wasm-pack writes.
+src/wasm/**/*_bg.wasm
+# public/ sample RAWs are large binaries — provide your own via the file picker.
+public/*.dng
+public/*.cr2
+public/*.nef
+public/*.arw
 
 # Editor directories and files (.vscode/ + .idea/ are ignored repo-wide at the root)
 .idea

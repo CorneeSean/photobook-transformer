@@ -7,10 +7,20 @@ export default defineConfig({
   plugins: [svelte(), tailwindcss()],
 
   // The Rust/WASM crates are built with `wasm-pack --target web` into
-  // src/wasm/{core,viewer}; their generated JS glue + .wasm are imported directly.
+  // src/wasm/{core,viewer,rawpdf}; their generated JS glue + .wasm are imported directly.
   // Exclude transformers.js from dep pre-bundling so its worker/wasm assets resolve.
   optimizeDeps: {
     exclude: ['@huggingface/transformers'],
+  },
+
+  // Two pages: the main photo app (index.html) and the RAW→PDF proof (rawpdf.html).
+  build: {
+    rollupOptions: {
+      input: {
+        main: 'index.html',
+        rawpdf: 'rawpdf.html',
+      },
+    },
   },
 
   // NOTE (R4): SharedArrayBuffer / wasm threads need COOP+COEP headers here:
