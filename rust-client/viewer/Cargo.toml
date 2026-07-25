@@ -1,0 +1,12 @@
+[package]
+name = "rust-client-viewer"
+version = "0.1.0"
+edition = "2021"
+description = "GPU photo viewer (wgpu) compiled to WASM"
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+wasm-bindgen = "0.2"
+# wgpu + web-sys deps are added when the GPU backend lands (step 4).

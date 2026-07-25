@@ -1,0 +1,9 @@
+# Cargo workspace for the two WASM crates. Shared target/ + lockfile; each crate is
+# built independently with `wasm-pack build --target web` (see rust-client/README.md).
+[workspace]
+members = ["core", "viewer"]
+resolver = "2"
+
+[profile.release]
+opt-level = "s"
+lto = true
