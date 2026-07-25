@@ -13,7 +13,9 @@ wasm-bindgen-futures = "0.4"
 js-sys = "0.3"
 # wgpu >= 23: drops the `maxInterStageShaderComponents` limit that current Chrome
 # removed from the WebGPU spec (22 sends it → requestDevice rejects).
-wgpu = "23"
+# `webgl` feature: enables the GL backend so the same viewer falls back to WebGL2
+# when WebGPU is unavailable (one Rust codebase, two GPU backends).
+wgpu = { version = "23", features = ["webgl"] }
 bytemuck = { version = "1", features = ["derive"] }
 console_error_panic_hook = "0.1"
 

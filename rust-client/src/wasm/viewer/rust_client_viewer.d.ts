@@ -6,6 +6,10 @@ export class PhotoViewer {
     free(): void;
     [Symbol.dispose](): void;
     /**
+     * Which GPU backend bound: "webgpu" or "webgl2".
+     */
+    backend(): string;
+    /**
      * Reconfigure the surface to a new backing size (physical pixels) and redraw.
      */
     resize(width: number, height: number): void;
@@ -36,13 +40,14 @@ export interface InitOutput {
     readonly __wbg_photoviewer_free: (a: number, b: number) => void;
     readonly create_viewer: (a: any) => any;
     readonly photoviewer_set_image: (a: number, b: number, c: number, d: number, e: number) => void;
+    readonly photoviewer_backend: (a: number) => [number, number];
     readonly photoviewer_set_background: (a: number, b: number, c: number, d: number) => void;
     readonly photoviewer_set_exposure: (a: number, b: number) => void;
     readonly photoviewer_resize: (a: number, b: number, c: number) => void;
-    readonly wasm_bindgen__convert__closures_____invoke__h2b15141265791625: (a: number, b: number, c: any) => [number, number];
-    readonly wasm_bindgen__convert__closures_____invoke__h4898392f98592a88: (a: number, b: number, c: any, d: any) => void;
-    readonly wasm_bindgen__convert__closures_____invoke__h0e987b0bfd7346ca: (a: number, b: number, c: any) => void;
-    readonly wasm_bindgen__convert__closures_____invoke__h0e987b0bfd7346ca_2: (a: number, b: number, c: any) => void;
+    readonly wasm_bindgen__convert__closures_____invoke__h042a4ab1f1630212: (a: number, b: number, c: any) => [number, number];
+    readonly wasm_bindgen__convert__closures_____invoke__h1d4b9406f012d333: (a: number, b: number, c: any, d: any) => void;
+    readonly wasm_bindgen__convert__closures_____invoke__he4086b7f26f1a23e: (a: number, b: number, c: any) => void;
+    readonly wasm_bindgen__convert__closures_____invoke__he4086b7f26f1a23e_2: (a: number, b: number, c: any) => void;
     readonly __wbindgen_malloc: (a: number, b: number) => number;
     readonly __wbindgen_realloc: (a: number, b: number, c: number, d: number) => number;
     readonly __wbindgen_exn_store: (a: number) => void;

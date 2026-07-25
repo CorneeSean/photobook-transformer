@@ -21,10 +21,12 @@ Svelte + shadcn-svelte tokens (Vite + TS)     ← chrome, gallery, controls, sta
   `lib/store.ts` (wraps the Rust store), `lib/viewer.ts` (photo viewer).
 - **`core/`** — Rust crate → WASM: `VecStore` = exact brute-force cosine KNN over
   L2-normalized embeddings. The "data lives in Rust" leg.
-- **`viewer/`** — Rust crate → WASM: a **wgpu** photo viewer that creates a WebGPU
+- **`viewer/`** — Rust crate → WASM: a **wgpu** photo viewer that creates a GPU
   surface on the shell's `<canvas>`, uploads the image as an sRGB texture, and
-  renders a contain-fit quad with a live exposure gain (WGSL fragment shader). The
-  Canvas2D viewer in `lib/viewer.ts` is the fallback when WebGPU is absent.
+  renders a contain-fit quad with a live exposure gain (WGSL fragment shader). One
+  codebase, two backends: **WebGPU** preferred, **WebGL2** fallback (naga transpiles
+  the WGSL to GLSL). The Canvas2D viewer in `lib/viewer.ts` is a last resort for
+  browsers with neither.
 - **`src/wasm/`** — generated wasm-pack output, **committed on purpose** (tiny;
   keeps `npm run check` / dev build-free). Regenerate with `npm run wasm`.
 
@@ -78,12 +80,11 @@ crates build with `npm run wasm`.
   fetch weights from the HF CDN; that means no SharedArrayBuffer / wasm threads for now.
 - **wgpu ≥ 23 required.** wgpu 22 requests the `maxInterStageShaderComponents` limit
   that current Chrome removed from the WebGPU spec, so `requestDevice` rejects it.
-- **Graceful GPU degradation.** `lib/gpu.ts` probes `requestAdapter()` once at startup;
-  both CLIP and the viewer key off it. If there's no usable adapter (GPU disabled /
-  blocklisted / hardware accel off), CLIP runs on the WASM backend and the viewer uses
-  Canvas2D — and because the probe runs *before* anything touches the canvas, the
-  fallback gets a pristine canvas (a half-initialised wgpu surface would otherwise
-  leave a `webgpu` context that blocks `getContext('2d')`).
+- **Graceful GPU degradation.** The viewer is one wgpu codebase over **WebGPU +
+  WebGL2**, so it renders on essentially any modern browser; Canvas2D is only a last
+  resort. CLIP still keys off a `lib/gpu.ts` `requestAdapter()` probe to pick its
+  `webgpu` vs `wasm` backend (transformers.js has no WebGL path). The status bar shows
+  the viewer's actual backend (`webgpu` / `webgl2` / `canvas2d`).
 - **Theme-aware viewer background.** The wgpu clear colour is set from the page's card
   colour (read via `getComputedStyle`, rasterized through a 1×1 2D canvas to normalize
   oklch → sRGB, then converted to linear for the sRGB surface), so the letterbox

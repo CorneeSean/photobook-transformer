@@ -36,6 +36,8 @@ pub struct PhotoViewer {
     /// Letterbox / clear colour (linear RGB), set by JS to the theme's card colour
     /// so the canvas background matches the page (and tracks light/dark).
     clear: wgpu::Color,
+    /// Which GPU backend actually bound: "webgpu" or "webgl2".
+    backend: String,
 }
 
 /// Create a viewer bound to `canvas`. Async: requests the GPU adapter + device.
@@ -46,8 +48,9 @@ pub async fn create_viewer(canvas: HtmlCanvasElement) -> Result<PhotoViewer, JsV
     let width = canvas.width().max(1);
     let height = canvas.height().max(1);
 
+    // WebGPU first, WebGL2 as fallback — same code + WGSL (naga transpiles to GLSL).
     let instance = wgpu::Instance::new(wgpu::InstanceDescriptor {
-        backends: wgpu::Backends::BROWSER_WEBGPU,
+        backends: wgpu::Backends::BROWSER_WEBGPU | wgpu::Backends::GL,
         ..Default::default()
     });
     let surface = instance
@@ -61,14 +64,23 @@ pub async fn create_viewer(canvas: HtmlCanvasElement) -> Result<PhotoViewer, JsV
             compatible_surface: Some(&surface),
         })
         .await
-        .ok_or_else(|| JsValue::from_str("no WebGPU adapter"))?;
+        .ok_or_else(|| JsValue::from_str("no GPU adapter (WebGPU or WebGL2)"))?;
+
+    let backend_name = match adapter.get_info().backend {
+        wgpu::Backend::BrowserWebGpu => "webgpu",
+        wgpu::Backend::Gl => "webgl2",
+        _ => "wgpu",
+    }
+    .to_string();
 
     let (device, queue) = adapter
         .request_device(
             &wgpu::DeviceDescriptor {
                 label: None,
                 required_features: wgpu::Features::empty(),
-                required_limits: wgpu::Limits::downlevel_defaults()
+                // WebGL2-safe limits so the GL fallback works; raised to the
+                // adapter's actual limits on WebGPU.
+                required_limits: wgpu::Limits::downlevel_webgl2_defaults()
                     .using_resolution(adapter.limits()),
                 memory_hints: wgpu::MemoryHints::default(),
             },
@@ -211,6 +223,7 @@ pub async fn create_viewer(canvas: HtmlCanvasElement) -> Result<PhotoViewer, JsV
             b: 1.0,
             a: 1.0,
         },
+        backend: backend_name,
     };
     viewer.render();
     Ok(viewer)
@@ -268,6 +281,11 @@ impl PhotoViewer {
         self.image = Some((bind_group, width, height));
         self.recompute_scale();
         self.render();
+    }
+
+    /// Which GPU backend bound: "webgpu" or "webgl2".
+    pub fn backend(&self) -> String {
+        self.backend.clone()
     }
 
     /// Set the letterbox/clear colour (linear RGB, 0..1) — the shell passes the

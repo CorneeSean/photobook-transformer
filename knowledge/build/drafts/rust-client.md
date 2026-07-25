@@ -233,6 +233,47 @@ wgpu findings:
 
 **Spike status: complete.** All of Part A + Part B (steps 1–4) done and verified.
 
+## Follow-on robustness (post-spike, verified)
+
+- **One viewer, WebGPU + WebGL2.** The `viewer` crate enables wgpu's `webgl` feature
+  and requests `BROWSER_WEBGPU | GL`; naga transpiles the WGSL to GLSL, so the *same*
+  Rust viewer runs on WebGPU (preferred) or WebGL2 (fallback) — verified both live
+  (forced GL-only build rendered + exposure worked, `viewer: webgl2`). Canvas2D is now
+  only a last resort. This collapses the earlier dual GPU/CPU viewer into one codebase.
+- **Graceful GPU degradation + theme-aware background.** CLIP picks `webgpu`/`wasm`
+  from a one-shot `requestAdapter()` probe; the wgpu clear colour is set from the
+  page's card colour (getComputedStyle → 1×1 canvas rasterize → sRGB → linear) so the
+  letterbox matches light/dark, restoring the Canvas2D look.
+
+## Client-side migration analysis (which pipeline features → Rust)
+
+Sweet spot = the **classical-CV + vector-math layer**: pure, deterministic, model-free.
+A Rust crate here runs **both** natively in the pipeline *and* as WASM in the client —
+one source of truth (Python can't cross to the browser). Ranked candidates:
+
+- **★★★** blur score (`quality.py`, Laplacian variance), `ClassicalToneEstimator`
+  (`tone_estimator.py`, mean-luma / gray-world WB / clip fractions), LAION aesthetic
+  **head** (`aesthetic.py`, small MLP on the CLIP embedding), select/dedup
+  (`select.py`, MMR + CLIP cosine — the `core` crate already does the KNN half).
+- **★★** `cluster.py` (temporal gaps + DBSCAN over GPS), enhance tone math.
+- **Leave in JS/ONNX**: CLIP + captioning **models** (transformers.js/WebGPU or API).
+- **Leave server-side / I/O**: ingest, sync (Immich), fulfill (Lulu).
+
+### darktable / print rendering
+
+`render.py` shells out to `darktable-cli` (RAW/original + XMP history of 4 bounded
+knobs → corrected JPEG). Findings:
+- **Reproducing darktable's exact output in-browser: impractical.** Its demosaic /
+  highlight-recon / filmic / color science aren't ported to WASM and are version-
+  sensitive (pipeline pins darktable 5.0.1).
+- **Rendering RAW to print quality in-browser: feasible, as your *own* renderer** —
+  `rawloader` + `imagepipe` (pure Rust → WASM) for decode/demosaic, WGSL for tone,
+  `qcms`/lcms2 for ICC, full-res 16-bit output. Different look, not a darktable clone.
+- **The 4 enhance knobs are trivially reproducible** client-side (exposure already is).
+- **Recommended split**: browser = live *preview/proofing* (Rust/WGSL, GPU); server =
+  canonical RAW→print render (darktable). Note GPU floats aren't cross-device
+  deterministic — a print path would want a deterministic CPU Rust renderer.
+
 ## Out of scope (this spike)
 Face detection, aesthetic scoring, classifiers, captioning VLM, neural/RAW
 enhancement, any connection to the Python pipeline / Postgres / Immich, ANN/HNSW

@@ -7,15 +7,14 @@
 // (App.svelte) only ever talks to the `Viewer` interface.
 
 import initViewer, { create_viewer, type PhotoViewer } from '../wasm/viewer/rust_client_viewer'
-import { webgpuUsable } from './gpu'
 
 export interface Viewer {
   /** Load an image (object URL or Blob) and fit it to the canvas. */
   setImage(src: string | Blob): Promise<void>
   /** Exposure in stops; brightness multiplier = 2**stops. Live, cheap to call. */
   setExposure(stops: number): void
-  /** Which backend is actually running (shown in the UI). */
-  readonly backend: 'canvas2d' | 'wgpu'
+  /** Which backend is actually running (shown in the UI): 'webgpu' | 'webgl2' | 'canvas2d'. */
+  readonly backend: string
 }
 
 class Canvas2DViewer implements Viewer {
@@ -117,13 +116,14 @@ function backingSize(canvas: HTMLCanvasElement): [number, number] {
 }
 
 class WgpuViewer implements Viewer {
-  readonly backend = 'wgpu' as const
+  readonly backend: string // 'webgpu' or 'webgl2', from the Rust adapter
   private ro: ResizeObserver
 
   constructor(
     private canvas: HTMLCanvasElement,
     private pv: PhotoViewer,
   ) {
+    this.backend = pv.backend()
     this.ro = new ResizeObserver(() => this.syncSize())
     this.ro.observe(canvas)
   }
@@ -154,26 +154,24 @@ let viewerModuleReady: Promise<void> | null = null
  * else the Canvas2D fallback. Returns the `Viewer` interface either way.
  */
 export async function createViewer(canvas: HTMLCanvasElement): Promise<Viewer> {
-  // Probe for a *usable* adapter before touching the canvas. If we skipped this and
-  // just tried wgpu, a dead GPU would still let create_surface claim the canvas's
-  // 'webgpu' context before the device request failed — leaving the Canvas2D
-  // fallback unable to get a '2d' context. Probing first keeps the canvas pristine.
-  if (await webgpuUsable()) {
-    try {
-      if (!viewerModuleReady) viewerModuleReady = initViewer().then(() => {})
-      await viewerModuleReady
-      // The surface is created from the canvas, so it needs a backing size first.
-      const [w, h] = backingSize(canvas)
-      canvas.width = w
-      canvas.height = h
-      const pv = await create_viewer(canvas)
-      // Match the viewer's letterbox to the page's card background (theme-aware).
-      const [r, g, b] = backgroundLinear(canvas.parentElement ?? canvas)
-      pv.set_background(r, g, b)
-      return new WgpuViewer(canvas, pv)
-    } catch (err) {
-      console.warn('[viewer] wgpu init failed, falling back to Canvas2D', err)
-    }
+  // The wgpu viewer covers WebGPU *and* WebGL2, so try it unconditionally — no need
+  // to probe first. Canvas2D is only a last resort for browsers with neither (near
+  // extinct). If wgpu init fails it may leave a GPU context on the canvas, making the
+  // Canvas2D fallback a no-op — acceptable in that no-WebGPU-and-no-WebGL2 case.
+  try {
+    if (!viewerModuleReady) viewerModuleReady = initViewer().then(() => {})
+    await viewerModuleReady
+    // The surface is created from the canvas, so it needs a backing size first.
+    const [w, h] = backingSize(canvas)
+    canvas.width = w
+    canvas.height = h
+    const pv = await create_viewer(canvas)
+    // Match the viewer's letterbox to the page's card background (theme-aware).
+    const [r, g, b] = backgroundLinear(canvas.parentElement ?? canvas)
+    pv.set_background(r, g, b)
+    return new WgpuViewer(canvas, pv)
+  } catch (err) {
+    console.warn('[viewer] wgpu (WebGPU/WebGL2) init failed, falling back to Canvas2D', err)
   }
   return new Canvas2DViewer(canvas)
 }
