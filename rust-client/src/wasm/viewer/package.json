@@ -1,0 +1,16 @@
+{
+  "name": "rust-client-viewer",
+  "type": "module",
+  "description": "GPU photo viewer (wgpu) compiled to WASM",
+  "version": "0.1.0",
+  "files": [
+    "rust_client_viewer_bg.wasm",
+    "rust_client_viewer.js",
+    "rust_client_viewer.d.ts"
+  ],
+  "main": "rust_client_viewer.js",
+  "types": "rust_client_viewer.d.ts",
+  "sideEffects": [
+    "./snippets/*"
+  ]
+}

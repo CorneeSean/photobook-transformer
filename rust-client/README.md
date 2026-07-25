@@ -12,7 +12,7 @@ wired into Postgres/Immich.
 
 ```
 Svelte + shadcn-svelte tokens (Vite + TS)     ← chrome, gallery, controls, state
-  ├─ <canvas> viewer ───► pixels               ← Canvas2D today; Rust/wgpu next (see status)
+  ├─ viewer (Rust → WASM, wgpu) ──► <canvas>   ← owns the canvas: texture + exposure shader (pixels)
   ├─ transformers.js (WebGPU) ──► CLIP          ← image → 512-d embedding (the "model" leg, JS)
   └─ core (Rust → WASM) ──► VecStore            ← store embedding + exact cosine KNN (the "data" leg)
 ```
@@ -21,8 +21,10 @@ Svelte + shadcn-svelte tokens (Vite + TS)     ← chrome, gallery, controls, sta
   `lib/store.ts` (wraps the Rust store), `lib/viewer.ts` (photo viewer).
 - **`core/`** — Rust crate → WASM: `VecStore` = exact brute-force cosine KNN over
   L2-normalized embeddings. The "data lives in Rust" leg.
-- **`viewer/`** — Rust crate → WASM for the wgpu photo viewer (placeholder until
-  step 4 lands; the Canvas2D viewer in `lib/viewer.ts` drives the UI meanwhile).
+- **`viewer/`** — Rust crate → WASM: a **wgpu** photo viewer that creates a WebGPU
+  surface on the shell's `<canvas>`, uploads the image as an sRGB texture, and
+  renders a contain-fit quad with a live exposure gain (WGSL fragment shader). The
+  Canvas2D viewer in `lib/viewer.ts` is the fallback when WebGPU is absent.
 - **`src/wasm/`** — generated wasm-pack output, **committed on purpose** (tiny;
   keeps `npm run check` / dev build-free). Regenerate with `npm run wasm`.
 
@@ -59,11 +61,10 @@ KNN and outlines the nearest neighbours in green.
 
 ## Status
 
-- ✅ **Step 1–3 done & verified in-browser**: Svelte/shadcn shell, CLIP embeddings
-  on WebGPU (512-d), Rust/WASM exact-KNN "Find similar", Canvas2D viewer with live
-  exposure.
-- ⏳ **Step 4 (Rust/wgpu viewer)** — pending; the Canvas2D viewer is the current
-  backend behind the same `Viewer` interface, so swapping it in is localized.
+✅ **All four steps done & verified in-browser** (Chrome, WebGPU): Svelte/shadcn
+shell, CLIP embeddings on WebGPU (512-d), Rust/WASM exact-KNN "Find similar", and
+the **Rust/wgpu viewer** (GPU texture render + live exposure shader). Both Rust
+crates build with `npm run wasm`.
 
 ## Notes / decisions
 
@@ -75,3 +76,7 @@ KNN and outlines the nearest neighbours in green.
   in `lib/clip.ts` to a ViT-L/14 for 768-d parity with the server's pgvector column.
 - **COOP/COEP headers** are left off (see `vite.config.ts`) so transformers.js can
   fetch weights from the HF CDN; that means no SharedArrayBuffer / wasm threads for now.
+- **wgpu ≥ 23 required.** wgpu 22 requests the `maxInterStageShaderComponents` limit
+  that current Chrome removed from the WebGPU spec, so `requestDevice` rejects it. The
+  Canvas2D fallback also had to be made context-tolerant: a failed wgpu attempt leaves
+  a `webgpu` context on the canvas, so `getContext('2d')` then returns null.

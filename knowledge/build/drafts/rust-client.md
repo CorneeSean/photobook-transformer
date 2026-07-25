@@ -213,9 +213,25 @@ Findings so far:
   (`arr[i].x = …`), not the plain object literal you pushed.
 - **R2 confirmed:** went with the Rust exact-KNN fallback rather than sqlite-vec.
 
-**Remaining:** step 4 (Rust/wgpu viewer) — the ambitious R1 piece; Canvas2D backend
-is in place behind the same `Viewer` interface, so the swap is localized. Not yet
-committed (on branch `spike-rust-client`).
+**Part B — step 4 (Rust/wgpu viewer): done & verified in-browser.** The `viewer`
+crate (wgpu 23) creates a WebGPU surface directly on the shell's `<canvas>`, uploads
+the selected photo as an sRGB texture, and renders a contain-fit quad; exposure is a
+live WGSL fragment-shader gain driven by the shadcn slider. Confirmed live: "viewer:
+wgpu", the photo renders GPU-side with letterbox bars, and the slider brightens it in
+real time (1.05 EV) — all three legs (CLIP → Rust KNN → Rust/wgpu pixels) working
+together. R1 is therefore resolved: the JS-shell ↔ Rust-GPU-canvas boundary works via
+`SurfaceTarget::Canvas` with no per-frame copy.
+
+wgpu findings:
+- **wgpu must be ≥ 23**: v22 requests the `maxInterStageShaderComponents` limit that
+  current Chrome removed from the WebGPU spec → `requestDevice` rejects it.
+- **Canvas context is single-use**: a failed wgpu attempt leaves a `webgpu` context
+  on the canvas, so the Canvas2D fallback's `getContext('2d')` returns null — the
+  fallback had to be made null-tolerant rather than throwing (it was crashing onMount).
+- The whole viewer crate is ~300 lines incl. the WGSL; wgpu-in-wasm was the only
+  genuinely fiddly part of the spike, and only at the version/limits layer.
+
+**Spike status: complete.** All of Part A + Part B (steps 1–4) done and verified.
 
 ## Out of scope (this spike)
 Face detection, aesthetic scoring, classifiers, captioning VLM, neural/RAW

@@ -9,4 +9,14 @@ crate-type = ["cdylib", "rlib"]
 
 [dependencies]
 wasm-bindgen = "0.2"
-# wgpu + web-sys deps are added when the GPU backend lands (step 4).
+wasm-bindgen-futures = "0.4"
+js-sys = "0.3"
+# wgpu >= 23: drops the `maxInterStageShaderComponents` limit that current Chrome
+# removed from the WebGPU spec (22 sends it → requestDevice rejects).
+wgpu = "23"
+bytemuck = { version = "1", features = ["derive"] }
+console_error_panic_hook = "0.1"
+
+[dependencies.web-sys]
+version = "0.3"
+features = ["HtmlCanvasElement"]
