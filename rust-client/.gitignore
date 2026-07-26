@@ -35,3 +35,6 @@ public/*.arw
 *.njsproj
 *.sln
 *.sw?
+
+# Staged sqlite-wasm assets (copied from node_modules by scripts/copy-sqlite.mjs)
+public/sqlite/

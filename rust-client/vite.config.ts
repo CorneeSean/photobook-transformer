@@ -6,9 +6,11 @@ import tailwindcss from '@tailwindcss/vite'
 export default defineConfig({
   plugins: [svelte(), tailwindcss()],
 
-  // The Rust/WASM crates are built with `wasm-pack --target web` into
-  // src/wasm/{core,viewer,rawpdf}; their generated JS glue + .wasm are imported directly.
-  // Exclude transformers.js from dep pre-bundling so its worker/wasm assets resolve.
+  // The Rust/WASM viewer crate is built with `wasm-pack --target web` into
+  // src/wasm/viewer; its generated JS glue + .wasm are imported directly.
+  // transformers.js ships its own worker/wasm assets (from the HF CDN) and must not be
+  // pre-bundled. (sqlite-wasm is loaded as a raw asset from public/sqlite/ — see
+  // store.ts — precisely because Vite's module transform breaks its Emscripten init.)
   optimizeDeps: {
     exclude: ['@huggingface/transformers'],
   },

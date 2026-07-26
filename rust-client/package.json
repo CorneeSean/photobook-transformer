@@ -8,8 +8,9 @@
     "build": "vite build",
     "preview": "vite preview",
     "check": "svelte-check --tsconfig ./tsconfig.app.json && tsc -p tsconfig.node.json",
-    "wasm": "npm run wasm:core && npm run wasm:viewer && npm run wasm:rawpdf",
-    "wasm:core": "wasm-pack build core --target web --out-dir ../src/wasm/core && rm -f src/wasm/core/.gitignore",
+    "sqlite:assets": "node scripts/copy-sqlite.mjs",
+    "postinstall": "node scripts/copy-sqlite.mjs",
+    "wasm": "npm run wasm:viewer && npm run wasm:rawpdf",
     "wasm:viewer": "wasm-pack build viewer --target web --out-dir ../src/wasm/viewer && rm -f src/wasm/viewer/.gitignore",
     "wasm:rawpdf": "wasm-pack build rawpdf --target web --out-dir ../src/wasm/rawpdf && rm -f src/wasm/rawpdf/.gitignore"
   },
@@ -25,6 +26,8 @@
     "vite": "^8.1.1"
   },
   "dependencies": {
-    "@huggingface/transformers": "^4.2.0"
+    "@huggingface/transformers": "^4.2.0",
+    "@sqlite.org/sqlite-wasm": "^3.53.0-build1",
+    "drizzle-orm": "^0.45.2"
   }
 }

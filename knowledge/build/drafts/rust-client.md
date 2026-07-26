@@ -285,6 +285,86 @@ no EXIF orientation → image is flipped, no ICC) — production would use image
 + moxcms. Verified crate list from the ecosystem sweep — rawloader/rawler (LGPL),
 moxcms (permissive CMYK/ICC), fast_image_resize (WASM-proven), printpdf (WASM-proven).
 
+### Correction: the RAW/print lane is NOT Rust-only (web scout, 2026-07)
+
+An earlier framing claimed "no real JS equivalent" for the RAW→develop→print-PDF
+pipeline, so Rust owned it by default. A web scout retired that claim — mature
+JS/WASM options exist for every leg, some *ahead* of the Rust crates above:
+
+- **RAW decode** — [LibRaw-Wasm](https://github.com/ybouane/LibRaw-Wasm): LibRaw
+  (the standard RAW engine) compiled to WASM, Web Worker, CR2/NEF/ARW/DNG… +
+  demosaic. **Broader format coverage than `rawloader`**, already shipped in prod
+  ([pics.io](https://blog.pics.io/in-browser-raw-processing-how-we-did-it-6f03f1e9fe4c/)).
+  Pure-JS [UTIF.js](https://github.com/photopea/UTIF.js/) covers the TIFF-ish subset.
+- **ICC / CMYK color management** — [lcms-wasm](https://www.npmjs.com/package/lcms-wasm)
+  (Little-CMS as WASM; FOGRA39/SWOP) and [jsColorEngine](https://github.com/glennwilton/jsColorEngine)
+  (**100% pure JS**, ICC v2+v4, RGB/CMYK/Lab/XYZ).
+- **Print-ready PDF** — [pdfkit](https://github.com/foliojs/pdfkit) +
+  [pdfkit-cmyk](https://www.npmjs.com/package/pdfkit-cmyk), and [IMG.LY's Print-Ready
+  PDF plugin](https://img.ly/docs/cesdk/js/plugins/print-ready-pdf-iroalu/) doing
+  **PDF/X-4, CMYK, ICC embedding, client-side** — arguably ahead of `printpdf` on
+  print-spec compliance.
+
+Catch: LibRaw-Wasm and lcms-wasm are themselves WASM (C), just driven from JS — so
+"Rust is faster / SIMD" is **not** a differentiator against them; they're equally
+native-speed.
+
+**Revised verdict.** With sqlite-vec owning storage+KNN (the Rust `core` VecStore's
+original job — now redundant), the honest Rust surface shrinks to:
+- **GPU viewer (wgpu): still Rust-only.** No JS equivalent to owning the `<canvas>`
+  at the WebGPU/shader level. Keep.
+- **RAW/print pipeline: Rust-*optional*, not Rust-only.** It competes with
+  LibRaw-Wasm + jsColorEngine/lcms-wasm + a CMYK PDF lib, which is the **lower-effort
+  path** for batch book export. Rust's only real edge here is *coherence with the
+  viewer*: develop/tone/resize in Rust share image types and one wasm memory with the
+  GPU viewer, so pixels never cross JS↔WASM between decode→develop→display→export
+  (the JS stack copies buffers across three separate WASM modules). That matters for
+  GPU-side develop + live proofing; it's ~irrelevant for plain batch export.
+
+So: build Rust here only if you want the single-memory / GPU-develop coherence.
+Otherwise the JS/WASM stack ships the print book faster.
+
+### Data layer: SQLite in the browser (built + verified; Rust `core` VecStore retired)
+
+The R2 fallback (hand-written cosine KNN in the Rust `core` crate) was replaced by a real
+browser SQLite store. Two build-reality constraints surfaced while wiring it up and
+reshaped the design from the original vec0-on-OPFS plan:
+
+1. **sqlite-vec `vec0` is right on paper, but the only ready-made browser build is
+   broken.** SQLite has no pluggable vector column/index like pgvector, so a `vec0`
+   **virtual table** is the correct hook (custom shadow-table storage + a
+   `MATCH … ORDER BY distance` operator; join to rows by `rowid`). But the sole
+   ready-made vec0 wasm build, `sqlite-vec-wasm-demo@0.1.9`, **aborts on `init()`** in
+   current Chrome (Emscripten *"set Module.postRun after already processed"*) —
+   reproduced across static import, dynamic import, **and its own jsDelivr CDN**. It's
+   explicitly labelled "a demonstration and may change at any time." → shelved.
+2. **OPFS SAHPool is Worker-only here.** Probed directly: `FileSystemSyncAccessHandle`
+   /`createSyncAccessHandle` is **absent on the main thread, present in a Worker**. A
+   Worker can't host our JS KNN UDF (callbacks don't cross the worker boundary), so an
+   OPFS-file-backed main-thread DB isn't available.
+
+**Shipped design** (works; verified live in Chrome):
+- **Engine**: official **`@sqlite.org/sqlite-wasm` 3.53** (inits cleanly; ships OPFS +
+  the capi we need). Loaded as a **raw static asset** from `public/sqlite/` (staged by
+  `scripts/copy-sqlite.mjs`, `postinstall`) via a `new Function('u','return import(u)')`
+  shim — Vite's module transform breaks the Emscripten init and rewrites dynamic imports
+  (`?import`), so it must bypass the bundler entirely.
+- **KNN**: a `cosine_distance` **scalar UDF** (`db.createFunction`) →
+  `SELECT id, cosine_distance(embedding, ?) AS distance FROM photos ORDER BY distance
+  LIMIT k`. Exact brute-force — identical results to sqlite-vec's non-ANN KNN, in SQL.
+- **Persistence**: main-thread in-memory DB **snapshotted to IndexedDB**
+  (`sqlite3_js_db_export` → `sqlite3_deserialize` on boot), debounced after writes +
+  flushed on `pagehide`. Same net effect as OPFS for us — embeddings computed **once
+  ever**. Verified: insert 3 → reload → `existing:3`, cache-hit embedding round-trips.
+- **ORM**: **Drizzle** for the typed relational read (`getByHash`); raw SQL for the
+  BLOB insert and the UDF KNN scan.
+- **Seam preserved**: the `knn()` / `getByHash()` / `putEmbedding()` interface is backend
+  -agnostic — a working **vec0** build (or a self-compiled sqlite-vec-in-official-wasm)
+  drops in later by swapping the UDF scan for a `MATCH` query. **[follow-up]**
+
+Consequence: Rust's clearly-justified surface narrows to the **wgpu viewer**; the data
+leg is SQL/JS, and the RAW/print leg is Rust-optional (see correction above).
+
 ## Out of scope (this spike)
 Face detection, aesthetic scoring, classifiers, captioning VLM, neural/RAW
 enhancement, any connection to the Python pipeline / Postgres / Immich, ANN/HNSW

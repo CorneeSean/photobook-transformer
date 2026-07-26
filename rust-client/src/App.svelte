@@ -2,7 +2,7 @@
   import { onMount } from 'svelte'
   import { loadClip, embedImage, embeddingDim, embeddingBackend } from './lib/clip'
   import { webgpuUsable } from './lib/gpu'
-  import { initStore, insert, knn, count } from './lib/store'
+  import { openStore, getByHash, putEmbedding, knn, count, hashBlob } from './lib/store'
   import { createViewer, type Viewer } from './lib/viewer'
 
   type Photo = {
@@ -10,6 +10,8 @@
     url: string
     blob: Blob
     embedding?: Float32Array
+    dbId?: number
+    cached?: boolean
     busy: boolean
   }
 
@@ -24,6 +26,7 @@
   let viewerBackend = $state('')
   let gpuOk = $state(false)
   let dragOver = $state(false)
+  let persistent = $state(false)
 
   let nextId = 0
   let canvasEl: HTMLCanvasElement
@@ -35,14 +38,17 @@
   onMount(async () => {
     gpuOk = await webgpuUsable()
     dim = embeddingDim()
-    await initStore(dim)
+    const store = await openStore(dim)
+    persistent = store.persistent
     viewer = await createViewer(canvasEl)
     viewerBackend = viewer.backend
     status = 'loading CLIP model…'
     await loadClip((m) => (status = m))
     clipBackend = embeddingBackend()
     ready = true
-    status = 'ready'
+    status = persistent
+      ? `ready · ${store.existing} vectors persisted`
+      : 'ready · in-memory (no persistence)'
   })
 
   async function addFiles(files: FileList | File[]) {
@@ -54,19 +60,31 @@
       // to the local object wouldn't be tracked by $state's deep reactivity.
       const p = photos[photos.length - 1]
       if (selectedId === null) select(p)
-      // Embed off the main thread's critical path; update in place when done.
-      embedImage(f)
-        .then((emb) => {
-          p.embedding = emb
-          insert(p.id, emb)
-          p.busy = false
-          status = `${count()} / ${photos.length} embedded (${dim}-d, ${clipBackend})`
-        })
-        .catch((err) => {
-          p.busy = false
-          status = `embed failed: ${err}`
-          console.error(err)
-        })
+      void embedOrLoad(p, f) // off the critical path; updates in place when done
+    }
+  }
+
+  // Embed a photo, or skip CLIP entirely if we've seen these exact bytes before
+  // (persisted embedding) — the concrete payoff of the sqlite-vec + OPFS store.
+  async function embedOrLoad(p: Photo, f: File) {
+    try {
+      const hash = await hashBlob(f)
+      const hit = await getByHash(hash)
+      if (hit) {
+        p.embedding = hit.embedding
+        p.dbId = hit.id
+        p.cached = true
+      } else {
+        const emb = await embedImage(f)
+        p.dbId = await putEmbedding(hash, f.name, emb)
+        p.embedding = emb
+      }
+      p.busy = false
+      status = `${count()} vectors (${dim}-d, ${clipBackend})${p.cached ? ' · last from cache' : ''}`
+    } catch (err) {
+      p.busy = false
+      status = `embed failed: ${err}`
+      console.error(err)
     }
   }
 
@@ -83,9 +101,13 @@
 
   function findSimilar() {
     if (!selected?.embedding) return
-    const ids = knn(selected.embedding, 6)
-    const set = new Set<number>(Array.from(ids))
-    set.delete(selected.id) // don't highlight the query itself
+    // KNN returns DB rowids; map them back to the gallery photos that carry them.
+    const rows = knn(selected.embedding, 7) // +1 for the query itself
+    const set = new Set<number>()
+    for (const { id } of rows) {
+      const gp = photos.find((p) => p.dbId === id)
+      if (gp && gp.id !== selected.id) set.add(gp.id)
+    }
     highlighted = set
     status = `nearest ${set.size} to #${selected.id}`
   }
@@ -110,6 +132,7 @@
       <span class="rounded-md bg-secondary px-2 py-1">CLIP: {clipBackend || '…'}</span>
       <span class="rounded-md bg-secondary px-2 py-1">viewer: {viewerBackend || '…'}</span>
       <span class="rounded-md bg-secondary px-2 py-1">WebGPU: {gpuOk ? 'yes' : 'no'}</span>
+      <span class="rounded-md bg-secondary px-2 py-1">store: {persistent ? 'sqlite-wasm · IndexedDB' : 'sqlite-wasm · memory'}</span>
     </div>
   </header>
 
