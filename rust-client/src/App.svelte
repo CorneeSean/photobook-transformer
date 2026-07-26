@@ -132,7 +132,7 @@
       <span class="rounded-md bg-secondary px-2 py-1">CLIP: {clipBackend || '…'}</span>
       <span class="rounded-md bg-secondary px-2 py-1">viewer: {viewerBackend || '…'}</span>
       <span class="rounded-md bg-secondary px-2 py-1">WebGPU: {gpuOk ? 'yes' : 'no'}</span>
-      <span class="rounded-md bg-secondary px-2 py-1">store: {persistent ? 'sqlite-wasm · IndexedDB' : 'sqlite-wasm · memory'}</span>
+      <span class="rounded-md bg-secondary px-2 py-1">store: {persistent ? 'sqlite-vec · IndexedDB' : 'sqlite-vec · memory'}</span>
     </div>
   </header>
 

@@ -330,37 +330,43 @@ The R2 fallback (hand-written cosine KNN in the Rust `core` crate) was replaced 
 browser SQLite store. Two build-reality constraints surfaced while wiring it up and
 reshaped the design from the original vec0-on-OPFS plan:
 
-1. **sqlite-vec `vec0` is right on paper, but the only ready-made browser build is
-   broken.** SQLite has no pluggable vector column/index like pgvector, so a `vec0`
-   **virtual table** is the correct hook (custom shadow-table storage + a
-   `MATCH … ORDER BY distance` operator; join to rows by `rowid`). But the sole
-   ready-made vec0 wasm build, `sqlite-vec-wasm-demo@0.1.9`, **aborts on `init()`** in
-   current Chrome (Emscripten *"set Module.postRun after already processed"*) —
-   reproduced across static import, dynamic import, **and its own jsDelivr CDN**. It's
-   explicitly labelled "a demonstration and may change at any time." → shelved.
-2. **OPFS SAHPool is Worker-only here.** Probed directly: `FileSystemSyncAccessHandle`
-   /`createSyncAccessHandle` is **absent on the main thread, present in a Worker**. A
-   Worker can't host our JS KNN UDF (callbacks don't cross the worker boundary), so an
-   OPFS-file-backed main-thread DB isn't available.
+SQLite has no pluggable vector column/index like pgvector, so a `vec0` **virtual table**
+is the correct hook (custom shadow-table storage + a `MATCH … ORDER BY distance` operator;
+join to rows by `rowid`). Getting a *working* vec0 build in the browser took two tries,
+and OPFS turned out to be unavailable on the main thread:
 
-**Shipped design** (works; verified live in Chrome):
-- **Engine**: official **`@sqlite.org/sqlite-wasm` 3.53** (inits cleanly; ships OPFS +
-  the capi we need). Loaded as a **raw static asset** from `public/sqlite/` (staged by
-  `scripts/copy-sqlite.mjs`, `postinstall`) via a `new Function('u','return import(u)')`
-  shim — Vite's module transform breaks the Emscripten init and rewrites dynamic imports
-  (`?import`), so it must bypass the bundler entirely.
-- **KNN**: a `cosine_distance` **scalar UDF** (`db.createFunction`) →
-  `SELECT id, cosine_distance(embedding, ?) AS distance FROM photos ORDER BY distance
-  LIMIT k`. Exact brute-force — identical results to sqlite-vec's non-ANN KNN, in SQL.
+1. **The ad-hoc demo build is broken.** `sqlite-vec-wasm-demo@0.1.9` **aborts on `init()`**
+   in current Chrome (Emscripten *"set Module.postRun after already processed"*) —
+   reproduced across static import, dynamic import, **and its own jsDelivr CDN**; it's
+   self-labelled "a demonstration and may change at any time." → rejected.
+2. **`sqlite-wasm-vec` works.** A fork of the *official* `@sqlite.org/sqlite-wasm` (SQLite
+   3.51) with **sqlite-vec `v0.1.7-alpha.2` statically compiled in**. Because it's built
+   the official way, it inits cleanly where the demo doesn't. This is what ships.
+3. **OPFS SAHPool is Worker-only here.** Probed directly: `createSyncAccessHandle` is
+   **absent on the main thread, present in a Worker**. A Worker complicates the vec0 path,
+   so we keep the DB in memory on the main thread and persist via an IndexedDB snapshot.
+
+**Shipped design** (works; verified live in Chrome — real vec0):
+- **Engine**: **`sqlite-wasm-vec` 0.1.11** (official sqlite-wasm + vec0). Loaded as a
+  **raw static asset** from `public/sqlite/` (staged by `scripts/copy-sqlite.mjs`,
+  `postinstall`) via a `new Function('u','return import(u)')` shim — Vite's module
+  transform breaks the Emscripten init and rewrites dynamic imports (`?import`), so it must
+  bypass the bundler entirely.
+- **KNN**: real `vec0` — `CREATE VIRTUAL TABLE vec_photos USING vec0(embedding
+  float[dim] distance_metric=cosine)`, queried with `WHERE embedding MATCH ? ORDER BY
+  distance LIMIT k`. Cosine matches the server's pgvector similarity. (An earlier interim
+  built a `cosine_distance` scalar UDF for the official no-vec build; dropped once
+  `sqlite-wasm-vec` proved out.)
 - **Persistence**: main-thread in-memory DB **snapshotted to IndexedDB**
   (`sqlite3_js_db_export` → `sqlite3_deserialize` on boot), debounced after writes +
-  flushed on `pagehide`. Same net effect as OPFS for us — embeddings computed **once
-  ever**. Verified: insert 3 → reload → `existing:3`, cache-hit embedding round-trips.
-- **ORM**: **Drizzle** for the typed relational read (`getByHash`); raw SQL for the
-  BLOB insert and the UDF KNN scan.
-- **Seam preserved**: the `knn()` / `getByHash()` / `putEmbedding()` interface is backend
-  -agnostic — a working **vec0** build (or a self-compiled sqlite-vec-in-official-wasm)
-  drops in later by swapping the UDF scan for a `MATCH` query. **[follow-up]**
+  flushed on `pagehide`. The **vec0 shadow tables serialize with the DB**, so persistence
+  is transparent. Same net effect as OPFS — embeddings computed **once ever**. Verified:
+  insert 3 → reload → `existing:3`, and **vec0 `MATCH` KNN works against the restored
+  shadow tables** (order + cosine distances identical pre/post reload).
+- **ORM**: **Drizzle** for the typed relational read/insert (`photos`); raw SQL for the
+  vec0 insert + `MATCH` KNN (no ORM models a virtual table).
+- **Backend-agnostic seam**: `knn()` / `getByHash()` / `putEmbedding()` — the engine can
+  swap (UDF ↔ vec0 ↔ future ANN) without touching callers.
 
 Consequence: Rust's clearly-justified surface narrows to the **wgpu viewer**; the data
 leg is SQL/JS, and the RAW/print leg is Rust-optional (see correction above).

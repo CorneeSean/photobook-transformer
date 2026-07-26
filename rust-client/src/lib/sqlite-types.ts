@@ -1,10 +1,7 @@
-// Minimal types for the official @sqlite.org/sqlite-wasm "oo1" API. We load the module
-// as a raw static asset (import('/sqlite/index.mjs')), so there's no importable package
-// specifier to get types from — we cast the dynamic import to these shapes instead.
-
-/** A SQLite scalar-UDF callback: first arg is the sqlite3_context pointer, then SQL args
- *  (BLOB values arrive as Uint8Array). Return value is converted back to a SQL value. */
-export type UdfFn = (ctx: unknown, ...args: unknown[]) => unknown
+// Minimal types for the sqlite-wasm "oo1" API (the sqlite-wasm-vec build — official
+// @sqlite.org/sqlite-wasm with the sqlite-vec `vec0` extension compiled in). We load the
+// module as a raw static asset (import('/sqlite/sqlite3.mjs')), so there's no importable
+// package specifier to get types from — we cast the dynamic import to these shapes instead.
 
 export interface OoDb {
   exec(sql: string): OoDb
@@ -18,11 +15,6 @@ export interface OoDb {
   selectValue(sql: string, bind?: unknown[]): unknown
   selectArrays(sql: string, bind?: unknown[]): unknown[][]
   selectObjects(sql: string, bind?: unknown[]): Record<string, unknown>[]
-  createFunction(
-    name: string,
-    fn: UdfFn,
-    opts?: { arity?: number; deterministic?: boolean; directOnly?: boolean },
-  ): OoDb
   close(): void
 }
 

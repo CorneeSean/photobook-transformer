@@ -1,24 +1,26 @@
-// The "data" leg — persistent SQLite in the browser.
+// The "data" leg — persistent SQLite + sqlite-vec in the browser.
 //
-// Backend note (2026-07), two constraints discovered while wiring this up:
-//   1. The only ready-made sqlite-vec (`vec0`) browser build (`sqlite-vec-wasm-demo`)
-//      aborts on init in current Chrome (an Emscripten postRun bug, reproduced from its
-//      own CDN too). So we ship on the official @sqlite.org/sqlite-wasm build and do KNN
-//      with a `cosine_distance` scalar UDF — an exact brute-force scan, identical in
-//      result to sqlite-vec's (non-ANN) KNN. A working vec0 build drops in behind this
-//      same `knn()` seam later (swap the UDF scan for a MATCH query).
-//   2. OPFS SAHPool (sync access handles) is Worker-only in this Chrome, and a Worker
-//      can't host the JS UDF callback. So instead of an OPFS-backed file we keep the DB
-//      in memory on the main thread and persist it by snapshotting the whole database
-//      (sqlite3_js_db_export) into IndexedDB, reloading it on boot (sqlite3_deserialize).
-//      The DB is small (a few KB/photo), so a debounced full snapshot is cheap. Net
-//      effect is the same as OPFS for our purpose: embeddings computed once, survive reload.
+// Backend note (2026-07): the plan was sqlite-vec's `vec0` virtual table, and that's what
+// ships here — via the `sqlite-wasm-vec` build (official @sqlite.org/sqlite-wasm with the
+// vec0 extension statically compiled in). The one *ad-hoc* demo build,
+// `sqlite-vec-wasm-demo`, aborts on init in current Chrome (Emscripten postRun bug); the
+// official-based `sqlite-wasm-vec` build inits cleanly. Vectors live in a `vec0` virtual
+// table (SQLite has no pluggable vector column/index like pgvector — a virtual table is
+// the only hook; join to relational rows by `rowid`). KNN is `MATCH … ORDER BY distance`
+// with `distance_metric=cosine`, matching the server's pgvector cosine similarity.
 //
-// The sqlite-wasm Emscripten module must be loaded *untransformed*, so it's served as a
-// raw asset from public/sqlite/ (staged by scripts/copy-sqlite.mjs) and imported by URL.
+// The sqlite-wasm Emscripten module must be loaded *untransformed*, so it's served as a raw
+// asset from public/sqlite/ (staged by scripts/copy-sqlite.mjs) and imported by URL via a
+// `new Function` shim (Vite's transform breaks the Emscripten init + rewrites the import).
 //
-// Layering: Drizzle owns the typed relational read (getByHash); inserts and the KNN scan
-// are raw SQL because they carry the embedding BLOB / the UDF expression.
+// Persistence: OPFS SAHPool sync-access-handles are Worker-only in this Chrome, and a
+// Worker complicates the vec0 path, so the DB is kept in memory on the main thread and
+// snapshotted whole into IndexedDB (sqlite3_js_db_export → sqlite3_deserialize on boot).
+// The vec0 shadow tables serialize with the DB, so persistence is transparent. Net effect
+// matches OPFS: embeddings computed once ever, survive reload.
+//
+// Layering: Drizzle owns the typed relational read (getByHash); the vec0 insert/KNN are
+// raw SQL — no ORM models a virtual table or its MATCH operator.
 import { drizzle, type SqliteRemoteDatabase } from 'drizzle-orm/sqlite-proxy'
 import { eq } from 'drizzle-orm'
 import { photos } from './schema'
@@ -29,8 +31,8 @@ const IDB_STORE = 'kv'
 const SNAPSHOT_KEY = 'photobook.sqlite'
 
 // Load an ESM by URL at runtime, fully bypassing the bundler's import transform (Vite
-// otherwise rewrites dynamic imports and appends `?import`, which breaks fetching the
-// raw public asset). Hiding `import()` inside `new Function` keeps Vite from seeing it.
+// otherwise rewrites dynamic imports and appends `?import`, which breaks fetching the raw
+// public asset). Hiding `import()` inside `new Function` keeps Vite from seeing it.
 const dynamicImport = new Function('u', 'return import(u)') as (u: string) => Promise<unknown>
 
 let sqlite3: Sqlite3 | null = null
@@ -48,7 +50,7 @@ function orm(): SqliteRemoteDatabase<Record<string, never>> {
   return db
 }
 
-/** A Float32 vector as a raw little-endian BLOB. */
+/** A Float32 vector as a raw little-endian BLOB (how sqlite-vec stores float[] vectors). */
 function toBlob(v: Float32Array): Uint8Array {
   return new Uint8Array(v.buffer, v.byteOffset, v.byteLength)
 }
@@ -59,26 +61,10 @@ function toVec(blob: Uint8Array): Float32Array {
 }
 
 function readEmbedding(id: number): Float32Array | null {
-  const blob = rawDb().selectValue('SELECT embedding FROM photos WHERE id = ?', [id]) as
+  const blob = rawDb().selectValue('SELECT embedding FROM vec_photos WHERE rowid = ?', [id]) as
     | Uint8Array
     | undefined
   return blob ? toVec(blob) : null
-}
-
-/** cosine *distance* (1 - cosine similarity); smaller = more similar. */
-function cosineDistance(a: Uint8Array, b: Uint8Array): number {
-  const x = toVec(a)
-  const y = toVec(b)
-  let dot = 0
-  let nx = 0
-  let ny = 0
-  for (let i = 0; i < x.length; i++) {
-    dot += x[i] * y[i]
-    nx += x[i] * x[i]
-    ny += y[i] * y[i]
-  }
-  const denom = Math.sqrt(nx * ny)
-  return denom ? 1 - dot / denom : 1
 }
 
 // ---- IndexedDB snapshot persistence ---------------------------------------
@@ -125,30 +111,26 @@ async function saveNow(): Promise<void> {
   }
 }
 
-// ---- schema + KNN UDF ------------------------------------------------------
+// ---- schema ----------------------------------------------------------------
 
 function migrate(d: OoDb, dim: number): void {
   d.exec(`CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT)`)
   const stored = d.selectValue(`SELECT value FROM meta WHERE key = 'dim'`) as string | undefined
-  if (stored !== undefined && Number(stored) !== dim) d.exec(`DROP TABLE IF EXISTS photos`)
+  if (stored !== undefined && Number(stored) !== dim) {
+    d.exec(`DROP TABLE IF EXISTS vec_photos`)
+    d.exec(`DROP TABLE IF EXISTS photos`)
+  }
   d.exec(`
     CREATE TABLE IF NOT EXISTS photos (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       hash TEXT NOT NULL UNIQUE,
       name TEXT NOT NULL,
-      added_at INTEGER NOT NULL,
-      embedding BLOB NOT NULL
+      added_at INTEGER NOT NULL
     );
+    CREATE VIRTUAL TABLE IF NOT EXISTS vec_photos
+      USING vec0(embedding float[${dim}] distance_metric=cosine);
   `)
   d.exec({ sql: `INSERT OR REPLACE INTO meta(key, value) VALUES ('dim', ?)`, bind: [String(dim)] })
-}
-
-function registerUdf(d: OoDb): void {
-  // UDFs live on the connection, so (re)register on every open.
-  d.createFunction('cosine_distance', (_ctx, a, b) => cosineDistance(a as Uint8Array, b as Uint8Array), {
-    arity: 2,
-    deterministic: true,
-  })
 }
 
 /** Drizzle "proxy" driver: run SQL against the synchronous oo1 DB, shaped for drizzle-orm. */
@@ -170,10 +152,9 @@ function driver(d: OoDb) {
 export async function openStore(dim: number): Promise<{ persistent: boolean; existing: number }> {
   dims = dim
   // Raw static asset (see header + dynamicImport note).
-  const mod = (await dynamicImport('/sqlite/index.mjs')) as { default: Sqlite3InitModule }
+  const mod = (await dynamicImport('/sqlite/sqlite3.mjs')) as { default: Sqlite3InitModule }
   sqlite3 = await mod.default()
   raw = new sqlite3.oo1.DB(':memory:')
-  registerUdf(raw)
 
   // Load the previous snapshot from IndexedDB, if any.
   try {
@@ -199,7 +180,6 @@ export async function openStore(dim: number): Promise<{ persistent: boolean; exi
   db = drizzle(driver(raw))
   if (persistEnabled) {
     void navigator.storage?.persist?.()
-    // Best-effort flush when the tab goes away, in case a debounced save is pending.
     addEventListener('pagehide', () => void saveNow())
     scheduleSave() // persist the (possibly migrated) schema even before the first insert
   }
@@ -217,27 +197,30 @@ export async function getByHash(
   return emb ? { id: rows[0].id, embedding: emb } : null
 }
 
-/** Insert a new photo + its embedding, returning the assigned id. */
+/** Insert a new photo row (Drizzle) + its embedding (vec0), returning the shared rowid. */
 export async function putEmbedding(
   hash: string,
   name: string,
   embedding: Float32Array,
 ): Promise<number> {
   if (embedding.length !== dims) throw new Error(`embedding dim ${embedding.length} ≠ store dim ${dims}`)
-  // Raw insert: it carries the BLOB (kept off the ORM path to avoid browser Buffer quirks).
-  rawDb().exec({
-    sql: 'INSERT INTO photos(hash, name, added_at, embedding) VALUES (?, ?, ?, ?)',
-    bind: [hash, name, Date.now(), toBlob(embedding)],
-  })
+  const inserted = await orm()
+    .insert(photos)
+    .values({ hash, name, addedAt: Date.now() })
+    .returning({ id: photos.id })
+  const id = inserted[0].id
+  rawDb().exec({ sql: 'INSERT INTO vec_photos(rowid, embedding) VALUES (?, ?)', bind: [id, toBlob(embedding)] })
   scheduleSave()
-  return rawDb().selectValue('SELECT last_insert_rowid()') as number
+  return id
 }
 
-/** k nearest photo ids to `query` by cosine distance, nearest first (exact scan; may include self). */
+/** k nearest photo ids to `query` by cosine distance, nearest first (vec0 KNN; may include self). */
 export function knn(query: Float32Array, k: number): { id: number; distance: number }[] {
+  // k is a small integer we control, so inlining it (rather than binding) sidesteps any
+  // vec0 parameter-in-LIMIT quirk; the only bound value is the query blob.
   const limit = Math.max(1, k | 0)
   return rawDb().selectObjects(
-    `SELECT id, cosine_distance(embedding, ?) AS distance FROM photos ORDER BY distance LIMIT ${limit}`,
+    `SELECT rowid AS id, distance FROM vec_photos WHERE embedding MATCH ? ORDER BY distance LIMIT ${limit}`,
     [toBlob(query)],
   ) as { id: number; distance: number }[]
 }
