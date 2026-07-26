@@ -73,7 +73,7 @@
   // Repopulate the gallery from the persisted DB + cached thumbnails — no originals or
   // permissions needed. Full-res loads lazily from disk when a photo is opened.
   async function restoreGallery() {
-    for (const row of listPhotos()) {
+    for (const row of await listPhotos()) {
       const thumb = await getThumb(row.id)
       if (!thumb) continue // no cached thumbnail — can't show it, skip
       photos.push({
@@ -151,7 +151,7 @@
       await putRef(p.dbId, handle, thumb) // persist handle (if any) + thumbnail by db id
       p.busy = false
       p.stage = undefined
-      status = `${count()} photos (${dim}-d, ${clipBackend})${handle ? '' : ' · no disk ref'}`
+      status = `${await count()} photos (${dim}-d, ${clipBackend})${handle ? '' : ' · no disk ref'}`
     } catch (err) {
       p.busy = false
       p.stage = undefined
@@ -193,17 +193,17 @@
     viewer?.setExposure(exposure)
   }
 
-  function findSimilar() {
+  async function findSimilar() {
     if (!selected) return
     // Restored photos carry no embedding until needed — lazy-load it from the store.
     let emb = selected.embedding
     if (!emb && selected.dbId != null) {
-      emb = getEmbedding(selected.dbId) ?? undefined
+      emb = (await getEmbedding(selected.dbId)) ?? undefined
       selected.embedding = emb
     }
     if (!emb) return
     // KNN returns DB rowids; map them back to the gallery photos that carry them.
-    const rows = knn(emb, 7) // +1 for the query itself
+    const rows = await knn(emb, 7) // +1 for the query itself
     const set = new Set<number>()
     for (const { id } of rows) {
       const gp = photos.find((p) => p.dbId === id)
@@ -222,14 +222,14 @@
   // reference to it.
   async function removePhoto(photo: Photo) {
     if (photo.dbId != null) {
-      deletePhoto(photo.dbId)
+      await deletePhoto(photo.dbId)
       await deleteRef(photo.dbId)
     }
     URL.revokeObjectURL(photo.thumbUrl)
     photos = photos.filter((p) => p.id !== photo.id)
     if (highlighted.has(photo.id)) highlighted = new Set([...highlighted].filter((id) => id !== photo.id))
     if (selectedId === photo.id) selectedId = null
-    status = `removed “${photo.name}” · ${count()} photos`
+    status = `removed “${photo.name}” · ${await count()} photos`
   }
 
   async function onDrop(e: DragEvent) {
@@ -260,7 +260,7 @@
       <span class="rounded-md bg-secondary px-2 py-1">CLIP: {clipBackend || '…'}</span>
       <span class="rounded-md bg-secondary px-2 py-1">viewer: {viewerBackend || '…'}</span>
       <span class="rounded-md bg-secondary px-2 py-1">WebGPU: {gpuOk ? 'yes' : 'no'}</span>
-      <span class="rounded-md bg-secondary px-2 py-1">store: {persistent ? 'sqlite-vec · IndexedDB' : 'sqlite-vec · memory'}</span>
+      <span class="rounded-md bg-secondary px-2 py-1">store: {persistent ? 'sqlite-vec · OPFS worker' : 'sqlite-vec · memory'}</span>
     </div>
   </header>
 

@@ -9,8 +9,9 @@ export default defineConfig({
   // The Rust/WASM viewer crate is built with `wasm-pack --target web` into
   // src/wasm/viewer; its generated JS glue + .wasm are imported directly.
   // transformers.js ships its own worker/wasm assets (from the HF CDN) and must not be
-  // pre-bundled. (sqlite-wasm is loaded as a raw asset from public/sqlite/ — see
-  // store.ts — precisely because Vite's module transform breaks its Emscripten init.)
+  // pre-bundled. (sqlite-wasm is loaded as a raw asset from public/sqlite/ inside the DB
+  // worker — see lib/db.worker.ts — precisely because Vite's module transform breaks its
+  // Emscripten init. The DB worker itself is bundled by Vite via `new Worker(new URL(...))`.)
   optimizeDeps: {
     exclude: ['@huggingface/transformers'],
   },

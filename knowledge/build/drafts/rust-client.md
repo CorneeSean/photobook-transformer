@@ -343,33 +343,52 @@ and OPFS turned out to be unavailable on the main thread:
    3.51) with **sqlite-vec `v0.1.7-alpha.2` statically compiled in**. Because it's built
    the official way, it inits cleanly where the demo doesn't. This is what ships.
 3. **OPFS SAHPool is Worker-only here.** Probed directly: `createSyncAccessHandle` is
-   **absent on the main thread, present in a Worker**. A Worker complicates the vec0 path,
-   so we keep the DB in memory on the main thread and persist via an IndexedDB snapshot.
+   **absent on the main thread, present in a Worker**. The first cut avoided the Worker and
+   kept the DB in memory on the main thread, persisting via an IndexedDB snapshot. That was
+   later **superseded** (below): the DB now runs in a Worker on OPFS, and the worry that "a
+   Worker complicates the vec0 path" did not hold — nothing vec0-specific breaks in a Worker.
 
 **Shipped design** (works; verified live in Chrome — real vec0):
-- **Engine**: **`sqlite-wasm-vec` 0.1.11** (official sqlite-wasm + vec0). Loaded as a
-  **raw static asset** from `public/sqlite/` (staged by `scripts/copy-sqlite.mjs`,
-  `postinstall`) via a `new Function('u','return import(u)')` shim — Vite's module
-  transform breaks the Emscripten init and rewrites dynamic imports (`?import`), so it must
-  bypass the bundler entirely.
+- **Threading**: the whole DB lives in a **Web Worker** (`lib/db.worker.ts`), fronted on
+  the main thread by **Comlink** (`lib/store.ts`) so callers use it like a normal async
+  module (`await knn(vec, k)` is a postMessage round-trip). This (a) unlocks OPFS SAHPool
+  (Worker-only) and (b) keeps the O(n) brute-force KNN scan + inserts off the render thread
+  so they can't jank the wgpu viewer. The public store API is unchanged; the former **sync**
+  getters (`knn`/`count`/`listPhotos`/`getEmbedding`/`deletePhoto`) are now **async**.
+- **Engine**: **`sqlite-wasm-vec` 0.1.11** (official sqlite-wasm + vec0). Loaded *inside the
+  worker* as a **raw static asset** from `public/sqlite/` (staged by
+  `scripts/copy-sqlite.mjs`, `postinstall`) via a `new Function('u','return import(u)')`
+  shim — Vite's module transform breaks the Emscripten init and rewrites dynamic imports
+  (`?import`), so it must bypass the bundler entirely. The worker itself *is* bundled by
+  Vite (`new Worker(new URL('./db.worker.ts', import.meta.url), {type:'module'})`).
 - **KNN**: real `vec0` — `CREATE VIRTUAL TABLE vec_photos USING vec0(embedding
   float[dim] distance_metric=cosine)`, queried with `WHERE embedding MATCH ? ORDER BY
   distance LIMIT k`. Cosine matches the server's pgvector similarity. (An earlier interim
   built a `cosine_distance` scalar UDF for the official no-vec build; dropped once
   `sqlite-wasm-vec` proved out.)
-- **Persistence**: main-thread in-memory DB **snapshotted to IndexedDB**
-  (`sqlite3_js_db_export` → `sqlite3_deserialize` on boot), debounced after writes +
-  flushed on `pagehide`. The **vec0 shadow tables serialize with the DB**, so persistence
-  is transparent. Same net effect as OPFS — embeddings computed **once ever**. Verified:
-  insert 3 → reload → `existing:3`, and **vec0 `MATCH` KNN works against the restored
-  shadow tables** (order + cosine distances identical pre/post reload).
+- **Persistence**: **OPFS via `installOpfsSAHPoolVfs`** in the worker — SQLite writes pages
+  straight to OPFS, so persistence is automatic (no snapshotting). This replaced the earlier
+  IndexedDB-snapshot approach, whose `sqlite3_js_db_export` re-serialized the *whole* DB on
+  every change (grew with the library); OPFS writes only dirty pages. The vec0 shadow tables
+  are ordinary tables, so they persist transparently. Falls back to an in-memory DB if OPFS
+  is unavailable. Verified live: insert 3 → reload → `existing:3`, and vec0 `MATCH` KNN is
+  identical (order + cosine distances) against the reopened OPFS DB.
+  - **Reload lock race + fix.** SAHPool takes **exclusive** sync-access handles; on reload a
+    navigated-away worker can still hold them, so a fresh acquire transiently throws and
+    would silently fall back to in-memory. Fixed with two mitigations: `store.ts` terminates
+    the worker on `pagehide` (releases handles promptly) **and** `openOpfs` retries
+    acquisition for ~4 s before falling back. Bounded so a *second live tab* (which holds the
+    lock indefinitely — SAHPool is single-connection) eventually falls back rather than
+    hanging. Verified: single reload reliably reacquires OPFS; rapid back-to-back loads can
+    still momentarily fall back, then recover on the next load.
 - **ORM**: **Drizzle** for the typed relational read/insert (`photos`); raw SQL for the
   vec0 insert + `MATCH` KNN (no ORM models a virtual table).
 - **Backend-agnostic seam**: `knn()` / `getByHash()` / `putEmbedding()` — the engine can
   swap (UDF ↔ vec0 ↔ future ANN) without touching callers.
 
-**Photos on disk (`lib/files.ts`, verified live).** Image *bytes* stay out of SQLite (the
-snapshot would balloon). Instead, per photo we persist in a separate IndexedDB DB:
+**Photos on disk (`lib/files.ts`, verified live).** Image *bytes* stay out of SQLite (they'd
+bloat the OPFS DB file and every KNN table scan). Instead, per photo we persist in a separate
+IndexedDB DB:
 - a **`FileSystemFileHandle`** — a re-openable *reference* to the user's original file
   (File System Access API; **Chromium-only**; structured-cloneable so it survives reload).
   Captured from `showOpenFilePicker()` or drag-drop `getAsFileSystemHandle()`. Re-granting

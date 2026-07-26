@@ -27,6 +27,7 @@
   },
   "dependencies": {
     "@huggingface/transformers": "^4.2.0",
+    "comlink": "^4.4.2",
     "drizzle-orm": "^0.45.2",
     "sqlite-wasm-vec": "^0.1.11"
   }

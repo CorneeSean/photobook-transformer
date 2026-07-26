@@ -18,7 +18,8 @@ export interface OoDb {
   close(): void
 }
 
-/** Returned by installOpfsSAHPoolVfs — its DB persists to OPFS (no COOP/COEP needed). */
+/** Returned by installOpfsSAHPoolVfs — its DB persists to OPFS (no COOP/COEP needed).
+ *  SAHPool's sync-access handles are Worker-only, so this is used from db.worker.ts. */
 export interface SAHPoolUtil {
   OpfsSAHPoolDb: new (filename: string) => OoDb
 }
@@ -30,21 +31,6 @@ export interface Sqlite3 {
     initialCapacity?: number
     clearOnInit?: boolean
   }): Promise<SAHPoolUtil>
-  // Whole-DB snapshot round-trip (used for IndexedDB persistence — see store.ts).
-  capi: {
-    sqlite3_js_db_export(db: OoDb): Uint8Array
-    sqlite3_deserialize(
-      db: OoDb,
-      schema: string,
-      data: number,
-      szDb: number,
-      szBuf: number,
-      flags: number,
-    ): number
-    SQLITE_DESERIALIZE_FREEONCLOSE: number
-    SQLITE_DESERIALIZE_RESIZEABLE: number
-  }
-  wasm: { allocFromTypedArray(a: Uint8Array): number }
 }
 
 export type Sqlite3InitModule = (config?: Record<string, unknown>) => Promise<Sqlite3>
