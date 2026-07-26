@@ -368,6 +368,21 @@ and OPFS turned out to be unavailable on the main thread:
 - **Backend-agnostic seam**: `knn()` / `getByHash()` / `putEmbedding()` — the engine can
   swap (UDF ↔ vec0 ↔ future ANN) without touching callers.
 
+**Photos on disk (`lib/files.ts`, verified live).** Image *bytes* stay out of SQLite (the
+snapshot would balloon). Instead, per photo we persist in a separate IndexedDB DB:
+- a **`FileSystemFileHandle`** — a re-openable *reference* to the user's original file
+  (File System Access API; **Chromium-only**; structured-cloneable so it survives reload).
+  Captured from `showOpenFilePicker()` or drag-drop `getAsFileSystemHandle()`. Re-granting
+  read permission needs a user gesture, so full-res resolves lazily on click
+  (`resolveFullRes` → `none`/`denied`/`missing`/`ok`). We never expose a path and never
+  write the user's file.
+- a small **JPEG thumbnail** — the gallery repopulates instantly on reload from DB rows +
+  thumbnails, with **no permission prompt**; full-res loads from disk only when opened.
+- **Delete** drops the SQLite row + vector and the IndexedDB handle+thumbnail — the
+  on-disk original is left untouched (we remove our *reference*, not the file).
+Verified: thumbnail persist/restore, handle survives reload → resolves full-res, moved
+file → `missing`, no-handle (input fallback) → `none`, delete persists across reload.
+
 Consequence: Rust's clearly-justified surface narrows to the **wgpu viewer**; the data
 leg is SQL/JS, and the RAW/print leg is Rust-optional (see correction above).
 

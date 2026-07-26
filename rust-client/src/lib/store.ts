@@ -225,9 +225,30 @@ export function knn(query: Float32Array, k: number): { id: number; distance: num
   ) as { id: number; distance: number }[]
 }
 
+/** Remove a photo's row + its vector. Does not touch any on-disk file (see files.ts). */
+export function deletePhoto(id: number): void {
+  rawDb().exec({ sql: 'DELETE FROM vec_photos WHERE rowid = ?', bind: [id] })
+  rawDb().exec({ sql: 'DELETE FROM photos WHERE id = ?', bind: [id] })
+  scheduleSave()
+}
+
 /** Number of photos stored. */
 export function count(): number {
   return rawDb().selectValue('SELECT count(*) FROM photos') as number
+}
+
+/** All stored photos (metadata only), oldest first — to restore the gallery on boot. */
+export function listPhotos(): { id: number; hash: string; name: string }[] {
+  return rawDb().selectObjects('SELECT id, hash, name FROM photos ORDER BY id') as {
+    id: number
+    hash: string
+    name: string
+  }[]
+}
+
+/** The stored embedding for a photo id (lazy-loaded for a restored photo on demand). */
+export function getEmbedding(id: number): Float32Array | null {
+  return readEmbedding(id)
 }
 
 /** SHA-256 of a blob's bytes, hex — the stable per-photo key used for cache hits. */
