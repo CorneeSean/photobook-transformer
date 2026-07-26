@@ -42,8 +42,8 @@ export class PhotoViewer {
         wasm.photoviewer_resize(this.__wbg_ptr, width, height);
     }
     /**
-     * Set the letterbox/clear colour (linear RGB, 0..1) — the shell passes the
-     * theme's card colour so the canvas matches the page background.
+     * Set the letterbox/clear colour (sRGB, 0..1) — the shell passes the theme's
+     * card colour so the canvas matches the page background.
      * @param {number} r
      * @param {number} g
      * @param {number} b

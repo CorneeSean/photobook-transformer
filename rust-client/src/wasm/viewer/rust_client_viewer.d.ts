@@ -14,8 +14,8 @@ export class PhotoViewer {
      */
     resize(width: number, height: number): void;
     /**
-     * Set the letterbox/clear colour (linear RGB, 0..1) — the shell passes the
-     * theme's card colour so the canvas matches the page background.
+     * Set the letterbox/clear colour (sRGB, 0..1) — the shell passes the theme's
+     * card colour so the canvas matches the page background.
      */
     set_background(r: number, g: number, b: number): void;
     /**

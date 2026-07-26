@@ -85,15 +85,11 @@ async function decodeToRGBA(
   return { data: new Uint8Array(data.buffer), width, height }
 }
 
-function srgbToLinear(c: number): number {
-  return c <= 0.04045 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4)
-}
-
-/** Read an element's background as linear RGB (0..1) for use as the wgpu clear colour.
- *  The surface is sRGB, so the clear value is treated as linear — hence the convert.
+/** Read an element's background as sRGB (0..1) for the wgpu clear colour. The surface
+ *  is non-sRGB and the shader manages sRGB, so the clear value is passed through as-is.
  *  getComputedStyle may return the colour in any CSS Color 4 form (our theme uses
- *  oklch), so we rasterize it via a 1×1 2D canvas to get normalized sRGB bytes. */
-function backgroundLinear(el: Element): [number, number, number] {
+ *  oklch), so we rasterize it via a 1×1 2D canvas to normalize to sRGB bytes. */
+function backgroundSrgb(el: Element): [number, number, number] {
   const color = getComputedStyle(el).backgroundColor
   const c = document.createElement('canvas')
   c.width = c.height = 1
@@ -103,7 +99,7 @@ function backgroundLinear(el: Element): [number, number, number] {
   ctx.fillRect(0, 0, 1, 1)
   const [r, g, b, a] = ctx.getImageData(0, 0, 1, 1).data
   if (a === 0) return [1, 1, 1] // transparent → default to white
-  return [srgbToLinear(r / 255), srgbToLinear(g / 255), srgbToLinear(b / 255)]
+  return [r / 255, g / 255, b / 255]
 }
 
 /** Physical backing size for a canvas, DPR-aware but capped so the surface stays sane. */
@@ -167,7 +163,7 @@ export async function createViewer(canvas: HTMLCanvasElement): Promise<Viewer> {
     canvas.height = h
     const pv = await create_viewer(canvas)
     // Match the viewer's letterbox to the page's card background (theme-aware).
-    const [r, g, b] = backgroundLinear(canvas.parentElement ?? canvas)
+    const [r, g, b] = backgroundSrgb(canvas.parentElement ?? canvas)
     pv.set_background(r, g, b)
     return new WgpuViewer(canvas, pv)
   } catch (err) {

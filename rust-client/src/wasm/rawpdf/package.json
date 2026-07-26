@@ -1,0 +1,16 @@
+{
+  "name": "rust-client-rawpdf",
+  "type": "module",
+  "description": "Proof: decode a camera RAW and assemble a PDF, entirely in WASM",
+  "version": "0.1.0",
+  "files": [
+    "rust_client_rawpdf_bg.wasm",
+    "rust_client_rawpdf.js",
+    "rust_client_rawpdf.d.ts"
+  ],
+  "main": "rust_client_rawpdf.js",
+  "types": "rust_client_rawpdf.d.ts",
+  "sideEffects": [
+    "./snippets/*"
+  ]
+}

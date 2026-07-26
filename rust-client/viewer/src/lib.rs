@@ -33,8 +33,8 @@ pub struct PhotoViewer {
     /// (texture bind group, width, height) — None until an image is set.
     image: Option<(wgpu::BindGroup, u32, u32)>,
     uniforms: Uniforms,
-    /// Letterbox / clear colour (linear RGB), set by JS to the theme's card colour
-    /// so the canvas background matches the page (and tracks light/dark).
+    /// Letterbox / clear colour (sRGB, to match the non-sRGB surface), set by JS to
+    /// the theme's card colour so the canvas background matches the page (light/dark).
     clear: wgpu::Color,
     /// Which GPU backend actually bound: "webgpu" or "webgl2".
     backend: String,
@@ -90,11 +90,13 @@ pub async fn create_viewer(canvas: HtmlCanvasElement) -> Result<PhotoViewer, JsV
         .map_err(|e| JsValue::from_str(&format!("request_device: {e}")))?;
 
     let caps = surface.get_capabilities(&adapter);
+    // Non-sRGB surface: the shader does sRGB decode/encode explicitly, so this works
+    // identically on WebGPU (which often offers no sRGB surface format) and WebGL2.
     let format = caps
         .formats
         .iter()
         .copied()
-        .find(|f| f.is_srgb())
+        .find(|f| !f.is_srgb())
         .unwrap_or(caps.formats[0]);
     let config = wgpu::SurfaceConfiguration {
         usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
@@ -244,7 +246,9 @@ impl PhotoViewer {
             mip_level_count: 1,
             sample_count: 1,
             dimension: wgpu::TextureDimension::D2,
-            format: wgpu::TextureFormat::Rgba8UnormSrgb,
+            // Plain unorm: sampling returns the stored sRGB-encoded bytes, which the
+            // shader decodes/encodes explicitly (see shader.wgsl).
+            format: wgpu::TextureFormat::Rgba8Unorm,
             usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
             view_formats: &[],
         });
@@ -288,8 +292,8 @@ impl PhotoViewer {
         self.backend.clone()
     }
 
-    /// Set the letterbox/clear colour (linear RGB, 0..1) — the shell passes the
-    /// theme's card colour so the canvas matches the page background.
+    /// Set the letterbox/clear colour (sRGB, 0..1) — the shell passes the theme's
+    /// card colour so the canvas matches the page background.
     pub fn set_background(&mut self, r: f32, g: f32, b: f32) {
         self.clear = wgpu::Color {
             r: r as f64,
