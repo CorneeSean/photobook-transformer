@@ -12,7 +12,7 @@ timestamp: 2026-07-18
 playbook. It records what the user wants, anchors it to the current code, names the
 central design decision (a common album-output data structure), and lists the open
 questions — so a follow-up agent can turn it into step plans (the way
-[folder-structure-ingestion.md](/build/archive/folder-structure-ingestion.md) did for that
+[folder-structure-ingestion.md](archive/folder-structure-ingestion.md) did for that
 feature). **Do not treat any shape below as decided.**
 
 ## The want, in one line
@@ -49,7 +49,7 @@ by `_effective_score`, honor the dup/near-dup guards, and stop at the range — 
 the budget across the segment's scenes so coverage stays diverse rather than draining one
 scene. Must degrade cleanly: **no range set ⇒ today's behavior exactly** (genericity /
 segments-optional guard). Natural authoring homes to weigh: the new ingest manifest's
-`SegmentSpec` (see [folder-structure-ingestion.md](/build/archive/folder-structure-ingestion.md)),
+`SegmentSpec` (see [folder-structure-ingestion.md](archive/folder-structure-ingestion.md)),
 `album.yml`'s `SegmentYAML`, or the album document below. Open: what "40 for the segment"
 means when a segment has many scenes vs one, and whether a **whole-album** budget is also
 wanted.
@@ -127,7 +127,7 @@ Design tensions a planner must resolve (do **not** pre-decide here):
 - **Format & location.** YAML/JSON under `data/albums/<slug>/`? Reuse the `BookPage`/
   `BookPhoto` shapes as its serialization, or a new schema? Human-diffable vs UI-friendly.
 - **Genericity.** The document must not encode occasion concepts — only structural
-  album/segment/page/photo/score, matching the [genericity rule](/reference/folder-structure.md).
+  album/segment/page/photo/score, matching the [genericity rule](../reference/folder-structure.md).
 
 ## Constraints any plan must honor
 
@@ -164,5 +164,5 @@ Design tensions a planner must resolve (do **not** pre-decide here):
 `duplicate_group_id`), `flow/stages/assemble.py` (ordering + pagination),
 `printers/base.py` (`iter_book_pages` → `BookPage`/`BookPhoto`, the current implicit output
 shape), `definition.py` (`album.yml` as the input definition), and
-[folder-structure-ingestion.md](/build/archive/folder-structure-ingestion.md) (the manifest
+[folder-structure-ingestion.md](archive/folder-structure-ingestion.md) (the manifest
 `SegmentSpec`, a candidate home for count ranges).

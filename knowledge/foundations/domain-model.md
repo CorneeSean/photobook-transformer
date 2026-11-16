@@ -27,18 +27,18 @@ the same shape covers every other album type:
 
 The pipeline reasons about segments *structurally* — they're ordered,
 time-bounded, and optionally placed — without knowing or caring what they mean
-semantically. That's what keeps [`cluster`](/stages/cluster.md) and
-[`caption`](/stages/caption.md) able to do something useful with them while
+semantically. That's what keeps [`cluster`](../stages/cluster.md) and
+[`caption`](../stages/caption.md) able to do something useful with them while
 staying generic.
 
 **Segments are optional.** An album with no segments still works:
-[`cluster`](/stages/cluster.md) falls back to pure time-gap scene detection, and
-[`caption`](/stages/caption.md) produces ungrounded (but still accurate)
+[`cluster`](../stages/cluster.md) falls back to pure time-gap scene detection, and
+[`caption`](../stages/caption.md) produces ungrounded (but still accurate)
 captions. Segments make the output *better*, not possible.
 
 **A Segment's time window has several *sources*, not several *concepts*.** It can
 be authored by hand, extracted from a `--source-document`, or — via a manifest
-([folder-structure ingestion](/build/archive/folder-structure-ingestion.md)) — derived as
+([folder-structure ingestion](../build/archive/folder-structure-ingestion.md)) — derived as
 `[min, max]` of the capture timestamps of the photos in a subfolder. All three
 produce the identical on-disk `Segment` the pipeline reasons about; only where the
 `[start_at, end_at]` window comes from differs.
@@ -51,4 +51,4 @@ produce the identical on-disk `Segment` the pipeline reasons about; only where t
 - Structured-but-optional is the right level: universal in shape, flexible in meaning.
 - A free-form `Album.meta` JSON column *is* the escape hatch for album-specific extras
   (couple's names, a trip's country) that stages don't reason about but templates and
-  caption prompts interpolate. See [Data model](/reference/data-model.md).
+  caption prompts interpolate. See [Data model](../reference/data-model.md).

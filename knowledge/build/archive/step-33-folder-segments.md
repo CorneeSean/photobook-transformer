@@ -8,10 +8,10 @@ timestamp: 2026-07-18
 
 # Step 33: Folder-derived segments in `ingest.py`
 
-**Status: todo.** Depends on [step 32](/build/archive/step-32-manifest-schema.md) (imports
+**Status: todo.** Depends on [step 32](step-32-manifest-schema.md) (imports
 `AlbumSpec`/`SegmentSpec`). Second step of the
-[folder-structure-driven ingestion playbook](/build/archive/folder-structure-ingestion.md).
-The fan-out loop + CLI is [step 34](/build/archive/step-34-fanout-cli.md) — this step delivers
+[folder-structure-driven ingestion playbook](folder-structure-ingestion.md).
+The fan-out loop + CLI is [step 34](step-34-fanout-cli.md) — this step delivers
 and unit-tests a single-album `ingest_album(spec, root)` in isolation.
 
 ## Why
@@ -21,7 +21,7 @@ and unit-tests a single-album `ingest_album(spec, root)` in isolation.
 and factors the two behind one seam so the upload → create → readiness → materialize
 → validate spine is shared, not duplicated. A folder-derived segment's window is
 `[min, max]` of the capture timestamps of the photos actually in that subfolder
-([playbook detail](/build/archive/folder-structure-ingestion.md#folder-derived-segment-windows--the-load-bearing-detail)).
+([playbook detail](folder-structure-ingestion.md#folder-derived-segment-windows--the-load-bearing-detail)).
 
 ## Design — a segment-source seam
 
@@ -108,7 +108,7 @@ reuses the one source of truth for segment correctness rather than re-checking h
   tested downstream fallback (rule 2). `ingest_album` must degrade to exactly today's
   no-segments `album.yml` in that case.
 
-## Tests (TDD — write first, per [working-agreement.md](/process/working-agreement.md))
+## Tests (TDD — write first, per [working-agreement.md](../../process/working-agreement.md))
 
 Extend `tests/album/test_ingest.py` with the existing fake `IngestClient` (a fake that
 returns deterministic asset ids from `upload_asset` and canned `get_album_assets` with
@@ -136,17 +136,17 @@ All DB-free/torch-free — default `poe check` collection.
 
 ## Docs to update
 
-- [single-command-ingestion.md](/build/archive/single-command-ingestion.md) — cross-reference:
+- [single-command-ingestion.md](single-command-ingestion.md) — cross-reference:
   segments now also come from folders, not only a document.
-- [domain-model.md](/foundations/domain-model.md) — one line noting a Segment's time
+- [domain-model.md](../../foundations/domain-model.md) — one line noting a Segment's time
   range can be derived from a subfolder's photo timestamps (a new segment *source*, not
   a new concept).
-- [progress.md](/build/progress.md) — move the step-33 row Outstanding → Completed on merge.
-- [log.md](/log.md) — record the change once implemented.
+- [progress.md](../progress.md) — move the step-33 row Outstanding → Completed on merge.
+- [log.md](../../log.md) — record the change once implemented.
 
 ## Verification (when implemented)
 
 `uv run poe check` green. Live ingestion of a real multi-folder tree is deferred to the
 first live run (the standing no-reachable-Immich gap — see
-[progress.md Notes](/build/progress.md#notes--blockers)); the fake-client tests are the
+[progress.md Notes](../progress.md#notes--blockers)); the fake-client tests are the
 offline stand-in, exactly as for steps 27/28.

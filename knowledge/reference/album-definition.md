@@ -9,8 +9,8 @@ timestamp: 2026-07-12
 # Album definition on disk
 
 Each album is defined by one YAML file — no code, no DB fiddling.
-[`definition.py`](/build/build-order.md) loads it into [`Album` + `Segment`
-rows](/reference/data-model.md), normalizing all segment times to UTC.
+[`definition.py`](../build/build-order.md) loads it into [`Album` + `Segment`
+rows](data-model.md), normalizing all segment times to UTC.
 
 # Examples
 
@@ -60,15 +60,15 @@ segments:
 by hand (above), extract them from a `--source-document` PDF, or derive them from
 subfolders via a manifest (`generate <root> --manifest` — each subfolder's window is
 `[min, max]` of its photos' capture timestamps; see
-[folder-structure-driven ingestion](/build/archive/folder-structure-ingestion.md)). All three
+[folder-structure-driven ingestion](../build/archive/folder-structure-ingestion.md)). All three
 produce the identical `segments` block this file documents, validated by the same
 loader — the source differs, the shape does not.
 
 ## Lead faces (optional priority subjects)
 
 An optional `lead_faces` block names the key people — the couple, the baby, the
-guest of honour — so [`select`](/stages/select.md) prioritizes photos of them.
-Set **exactly one** of three inputs (see [Immich enrichment](/build/archive/enrichment.md)).
+guest of honour — so [`select`](../stages/select.md) prioritizes photos of them.
+Set **exactly one** of three inputs (see [Immich enrichment](../build/archive/enrichment.md)).
 Every input is a *list*, so naming one lead is just the one-element case:
 
 ```yaml
@@ -88,7 +88,7 @@ writes the `reference_images` block for you (absolute paths). On `run` and
 
 We never run our own face model — Immich already recognizes library faces into
 `Person`s; the references just *name* which are leads.
-[`flow/stages/lead_faces.py`](/stages/index.md) resolves them (upload → wait out async
+[`flow/stages/lead_faces.py`](../stages/index.md) resolves them (upload → wait out async
 detection → read faces) and marks matching `Person` rows `is_lead=True`. Omit the block
 for an album with no priority subjects (every stage then behaves as before). A reference
 face Immich hasn't assigned to a named person surfaces a warning (confirm the person
@@ -102,4 +102,4 @@ once in Immich's UI), not a silent drop.
   to interpret it.
 - A time with neither an offset nor an album `timezone` is an error at load time.
 - Everything is normalized to UTC before it reaches the database — see
-  [Data model](/reference/data-model.md) and [Open questions](/build/open-questions.md) #3.
+  [Data model](data-model.md) and [Open questions](../build/open-questions.md) #3.

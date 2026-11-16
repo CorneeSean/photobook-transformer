@@ -8,7 +8,7 @@ timestamp: 2026-07-18
 
 # Step 30: CLI flag for multiple lead-face reference photos
 
-**Status: done.** See [progress.md](/build/progress.md).
+**Status: done.** See [progress.md](../progress.md).
 
 > **As-built (2026-07-18) — diverged from this plan on two points.** The sections
 > below are the original plan; the shipped design differs as follows.
@@ -34,8 +34,8 @@ timestamp: 2026-07-18
 
 Naming an album's priority subjects (`lead_faces`) today requires
 hand-authoring `album.yml`, and its `reference_image` input supports exactly
-**one** local photo (see [album-definition.md](/reference/album-definition.md),
-[enrichment.md](/build/archive/enrichment.md)). This adds a repeatable `--lead-face
+**one** local photo (see [album-definition.md](../../reference/album-definition.md),
+[enrichment.md](enrichment.md)). This adds a repeatable `--lead-face
 IMAGE` CLI flag so one or more reference photos can be passed directly, with
 `generate`/`run` doing the `album.yml` bookkeeping — matching how `generate`
 already auto-materializes `album.yml` for `slug`/`title`/`segments`.
@@ -192,14 +192,14 @@ already do on the reuse path).
 
 ## Docs to update
 
-- [Album definition](/reference/album-definition.md) — document `reference_images` and the `--lead-face` CLI flag.
-- [Immich enrichment](/build/archive/enrichment.md) — "three `album.yml` inputs" → four; mention the CLI shortcut.
-- [Data model](/reference/data-model.md) — update the `Album.lead_reference_asset_id` description to the renamed/generalized column.
+- [Album definition](../../reference/album-definition.md) — document `reference_images` and the `--lead-face` CLI flag.
+- [Immich enrichment](enrichment.md) — "three `album.yml` inputs" → four; mention the CLI shortcut.
+- [Data model](../../reference/data-model.md) — update the `Album.lead_reference_asset_id` description to the renamed/generalized column.
 - **Model comment** `src/album/db/models.py` (the `lead_reference_asset_id` block, ~lines 54-58) — rename to `lead_reference_asset_ids`, reword "asset id" → "asset ids".
-- [Progress tracker](/build/progress.md) — move this row from Outstanding to Completed once merged.
-- [Change log](/log.md) — record the change once implemented.
+- [Progress tracker](../progress.md) — move this row from Outstanding to Completed once merged.
+- [Change log](../../log.md) — record the change once implemented.
 
-## Tests (TDD — write first, per [working-agreement.md](/process/working-agreement.md))
+## Tests (TDD — write first, per [working-agreement.md](../../process/working-agreement.md))
 
 - `tests/album/test_definition.py` — `reference_images` accepted; still exactly one of the four inputs enforced (reject two set, reject none set).
 - `tests/album/flow/stages/test_lead_faces.py` — multi-image upload + face union across images; cache hit when `lead_reference_asset_ids` length matches `reference_images` length (no upload calls); cache miss/re-upload on count mismatch; unassigned faces counted across multiple images; missing file in the list raises `LeadFaceResolutionError` naming the missing entry.

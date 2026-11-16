@@ -8,12 +8,12 @@ timestamp: 2026-07-15
 
 # TestContainers integration testing — build order (steps 21+)
 
-A follow-on to the [build order](/build/build-order.md) and the
-[Immich enrichment playbook](/build/archive/enrichment.md). The pipeline's fast test
+A follow-on to the [build order](../build-order.md) and the
+[Immich enrichment playbook](enrichment.md). The pipeline's fast test
 suite is in-memory SQLite + injected doubles (`respx` for Immich/Lulu HTTP,
 PydanticAI `TestModel` for the agent, a numpy `StubSimilarity` for pgvector). One
 real container is already used — `tests/test_similarity.py` runs the pgvector
-query against a Postgres [testcontainer](/process/working-agreement.md). This playbook
+query against a Postgres [testcontainer](../../process/working-agreement.md). This playbook
 promotes the **highest-value** boundaries to real containerized integration
 tests, **without depending on any internet-hosted model**.
 
@@ -35,15 +35,15 @@ in scope runs from a pinned container image or a binary we already ship.
 
 ## The steps
 
-Each follows the [implementation workflow](/process/implementation-workflow.md) (TDD where
+Each follows the [implementation workflow](../../process/implementation-workflow.md) (TDD where
 applicable, `uv run poe check` green — or the container run as the manual
 verification, sub-agent review, squash-merge; human-review gate stays waived per
-the step-4-onward note in [progress](/build/progress.md)). Mark the new tests so the
+the step-4-onward note in [progress](../progress.md)). Mark the new tests so the
 fast SQLite suite stays the default and containers run in a separate gate
 (`@pytest.mark.integration`, or a `poe` task that opts in). The Ryuk reaper now
 works, so plain `uv run poe check` is green — `TESTCONTAINERS_RYUK_DISABLED` is
 **no longer needed** (the old sandbox landmine was resolved 2026-07-15; see
-[progress](/build/progress.md) notes).
+[progress](../progress.md) notes).
 
 **21. pgvector schema + integration harness** *(in scope — highest value)*.
 A session-scoped `pgvector` testcontainer fixture that runs **`alembic upgrade
@@ -67,7 +67,7 @@ real `DarktableRenderer` **inside the shipped app Docker image** (which contains
 output JPEG exists, decodes, and is **visibly brighter** than the source. Closes
 build step 11's deferred *"visibly corrected versus its original"* manual check,
 no internet model. Validated the darktable XMP history-stack format — see
-[enhance.md](/stages/enhance.md) History note.
+[enhance.md](../../stages/enhance.md) History note.
 - **Landmine:** shells out to the `docker` CLI, not docker-py — this sandbox's
   `~/.docker` credential helper (`docker-credential-gcloud`) crashes under Python
   3.14 (`No module named 'imp'`), breaking docker-py's image build; the CLI is

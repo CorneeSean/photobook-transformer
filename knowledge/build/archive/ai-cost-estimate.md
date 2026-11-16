@@ -8,7 +8,7 @@ timestamp: 2026-07-17
 
 # AI-pass cost estimate — open question 5
 
-Answers [open question 5](/build/open-questions.md#5) — *"What does the full AI
+Answers [open question 5](../open-questions.md#5) — *"What does the full AI
 pass cost? Estimate the Claude API spend for ~300–500 selected photos before
 running it, and confirm it's acceptable."*
 
@@ -22,7 +22,7 @@ Grounded in `src/album/agents/analysis.py`, `agents/_model.py`, and
 `flow/photo_analyzer.py`:
 
 * **One combined vision call per *selected* photo** — the "one combined vision
-  call" from [architecture.md](/foundations/architecture.md). `PhotoAnalyzer.ensure` is
+  call" from [architecture.md](../../foundations/architecture.md). `PhotoAnalyzer.ensure` is
   the single caller; `enhance` and `caption` share its **one** result, so a
   selected photo is analyzed exactly once (idempotent — a re-run costs $0 for
   already-analyzed photos). *Un*selected photos are never sent.
@@ -74,7 +74,7 @@ for 500 photos**. Still trivial.
 * **Model choice** assumes `claude-sonnet-5`. Opus-tier (`claude-opus-4-8`,
   $5/$25) would be ~2–3× — still under ~$10 for a full album.
 * **Out of scope for this question:** the `--source-document` segment-extraction
-  agent ([single-command-ingestion.md](/build/archive/single-command-ingestion.md) step 3 /
+  agent ([single-command-ingestion.md](single-command-ingestion.md) step 3 /
   build step 28) is **one** extra call per *album*, not per photo — negligible.
 
 ## Caveat

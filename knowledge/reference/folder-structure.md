@@ -77,12 +77,12 @@ photo-album-pipeline/
 Shared helpers/fixtures live at the `tests/` root (imported absolutely, e.g.
 `from tests.doubles import …`); everything under `tests/album/` mirrors
 `src/album/` package-for-package. Tests are grouped into `class Test…:` suites —
-see [quality practices](/process/quality-practices.md) §2.
+see [quality practices](../process/quality-practices.md) §2.
 
 ## Structure rules
 
 These enforce genericity and testability. Detail and rationale for the code-shape
-rules live in [quality practices](/process/quality-practices.md); this is the
+rules live in [quality practices](../process/quality-practices.md); this is the
 checklist.
 
 - **`album_id`-scoped.** Every stage is constructed with its `album_id` (+ a
@@ -99,18 +99,18 @@ checklist.
   (sequential stages), `to_task().submit()` fans out (concurrent stages). The stage
   holds only a `session_factory` (never a live `Session`), so the same instance is
   safe to submit — the session opens inside `run`, on the thread that runs it. Full
-  design + the session/threading invariants: [quality practices](/process/quality-practices.md)
-  §1.5–1.6 and [pipeline execution](/foundations/pipeline-execution.md).
+  design + the session/threading invariants: [quality practices](../process/quality-practices.md)
+  §1.5–1.6 and [pipeline execution](../foundations/pipeline-execution.md).
 - **A stage is a class when it has a collaborator or several helpers**, a plain
   function only when genuinely trivial (the hybrid rule — all current stages are
   classes). `LeadFaceResolver` is a non-`Stage` sibling `TaskUnit`.
 - **`prefect` is imported only by `flow/stages/base.py` and `flow/_flow.py`** —
   never in `db/`, `immich/`, `lulu/`, `printers/`, `analysis/`, `agents/`,
   `config.py`, or `definition.py`.
-- **One combined per-photo analysis.** [`enhance`](/stages/enhance.md) and
-  [`caption`](/stages/caption.md) both receive the shared `flow.photo_analyzer.PhotoAnalyzer`
+- **One combined per-photo analysis.** [`enhance`](../stages/enhance.md) and
+  [`caption`](../stages/caption.md) both receive the shared `flow.photo_analyzer.PhotoAnalyzer`
   (tone deltas + caption, idempotent, once per selected photo) — see
-  [architecture](/foundations/architecture.md).
+  [architecture](../foundations/architecture.md).
 - **`config.py` is the only place that reads env vars.**
 - **`docker-compose.yml`** holds our own services (`app`, `db`, `prefect-server`)
   and pulls in Immich's stack via `include:`. `darktable-cli` must be in the app

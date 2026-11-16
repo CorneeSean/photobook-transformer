@@ -9,7 +9,7 @@ timestamp: 2026-07-18
 # Step 31: Wire the real LAION/open_clip aesthetic scorer + CLIP embedder
 
 **Status: DONE (2026-07-18, branch `step-31-laion-aesthetic-scorer`).** See
-[progress.md](/build/progress.md) and [log.md](/log.md).
+[progress.md](../progress.md) and [log.md](../../log.md).
 
 **Two deviations from the plan below, both discovered during implementation:**
 1. **Quality deps resolve lazily at run-time, not at `Pipeline` construction.** Building
@@ -26,8 +26,8 @@ timestamp: 2026-07-18
    checkpoint with the correct activation (no re-download).
 
 > **Numbering note.** This closes the "real LAION/open_clip scorer" item deferred at
-> [build step 6](/log.md) and resurfaced at step 14 (see progress.md's
-> [Notes / blockers](/build/progress.md#notes--blockers)). Step 23 is already the
+> [build step 6](../../log.md) and resurfaced at step 14 (see progress.md's
+> [Notes / blockers](../progress.md#notes--blockers)). Step 23 is already the
 > DB-backed smoke test and 30 is the highest used, so this is **step 31** — a new
 > follow-on playbook, not a renumbering of the deferred item.
 
@@ -283,7 +283,7 @@ residency first; add the stage-scoped release only if a constrained target needs
 Disk (not RAM): `fetch-aesthetic-weights` caches ~0.9 GB (CLIP checkpoint + tiny
 head); torch install ~0.3–1 GB one-time (platform-dependent) → budget ~1.5–2 GB disk.
 
-## Testing (TDD — write first, per [working-agreement.md](/process/working-agreement.md))
+## Testing (TDD — write first, per [working-agreement.md](../../process/working-agreement.md))
 
 - **Stage unit tests unchanged.** `quality`/`select` tests already inject stub
   scorers/embedders, so they stay pure-logic and torch-free — the point of the
@@ -307,15 +307,15 @@ head); torch install ~0.3–1 GB one-time (platform-dependent) → budget ~1.5�
 
 ## Docs to update
 
-- [quality stage](/stages/quality.md) + module docstring — aesthetic/embedder now
+- [quality stage](../../stages/quality.md) + module docstring — aesthetic/embedder now
   real; note the `scoring` extra + weights fetch + graceful fallback.
-- [pipeline-execution.md](/foundations/pipeline-execution.md) — the `quality` row
+- [pipeline-execution.md](../../foundations/pipeline-execution.md) — the `quality` row
   ("aesthetic + CLIP embedding (ML, deferred)") → no longer deferred.
-- [data-model.md](/reference/data-model.md) — `aesthetic_score`/`clip_embedding`
+- [data-model.md](../../reference/data-model.md) — `aesthetic_score`/`clip_embedding`
   are now populated on a normal run (given the extra).
-- [progress.md](/build/progress.md) — move the step-31 row Outstanding→Completed;
+- [progress.md](../progress.md) — move the step-31 row Outstanding→Completed;
   strike the "Real LAION/open_clip scorer not wired" bullet from Notes / blockers.
-- [log.md](/log.md) — record the change once implemented.
+- [log.md](../../log.md) — record the change once implemented.
 
 ## Verification (when implemented)
 
@@ -349,5 +349,5 @@ head); torch install ~0.3–1 GB one-time (platform-dependent) → budget ~1.5�
   one-shot per photo and idempotent (`_already_scored`), so a resumed run doesn't
   repay it. Speed is a config flip, not code: `quality.device="mps"` (Apple Silicon)
   or `"cuda"`.
-- **Ruff `except` landmine still applies** (see the [working agreement](/process/working-agreement.md#pre-commit-hooks-local-enforcement)): the
+- **Ruff `except` landmine still applies** (see the [working agreement](../../process/working-agreement.md#pre-commit-hooks-local-enforcement)): the
   `_build_quality_model` `except` must be a single clause or `# fmt: skip`.

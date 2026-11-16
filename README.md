@@ -8,7 +8,7 @@ It is a monorepo with two sibling projects at very different maturity:
 
 | Dir | What it is | Maturity | Stack |
 | --- | --- | --- | --- |
-| **[`pipeline/`](./pipeline/)** | The batch pipeline that turns a raw photo dump into a curated, enhanced, captioned, print-ready book. | **Mature product.** The build order (steps 0-16) and follow-on playbooks through step 35 are done and merged; [`progress.md`](./knowledge/build/progress.md) lists what is still deferred. | Python 3.14, `uv`, Prefect, SQLAlchemy + Postgres/pgvector, open_clip |
+| **[`pipeline/`](./pipeline/)** | The batch pipeline that turns a raw photo dump into a curated, enhanced, captioned, print-ready book. | **Mature product.** The build order (steps 0-16) and follow-on playbooks through step 43 are done and merged; [`progress.md`](./knowledge/build/progress.md) lists what is still deferred. | Python 3.14, `uv`, Prefect, SQLAlchemy + Postgres/pgvector, open_clip |
 | **[`rust-client/`](./rust-client/)** | A greenfield spike testing how much of the analysis/select stack can run **client-side in the browser**. First non-Python stack. | **Spike.** Deliberately outside the Python gate and not wired into Postgres or Immich. | Svelte + shadcn-svelte tokens, Rust to WASM (wgpu), sqlite-vec in a Worker on OPFS, transformers.js |
 
 ## Why it exists
@@ -145,7 +145,7 @@ switch to ViT-L/14 for 768-d parity with the server column. Full-resolution imag
 SQLite; it holds embeddings, a content hash and the file name. Note that
 [`rust-client/README.md`](./rust-client/README.md) still describes the earlier in-Rust cosine KNN (a `core/`
 crate); that crate was retired in favour of sqlite-vec (see `rust-client/Cargo.toml` and commits
-`90265f0`, `1a947d0`).
+`6ada5bd`, `d863dcb`).
 
 ## Pipeline stages
 
@@ -233,31 +233,30 @@ No coverage figures are published for either project.
 
 - **XMP sidecars that darktable ignored.** `enhance` first wrote flat `darktable:exposure="..."` attributes,
   which `darktable-cli` silently ignores, so no render applied any correction. A real-darktable integration
-  test (commit `2081214`) exposed it; the fix emits darktable's hex-encoded history-stack params, pinned to
+  test (commit `2f79aac`) exposed it; the fix emits darktable's hex-encoded history-stack params, pinned to
   darktable 5.0.1 and guarded by that test.
 - **Concurrency race found in review.** Running `enhance` and `caption` fully concurrently let both fire the
   shared analysis and race on the same row; the flow now joins `enhance` before submitting `render` and
-  `caption` (commit `7e80fd2`).
+  `caption` (commit `e7818ba`).
 - **Wrong media type sent to the LLM.** Immich serves thumbnails as WebP, but the captioner declared JPEG and
-  the API rejected the request; the type is now sniffed from magic bytes (commit `76debd5`).
+  the API rejected the request; the type is now sniffed from magic bytes (commit `1d9fe4f`).
 - **Heavy ML kept optional.** torch and open_clip are an opt-in extra and the scorer module imports without
   them; in Docker, torch is pinned to the CPU index to avoid about 5 GB of unusable CUDA libraries
   (`pyproject.toml`, `Dockerfile`).
 - **wgpu colour and limits.** Chrome's WebGPU canvas has no sRGB surface format, so the viewer does sRGB
-  encode/decode in the shader to fix a too-dark image (commit `9afd3bb`); wgpu 23+ is required because 22
+  encode/decode in the shader to fix a too-dark image (commit `0d1e171`); wgpu 23+ is required because 22
   requests a limit current Chrome removed.
 - **OPFS in a worker.** SAHPool takes exclusive handles, so a reload could race a navigated-away worker and
   silently fall back to memory; the worker is terminated on `pagehide`, with a bounded retry (commit
-  `1a947d0`).
+  `d863dcb`).
 - **RAW in the browser.** `rawloader` plus `printpdf` in WASM turn a camera RAW into a PDF entirely
-  client-side (commit `180769b`). The crude develop step does not give correct colour for every RAW (see
+  client-side (commit `15aa414`). The crude develop step does not give correct colour for every RAW (see
   Demo notes).
 
 ## Demo
 
-Screenshots, a short video, run transcripts and the scripts that produced them live outside this repo, in the
-portfolio repo at `github-projects-portfolio/demos/photobook-transformer/` (`screenshots/`, `video.webm`,
-`capture*.mjs`, `pipeline/`). The photos are 26 CC0 images from Wikimedia Commons (an Ishigaki trip by user
+Screenshots, a short video, run transcripts and the scripts that produced them are kept outside this
+repo. The demo photos are 26 CC0 images from Wikimedia Commons (an Ishigaki trip by user
 "Syced") plus CC0 RAW samples from raw.pixls.us; no personal photos.
 
 ### Demo notes (what was real and what was substituted)

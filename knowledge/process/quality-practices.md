@@ -9,8 +9,8 @@ timestamp: 2026-07-14
 # Quality practices — code structure & testing
 
 The standard for *how code is shaped*, on top of the
-[working agreement](/process/working-agreement.md)'s *when-is-it-done* gate and the
-[folder structure](/reference/folder-structure.md)'s *where-does-it-live* rules —
+[working agreement](working-agreement.md)'s *when-is-it-done* gate and the
+[folder structure](../reference/folder-structure.md)'s *where-does-it-live* rules —
 this is the authority where they overlap. Two goals: **encapsulate behaviour behind
 small public surfaces**, and **keep every unit trivially testable in isolation**.
 
@@ -94,7 +94,7 @@ Conventions the shape enforces:
 - **A collaborator shared by two stages is its own injected object**, not a function
   one stage imports from another — e.g. the shared `PhotoAnalyzer` both `enhance` and
   `caption` receive (the "one combined vision call", see
-  [architecture](/foundations/architecture.md)).
+  [architecture](../foundations/architecture.md)).
 
 ### 1.5 `to_task`/`run_as_task` and the `flow/_flow.py` aggregator
 
@@ -111,7 +111,7 @@ from `config.py`, builds each stage, and composes the DAG; the public `@flow` is
 `pipeline = Pipeline.flow()`, keeping `pipeline(album_slug=…, **deps)` callable and
 unit-testable for wiring without touching any external service. The DAG shape,
 fences, and session invariants live in
-[pipeline execution](/foundations/pipeline-execution.md).
+[pipeline execution](../foundations/pipeline-execution.md).
 
 ### 1.6 Design patterns — deliberate, not decorative
 
@@ -224,7 +224,7 @@ sibling `TaskUnit`: it takes its inputs + `session_factory` at construction, run
 - **Test through the public surface (`run`), never private methods** — helpers are
   covered via `run`'s observable behaviour, so they can be reshaped freely. A helper
   that seems to want its own test wants to be its own public unit.
-- **What doesn't change:** the [working agreement](/process/working-agreement.md)'s
+- **What doesn't change:** the [working agreement](working-agreement.md)'s
   test-*strategy* table (which layer each stage is tested at) stands; this section
   governs *organization*.
 
@@ -246,7 +246,7 @@ threshold. **The threshold does not go back up.**
 
 ## See also
 
-- [Working agreement](/process/working-agreement.md) — the TDD loop and `uv run poe check` gate.
-- [Folder structure](/reference/folder-structure.md) — where each unit lives + genericity rules.
-- [Architecture](/foundations/architecture.md) — why collaborators are injected; the one combined vision call.
-- [Pipeline execution](/foundations/pipeline-execution.md) — the DAG, session ownership, and fences.
+- [Working agreement](working-agreement.md) — the TDD loop and `uv run poe check` gate.
+- [Folder structure](../reference/folder-structure.md) — where each unit lives + genericity rules.
+- [Architecture](../foundations/architecture.md) — why collaborators are injected; the one combined vision call.
+- [Pipeline execution](../foundations/pipeline-execution.md) — the DAG, session ownership, and fences.

@@ -23,6 +23,6 @@ requested — not unconditionally on every run. The shared reader
 every printer lays the book out the same way `assemble` paginated it.
 
 Spine/page dimensions depend on Lulu's spec —
-[open question #4](/build/open-questions.md) (see
-[build step 13](/build/build-order.md)). Test page count and photo placement given
+[open question #4](../build/open-questions.md) (see
+[build step 13](../build/build-order.md)). Test page count and photo placement given
 fixture data, **including a segment-less album**.

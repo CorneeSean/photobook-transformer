@@ -12,7 +12,7 @@ status: planned
 ## Context
 
 Step 39 unified the old `generate`/`run` subcommands into one strategy-based
-`photobook-generator build` command (merged, commits `22acb9c` + `9da4dc6`). The
+`photobook-generator build` command (merged, commits `6f3c5c1` + `4c40fea`). The
 result works and is `poe check`-green (440/6), but it all lives in a single
 ~370-line `src/album/cli.py` that mixes four distinct responsibilities: argparse
 construction, the `AlbumSource` strategies + selection/validation, and the

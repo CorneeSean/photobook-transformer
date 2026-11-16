@@ -8,7 +8,7 @@ timestamp: 2026-07-18
 
 # Folder-structure-driven ingestion
 
-Follow-on to the [single-command ingestion playbook](/build/archive/single-command-ingestion.md).
+Follow-on to the [single-command ingestion playbook](single-command-ingestion.md).
 That playbook made `generate <dir>` collapse "upload + create Immich album + author
 `album.yml`" into one call for **one** album, with optional PDF-derived segments
 (`--source-document`). This playbook generalizes the *front* of that flow: one root
@@ -122,7 +122,7 @@ path does today.
 **Strictly sequential: 32 → 33 → 34 → 35.** These cannot be built concurrently. Step 33
 imports step 32's models; step 34 depends on step 33's `ingest_album` seam **and** both
 edit `src/album/ingest.py`; step 35 documents and verifies the finished feature. The
-repo's [parallel-build precedent](/build/progress.md#notes--blockers) required a
+repo's [parallel-build precedent](../progress.md#notes--blockers) required a
 no-shared-files check — it **fails** here (33 and 34 share `ingest.py`), so worktree
 fan-out is not available for these steps. (The only work that can be drafted off the
 critical path is prose — this umbrella doc and README wording — and, *within* step 33, the
@@ -130,14 +130,14 @@ two pure helpers are independent of the spine refactor.)
 
 | # | Step | Playbook | Touches | Depends on |
 |---|------|----------|---------|------------|
-| 32 | Manifest schema + loader | [step-32](/build/archive/step-32-manifest-schema.md) | new `manifest.py` | — |
-| 33 | Folder-derived segments in `ingest.py` | [step-33](/build/archive/step-33-folder-segments.md) | `ingest.py` | 32 |
-| 34 | Fan-out orchestration + `generate --manifest` | [step-34](/build/archive/step-34-fanout-cli.md) | `ingest.py`, `cli.py` | 32, 33 |
-| 35 | Docs + end-to-end genericity verification | [step-35](/build/archive/step-35-docs-verify.md) | knowledge/, README, tests | 32–34 |
+| 32 | Manifest schema + loader | [step-32](step-32-manifest-schema.md) | new `manifest.py` | — |
+| 33 | Folder-derived segments in `ingest.py` | [step-33](step-33-folder-segments.md) | `ingest.py` | 32 |
+| 34 | Fan-out orchestration + `generate --manifest` | [step-34](step-34-fanout-cli.md) | `ingest.py`, `cli.py` | 32, 33 |
+| 35 | Docs + end-to-end genericity verification | [step-35](step-35-docs-verify.md) | knowledge/, README, tests | 32–34 |
 
 Each step follows the standard workflow (branch off `main` → test-first → `poe check`
 green → sub-agent review → squash → fast-forward merge → push) and updates
-[progress.md](/build/progress.md) + [log.md](/log.md) on its branch before merging.
+[progress.md](../progress.md) + [log.md](../../log.md) on its branch before merging.
 
 ## As-built (steps 32–35, all merged)
 
@@ -166,7 +166,7 @@ The feature shipped as planned; the deviations worth knowing:
   three folder-ingestion modules stay token-clean.
 
 Live multi-album fan-out against a real Immich is still folded into the standing
-first-live-run gap ([progress.md Notes](/build/progress.md#notes--blockers)); the
+first-live-run gap ([progress.md Notes](../progress.md#notes--blockers)); the
 fixture-tree end-to-end test (`test_genericity.py`) is the offline stand-in.
 
 ## What "one command" still does not remove

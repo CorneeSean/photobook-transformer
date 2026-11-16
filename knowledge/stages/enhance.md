@@ -12,10 +12,10 @@ Core principle: **estimate bounded parameters, never generate pixels.** No
 invented detail.
 
 1. Ensure the **shared per-photo analysis** (see the "One shared analysis, one
-   fetch" note in [Architecture](/foundations/architecture.md)) has run for each
+   fetch" note in [Architecture](../foundations/architecture.md)) has run for each
    *selected* photo — one thumbnail fetch per photo, producing bounded numeric tone
    deltas (exposure EV, white-balance shift, shadows, highlights) *alongside* the
-   caption. As of **step 29** ([local-analysis.md](/build/archive/local-analysis.md)) the tone
+   caption. As of **step 29** ([local-analysis.md](../build/archive/local-analysis.md)) the tone
    deltas come from a classical, offline [`ClassicalToneEstimator`](../../src/album/analysis/tone_estimator.py)
    (auto-exposure to a target luminance, gray-world white balance, histogram-percentile
    shadow/highlight), not an LLM — every delta clamped to the

@@ -10,5 +10,5 @@ timestamp: 2026-07-12
 
 Immich's built-in duplicate detection (perceptual hash + ML) groups
 near-identical and burst shots. Not our code — we just consume the results (the
-`duplicate_group_id` on [`Photo`](/reference/data-model.md), pulled in by
+`duplicate_group_id` on [`Photo`](../reference/data-model.md), pulled in by
 [`sync`](./sync.md) and honored by [`select`](./select.md)).

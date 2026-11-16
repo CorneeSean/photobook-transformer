@@ -10,7 +10,7 @@ timestamp: 2026-07-18
 
 **Status: todo.** Depends on steps 32–34 (documents and verifies the finished
 feature). Final step of the
-[folder-structure-driven ingestion playbook](/build/archive/folder-structure-ingestion.md).
+[folder-structure-driven ingestion playbook](folder-structure-ingestion.md).
 Steps 32–34 each update their own local docs at merge (per convention); this step is
 the **cross-cutting** docs + the end-to-end guard that belongs to no single code step.
 
@@ -29,16 +29,16 @@ abstraction.
   `generate` docs: the `generate <root> --manifest` command, an annotated `ingest.yml`
   example, the per-album-flags-live-in-the-manifest rule, and the same "stack must be
   up / `IMMICH__API_KEY` set" caveat the single-command section already carries.
-- [folder-structure.md](/reference/folder-structure.md) — confirm the `manifest.py`
+- [folder-structure.md](../../reference/folder-structure.md) — confirm the `manifest.py`
   row (added in step 32) and note `ingest.py` now also fans out (`ingest_manifest`);
   the `data/albums/<slug>/` note already covers the N-album output (one dir per slug).
-- [album-definition.md](/reference/album-definition.md) — cross-reference: segments may
+- [album-definition.md](../../reference/album-definition.md) — cross-reference: segments may
   be authored by hand, extracted from a `--source-document`, **or** derived from
   subfolders via a manifest; the on-disk `album.yml` shape is identical either way.
-- [folder-structure-ingestion.md](/build/archive/folder-structure-ingestion.md) (umbrella) —
+- [folder-structure-ingestion.md](folder-structure-ingestion.md) (umbrella) —
   add an "As-built" preamble reconciling any implementation-time deviations across
   steps 32–34 (the step-30/31 playbooks set the precedent for this).
-- [progress.md](/build/progress.md) / [log.md](/log.md) — final playbook-complete
+- [progress.md](../progress.md) / [log.md](../../log.md) — final playbook-complete
   note; move the step-35 row Outstanding → Completed on merge.
 
 ## End-to-end genericity test
@@ -56,7 +56,7 @@ patched `pipeline` (no live Immich), asserting:
   `src/`-scanning test / grep guard, e.g. `test_genericity`) so the manifest path is
   covered: no trip/day/itinerary/occasion token in `src/album/manifest.py` or the new
   `ingest.py` code. This is the "enforced in tests, not prose" line from
-  [folder-structure.md](/reference/folder-structure.md).
+  [folder-structure.md](../../reference/folder-structure.md).
 
 Follows the `smith-wedding` genericity precedent (step 16): a second album *shape*
 proves the abstraction without any `src/` special-casing.
@@ -65,5 +65,5 @@ proves the abstraction without any `src/` special-casing.
 
 `uv run poe check` green, including the new end-to-end test. Live verification of a real
 multi-folder tree → multiple books remains folded into the standing first-live-run gap
-([progress.md Notes](/build/progress.md#notes--blockers)); the fixture-tree end-to-end
+([progress.md Notes](../progress.md#notes--blockers)); the fixture-tree end-to-end
 test is the offline stand-in and the genericity gate.

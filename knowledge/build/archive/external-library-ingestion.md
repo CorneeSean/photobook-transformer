@@ -9,13 +9,13 @@ status: planned
 
 # External-library (scan-in-place) ingestion
 
-Follow-on to the [single-command](/build/archive/single-command-ingestion.md) and
-[folder-structure](/build/archive/folder-structure-ingestion.md) ingestion playbooks.
+Follow-on to the [single-command](single-command-ingestion.md) and
+[folder-structure](folder-structure-ingestion.md) ingestion playbooks.
 Both upload every photo to Immich via `upload_asset` (`POST /assets`), so Immich
 stores its **own copy** of the whole dump — a 10 GB album costs ~10 GB again in
 Immich's storage. The folder-structure playbook explicitly kept this decoupled from
 External Libraries and flagged scan-in-place as *future work*
-([decision 7](/build/archive/folder-structure-ingestion.md), "Build against today's
+([decision 7](folder-structure-ingestion.md), "Build against today's
 upload path; stay decoupled from External Libraries"). **This playbook is that future
 work.**
 

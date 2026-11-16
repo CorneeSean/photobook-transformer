@@ -9,8 +9,8 @@ timestamp: 2026-07-22
 # ML boundary & quality-signal exploration
 
 > **Status: exploration notes.** Findings + directions from a design session, not
-> queued work. Extends [Immich dependency decision](/build/immich-dependency-decision.md)
-> and feeds [open questions](/build/open-questions.md). Promote items into
+> queued work. Extends [Immich dependency decision](../immich-dependency-decision.md)
+> and feeds [open questions](../open-questions.md). Promote items into
 > `progress.md` when scheduled.
 
 ## Scope

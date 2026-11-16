@@ -13,7 +13,7 @@ Ten stages turn Immich assets into a photo book. `flow/_flow.py` (the sole
 with two concurrent fan-out groups. Each stage **is its own Prefect task** via the
 `TaskUnit` base — sequential stages run inline and reuse the flow's shared session;
 fan-out stages `.submit()` to worker threads, each opening its own pooled session
-(see [quality practices](/process/quality-practices.md) §1.5–1.6 for the mechanism).
+(see [quality practices](../process/quality-practices.md) §1.5–1.6 for the mechanism).
 
 > Companion visual (self-contained): `knowledge/foundations/pipeline-execution.html` —
 > the same graph, styled for light/dark.
@@ -71,8 +71,8 @@ in group 1 (per-photo ML), the `enhance→render` chain in group 2 (render shell
 
 | Group | Stages | Why independent | Joins at |
 |---|---|---|---|
-| **After `sync`** | [`resolve-leads`](/build/archive/enrichment.md) ‖ [`quality`](/stages/quality.md) ‖ [`cluster`](/stages/cluster.md) | Each reads only `Photo` rows, writes disjoint state (`Person.is_lead`; scores/`clip_embedding`; segment/scene). No stage reads another's output. | [`select`](/stages/select.md) |
-| **After `select`** | [`enhance`](/stages/enhance.md)→[`render`](/stages/render.md) ‖ [`caption`](/stages/caption.md) | Both consume the `selected=True` set; render makes JPEGs, caption makes text. `enhance→render` is a hard chain (render needs enhance's XMP sidecars). | [`assemble`](/stages/assemble.md) |
+| **After `sync`** | [`resolve-leads`](../build/archive/enrichment.md) ‖ [`quality`](../stages/quality.md) ‖ [`cluster`](../stages/cluster.md) | Each reads only `Photo` rows, writes disjoint state (`Person.is_lead`; scores/`clip_embedding`; segment/scene). No stage reads another's output. | [`select`](../stages/select.md) |
+| **After `select`** | [`enhance`](../stages/enhance.md)→[`render`](../stages/render.md) ‖ [`caption`](../stages/caption.md) | Both consume the `selected=True` set; render makes JPEGs, caption makes text. `enhance→render` is a hard chain (render needs enhance's XMP sidecars). | [`assemble`](../stages/assemble.md) |
 
 True chains (not parallelisable): `sync → everything`, the group-1 trio → `select`,
 `enhance → render`, `assemble → fulfill`.
@@ -80,20 +80,20 @@ True chains (not parallelisable): `sync → everything`, the group-1 trio → `s
 ## Stage responsibilities
 
 Every stage is `album_id`-scoped and reads from **our** DB; Immich is touched only
-at `sync` (the boundary — see [architecture](/foundations/architecture.md)).
+at `sync` (the boundary — see [architecture](architecture.md)).
 
 | Stage | Group | Responsibility | Writes |
 |---|---|---|---|
-| [`sync`](/stages/sync.md) | seq | **The boundary.** Pull the album's assets from Immich, keyed on asset id. Idempotent. | `Photo` |
-| [`resolve-leads`](/build/archive/enrichment.md) | 1 | Resolve `album.yml` priority subjects to Immich people; mark lead. | `Person.is_lead` |
-| [`quality`](/stages/quality.md) | 1 | Score blur (real) + aesthetic + CLIP embedding — real `ClipAestheticModel` (ViT-L/14 + LAION head, step 31), behind the opt-in `scoring` extra with a NULL-scoring fallback. | `Photo` scores |
-| [`cluster`](/stages/cluster.md) | 1 | Assign each photo to a segment (timestamp) + scene (gap detection). | `segment_id`, `Scene` |
-| [`select`](/stages/select.md) | seq | Diversity- + people-aware best-of-scene via MMR; near-dup suppression. | `Photo.selected` |
-| [`enhance`](/stages/enhance.md) | 2 | Estimate bounded tone deltas; classical code writes XMP sidecars. | XMP sidecars |
-| [`render`](/stages/render.md) | 2 | Batch `darktable-cli` over the sidecars → corrected JPEGs. | JPEG files |
-| [`caption`](/stages/caption.md) | 2 | Every selected photo gets a caption (shared analysis call). | `Photo.caption` |
-| [`assemble`](/stages/assemble.md) | seq | Lay selected photos into the book's page order (grid capacities per segment/scene). Renders no file. | `Photo.page_number` |
-| [`fulfill`](/stages/fulfill.md) | seq | Deliver via a pluggable `Printer` — HTML (default) or Lulu. | deliverable |
+| [`sync`](../stages/sync.md) | seq | **The boundary.** Pull the album's assets from Immich, keyed on asset id. Idempotent. | `Photo` |
+| [`resolve-leads`](../build/archive/enrichment.md) | 1 | Resolve `album.yml` priority subjects to Immich people; mark lead. | `Person.is_lead` |
+| [`quality`](../stages/quality.md) | 1 | Score blur (real) + aesthetic + CLIP embedding — real `ClipAestheticModel` (ViT-L/14 + LAION head, step 31), behind the opt-in `scoring` extra with a NULL-scoring fallback. | `Photo` scores |
+| [`cluster`](../stages/cluster.md) | 1 | Assign each photo to a segment (timestamp) + scene (gap detection). | `segment_id`, `Scene` |
+| [`select`](../stages/select.md) | seq | Diversity- + people-aware best-of-scene via MMR; near-dup suppression. | `Photo.selected` |
+| [`enhance`](../stages/enhance.md) | 2 | Estimate bounded tone deltas; classical code writes XMP sidecars. | XMP sidecars |
+| [`render`](../stages/render.md) | 2 | Batch `darktable-cli` over the sidecars → corrected JPEGs. | JPEG files |
+| [`caption`](../stages/caption.md) | 2 | Every selected photo gets a caption (shared analysis call). | `Photo.caption` |
+| [`assemble`](../stages/assemble.md) | seq | Lay selected photos into the book's page order (grid capacities per segment/scene). Renders no file. | `Photo.page_number` |
+| [`fulfill`](../stages/fulfill.md) | seq | Deliver via a pluggable `Printer` — HTML (default) or Lulu. | deliverable |
 
 ## Session ownership & invariants
 
@@ -133,4 +133,4 @@ The invariants (why the fences are placed as they are):
 | **Join `enhance` before render/caption submit** | Keeps them strictly after `enhance`'s commit — a real `enhance` failure surfaces its own error, not a masked `UpstreamTaskError`, and avoids the `PhotoAnalyzer.ensure` idempotency race a fully-concurrent `enhance`‖`caption` had. |
 | **Failure isolation** | Each task's own `with session_factory()` rolls back independently; `.result()` re-raises and aborts before the join. |
 | **Connection pool** | Concurrency peaks at 3 (group 1); default `QueuePool` (5 + 10 overflow) suffices. Size `pool_size` only if a stage's *internal* per-photo loop later becomes Prefect-level fan-out. |
-| **Tests** | The in-memory SQLite test session isn't thread-shareable; unit tests inject a `session_factory` of independent doubles. Real concurrency is covered by the [pgvector TestContainers suite](/build/archive/testcontainers.md). |
+| **Tests** | The in-memory SQLite test session isn't thread-shareable; unit tests inject a `session_factory` of independent doubles. Real concurrency is covered by the [pgvector TestContainers suite](../build/archive/testcontainers.md). |

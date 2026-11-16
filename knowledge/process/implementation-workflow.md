@@ -9,8 +9,8 @@ timestamp: 2026-07-12
 # Implementation workflow (per-step handoff)
 
 This is the loop an implementing agent follows to deliver the project **one
-[build step](/build/build-order.md) at a time**. It is mandatory. The
-[working agreement](/process/working-agreement.md) defines the *quality* gate (TDD,
+[build step](../build/build-order.md) at a time**. It is mandatory. The
+[working agreement](working-agreement.md) defines the *quality* gate (TDD,
 typing, `uv run poe check`); this document defines the *delivery* gate (branch,
 review chain, squash, merge, push) around it.
 
@@ -36,7 +36,7 @@ review chain, squash, merge, push) around it.
 ## The loop for one step
 
 1. **Select the step.** Take the lowest-numbered step whose status is `todo` in
-   the [progress tracker](/build/progress.md)'s **Outstanding (TODO)** section.
+   the [progress tracker](../build/progress.md)'s **Outstanding (TODO)** section.
    Steps are strictly ordered. (The tracker is split into *Outstanding (TODO)* and
    *Completed (DONE)*: everything not yet merged lives in Outstanding; a step moves
    to Completed only when it lands on `main` — see step 9.)
@@ -45,13 +45,13 @@ review chain, squash, merge, push) around it.
    **Outstanding (TODO)** section, set the step `in-progress` and record the branch
    name (it stays in Outstanding until it merges).
 3. **Load the context** (see "Context to load" below) so the work respects the
-   established design and the [non-negotiable rules](/reference/folder-structure.md).
-4. **Implement test-first.** Follow the [TDD loop](/process/working-agreement.md): failing
+   established design and the [non-negotiable rules](../reference/folder-structure.md).
+4. **Implement test-first.** Follow the [TDD loop](working-agreement.md): failing
    test → minimum implementation → refactor. Make as many **subcommits** as help;
    they will be squashed.
 5. **Self-check — the gate for every review.** Run `uv run poe check` (ruff +
    basedpyright + pytest) until green. For a step with no automated test, perform
-   the manual verification the [build step](/build/build-order.md) describes and write
+   the manual verification the [build step](../build/build-order.md) describes and write
    down the result. **No review starts until checks are green.**
 6. **Sub-agent review (only on green checks).** Invoke **review sub-agents** on
    the step's diff (`main..HEAD`) — e.g. via the repo's code-review tooling —
@@ -90,15 +90,15 @@ review chain, squash, merge, push) around it.
    > tracker just points here.)
 8. **Finalize.** With user approval in hand and `uv run poe check` green (and
    manual verification done, if any): **squash** the branch's subcommits into one
-   commit using the [commit format](/process/working-agreement.md)
+   commit using the [commit format](working-agreement.md)
    (`<stage>: <what changed>`, verification in the body). Note its hash
    (`git rev-parse --short HEAD`) — for a fast-forward merge this *is* the hash
    the commit will have on `main`.
 9. **Record — still on the step branch, before merging.** In the
-   [progress tracker](/build/progress.md), **move the step's row out of
+   [progress tracker](../build/progress.md), **move the step's row out of
    *Outstanding (TODO)* into the matching *Completed (DONE)* sub-table** (status
    `done`, the hash just noted, the date), and add a dated entry to
-   [`log.md`](/log.md) — as one small commit on top of the squashed step commit.
+   [`log.md`](../log.md) — as one small commit on top of the squashed step commit.
    Moving the row (not just flipping its status) is the bookkeeping the tracker's
    two-section split depends on, so *Outstanding* always lists only what is left.
    Doing this now, rather than after the merge, is required: `main` is
@@ -138,14 +138,14 @@ do it the same way every time so it never has to be re-derived:
    are unaffected.
 3. **Rewrite every cross-bundle reference to `/build/archive/<name>.md`.** Grep the
    whole bundle (`grep -rn "build/<name>.md" knowledge`) and fix **all** hits —
-   including historical [`log.md`](/log.md) entries and stage/reference docs. The
-   already-archived docs (e.g. [`enrichment.md`](/build/archive/enrichment.md)) are
+   including historical [`log.md`](../log.md) entries and stage/reference docs. The
+   already-archived docs (e.g. [`enrichment.md`](../build/archive/enrichment.md)) are
    linked this way; match them.
 4. **Move its `index.md` entry** out of *Execution* into the *Archive* section, with
    a description that reflects the finished state.
 
-**Stays in `build/`:** living docs ([`build-order.md`](/build/build-order.md),
-[`progress.md`](/build/progress.md), [`open-questions.md`](/build/open-questions.md))
+**Stays in `build/`:** living docs ([`build-order.md`](../build/build-order.md),
+[`progress.md`](../build/progress.md), [`open-questions.md`](../build/open-questions.md))
 and forward-looking / not-yet-built briefs (analysis notes, feature briefs). Only
 *completed* playbooks and step notes are archived.
 
@@ -154,15 +154,15 @@ and forward-looking / not-yet-built briefs (analysis notes, feature briefs). Onl
 For step N, read, in this order:
 
 1. This workflow document (the loop and the hard rules).
-2. The step's entry in the [build order](/build/build-order.md) — and **every concept
-   document it links** (the relevant stage doc, [data model](/reference/data-model.md),
-   [domain model](/foundations/domain-model.md), etc.). Those links are the step's context.
-3. The [non-negotiable structure rules](/reference/folder-structure.md) and the
-   [working agreement](/process/working-agreement.md) (TDD table, typing gate, commit
+2. The step's entry in the [build order](../build/build-order.md) — and **every concept
+   document it links** (the relevant stage doc, [data model](../reference/data-model.md),
+   [domain model](../foundations/domain-model.md), etc.). Those links are the step's context.
+3. The [non-negotiable structure rules](../reference/folder-structure.md) and the
+   [working agreement](working-agreement.md) (TDD table, typing gate, commit
    gate).
-4. The [progress tracker](/build/progress.md) — what is already `done`, and any notes
+4. The [progress tracker](../build/progress.md) — what is already `done`, and any notes
    on `blocked` items.
-5. Any [open questions](/build/open-questions.md) the step is tasked with resolving.
+5. Any [open questions](../build/open-questions.md) the step is tasked with resolving.
 
 ## Definition of done for a step
 
@@ -175,8 +175,8 @@ A step is `done` only when **all** are true:
 - [ ] The user has explicitly approved.
 - [ ] Subcommits squashed into one `<stage>: <what changed>` commit with the
       verification in the body.
-- [ ] [Progress tracker](/build/progress.md) updated **on the step branch** — the
+- [ ] [Progress tracker](../build/progress.md) updated **on the step branch** — the
       step's row **moved from *Outstanding (TODO)* to *Completed (DONE)*** with its
-      hash — and a dated [`log.md`](/log.md) entry added, in a commit on top of the
+      hash — and a dated [`log.md`](../log.md) entry added, in a commit on top of the
       squashed step commit (not after merging — `main` can't take a direct commit).
 - [ ] Branch merged into `main`, branch deleted, and `main` pushed to `origin`.

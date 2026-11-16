@@ -13,4 +13,5 @@ LIABILITY ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE.
 
 The sample photos in pipeline/tests/data/cat-album/photos/ come from The Cat API
 (https://thecatapi.com) and stay the property of their owners. See that folder's
-README.
+README. The two fixture images in pipeline/tests/fixtures/images/ come from
+Lorem Picsum (https://picsum.photos) and stay the property of their owners.

@@ -16,7 +16,7 @@ the photo is analyzed **at most once** — this stage's job is to supply the gro
 context and to store the result.
 
 **Which captioner runs is selectable per run** (step 29 —
-[local-analysis.md](/build/archive/local-analysis.md)), behind a
+[local-analysis.md](../build/archive/local-analysis.md)), behind a
 [`Captioner`](../../src/album/analysis/captioner.py) seam:
 
 - **`TemplateCaptioner`** — the **default**, fully offline (no API, no key): composes
@@ -39,5 +39,5 @@ allows:
 - `Album.meta` extras (couple's names, event type) if present
 - Nothing at all → still produces an accurate, if generic, caption
 
-This is the payoff of keeping [`Segment`](/foundations/domain-model.md) structured rather than
+This is the payoff of keeping [`Segment`](../foundations/domain-model.md) structured rather than
 opaque: the caption can meaningfully interpolate it.

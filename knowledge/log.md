@@ -2,12 +2,12 @@
 
 Cross-commit narrative and decisions. Per-diff mechanics live in the commit
 bodies this log cites; keep entries tight (see
-[working-agreement · Be concise](/process/working-agreement.md#be-concise)).
+[working-agreement · Be concise](process/working-agreement.md#be-concise)).
 
 ## 2026-07-21
 
 * **PDF rendered on demand in `LuluPrinter`, not on every run (step 43,
-  user-requested; commit `0405e0f`).** The user asked why the print-ready PDF
+  user-requested; commit `9663d98`).** The user asked why the print-ready PDF
   was generated on every pipeline run when the default output is a browsable
   webpage. Root cause: `assemble` unconditionally rendered the master PDF via
   WeasyPrint, but only an opt-in Lulu order reads it — the default `HtmlPrinter`
@@ -29,7 +29,7 @@ bodies this log cites; keep entries tight (see
     check` green (469/6, incl. Docker pgvector). Live Lulu order still gapped on
     PDF hosting.
 * **Caption one-sentence summary + configurable output language (step 42,
-  user-requested; commit `49b7c26`).** The opt-in `ClaudeCaptioner` ran too
+  user-requested; commit `504a5e6`).** The opt-in `ClaudeCaptioner` ran too
   verbose, and the user wanted its output language selectable, defaulting to
   Polish. Its system prompt now demands **exactly ONE short summary sentence**
   ("a concise summary, not a description; no lists, no line breaks, no preamble")
@@ -62,7 +62,7 @@ bodies this log cites; keep entries tight (see
 ## 2026-07-20
 
 * **Total-failure escalation + stage/progress logging (step 41, user-requested;
-  commit `0a66842`).** The user asked why a stage that hit an error still showed as
+  commit `f04b4fc`).** The user asked why a stage that hit an error still showed as
   "done". Root cause: the four isolating stages (`quality`/`enhance`/`render`/
   `caption`) deliberately catch every per-photo exception, count it as `failed`, and
   never re-raise (architecture.md's "one bad photo in 3,000 must not sink the run"),
@@ -132,7 +132,7 @@ bodies this log cites; keep entries tight (see
 ## 2026-07-19
 
 * **Housekeeping — cat-album demo un-rotted and brought under the gate**
-  (`390b757`, `692dbb8`). While auditing `scripts/`, found `build_cat_album.py`
+  (`6eb8fdd`, `546d15b`). While auditing `scripts/`, found `build_cat_album.py`
   silently broken: it still called the old `ClusterStage().run(album_id, session)`,
   but stages are now `Stage(album_id, session_factory).run()` (rule #3) — it had
   rotted undetected because `scripts/` sat outside the type/xenon gate (it broke once
@@ -140,23 +140,23 @@ bodies this log cites; keep entries tight (see
   `reuse(session)`, extracted a testable `build_cat_album(output_dir)`, and added
   `tests/album/test_demo_cat_album.py` — a smoke test that drives the demo end to end
   over the committed fixture and asserts a complete book (segment header + all 30
-  photos). Then added `scripts` to the [basedpyright](/reference/tech-stack.md) include,
+  photos). Then added `scripts` to the [basedpyright](reference/tech-stack.md) include,
   so the demo is now guarded by all three layers (ruff + types + a runtime test) and
   the next break fails `poe check` instead of rotting. Also fixed stale `run`→`build`
   references and a fixture-README path; documented the in-memory `create_all` as an
   intentional rule-#8 exception. `poe check` green (441/6).
 
 * **Docs cleanup — `progress.md` restructured; process/deferral notes moved to their
-  canonical homes** (`e80fa94`). With the build complete, `progress.md` had become a
+  canonical homes** (`990d608`). With the build complete, `progress.md` had become a
   frozen audit trail wrapped in live-tracker scaffolding. Collapsed *Outstanding* to a
   one-paragraph summary (the "step 23 subsumed"/completion story had been repeated four
   ways) and trimmed *Current status* to operational facts. Made the **live-integration
-  gap the single canonical deferral list** — folded in [open-questions](/build/open-questions.md)
+  gap the single canonical deferral list** — folded in [open-questions](build/open-questions.md)
   #2/#3 and the LAION within-scene live check, which now point back to it. Relocated
   process conventions *out* of the tracker: the **human-review waiver** is now canonical
-  in [implementation-workflow.md](/process/implementation-workflow.md) (it had lived only
+  in [implementation-workflow.md](process/implementation-workflow.md) (it had lived only
   in the tracker, which the workflow doc silently contradicted); the ruff-`py314`
-  `except` landmine moved to the [working agreement](/process/working-agreement.md);
+  `except` landmine moved to the [working agreement](process/working-agreement.md);
   panel-of-4 / `main`-protected / the parallel-build precedent / resolved landmines were
   dropped as duplicates of homes they already had here or in the workflow doc. Also fixed
   `build-order.md` step 14's dead `run` verb (→ `build`, step 39). Docs-only.
@@ -174,11 +174,11 @@ bodies this log cites; keep entries tight (see
   (`testcontainers.md`, `external-library-ingestion.md`, `step-39-cli-package-split.md`),
   rewriting every cross-bundle link to `/build/archive/…` and reshuffling the `index.md`
   entries into the Archive section. Encoded the archiving mechanics as a standing
-  convention in [implementation-workflow.md](/process/implementation-workflow.md) so it
+  convention in [implementation-workflow.md](process/implementation-workflow.md) so it
   isn't re-derived next time. Docs-only; no `src/`/test changes.
 
-* **Step 39 (follow-up) — split `cli.py` into an `album/cli/` package** (`ae40daa`;
-  [plan](/build/archive/step-39-cli-package-split.md)). The step-39 `build` command worked and
+* **Step 39 (follow-up) — split `cli.py` into an `album/cli/` package** (`3c1177f`;
+  [plan](build/archive/step-39-cli-package-split.md)). The step-39 `build` command worked and
   was `poe check`-green, but lived in a single ~370-line `cli.py` mixing four
   responsibilities. Split into a package with one job per module: `parser.py` (argparse
   only), `sources.py` (the `AlbumSource` strategies + `select_source`), `runner.py`
@@ -196,7 +196,7 @@ bodies this log cites; keep entries tight (see
   at the `cli/` package. `poe check` green (440 passed, 6 skipped). Logged as a step-39
   follow-up (not a new step number), per the user's framing.
 
-* **Step 39 — unify the CLI into one `build` command** (`22acb9c`). User-requested cleanup of a
+* **Step 39 — unify the CLI into one `build` command** (`6f3c5c1`). User-requested cleanup of a
   CLI that had grown verbose and scattered across `generate`/`run` subcommands with parallel
   `_generate_single`/`_generate_manifest`/`_run` handlers. Now a single `photobook-generator build`
   with two phases — **ingest** (default on) and **pipeline** — that become an `AlbumSource` strategy
@@ -219,8 +219,8 @@ bodies this log cites; keep entries tight (see
   `_select_source` (rank B → A). `poe check` green (440 passed, 6 skipped). Logged as build step 39
   at the user's request.
 
-* **Step 38 — external-library ingest: the `--ingest-mode` flag (closes the playbook)** (`f356c2b`;
-  [external-library-ingestion.md](/build/archive/external-library-ingestion.md)). Exposes the step-37
+* **Step 38 — external-library ingest: the `--ingest-mode` flag (closes the playbook)** (`55eb1ad`;
+  [external-library-ingestion.md](build/archive/external-library-ingestion.md)). Exposes the step-37
   `AssetRegistrar` seam on the CLI: `generate --ingest-mode {upload,external}`, with precedence
   flag > `IMMICH__INGEST_MODE` env > `upload` default (the `--captioner` pattern). It is a
   **run-level** mode — how bytes reach Immich — so it applies to every album including the
@@ -239,8 +239,8 @@ bodies this log cites; keep entries tight (see
   live-integration gap (no reachable Immich in this sandbox). Only the optional step 23 remains on
   the build order.
 
-* **Step 37 — external-library ingest: the `AssetRegistrar` seam** (`749a57e`;
-  [external-library-ingestion.md](/build/archive/external-library-ingestion.md)).
+* **Step 37 — external-library ingest: the `AssetRegistrar` seam** (`b09f994`;
+  [external-library-ingestion.md](build/archive/external-library-ingestion.md)).
   Wires the mode swap the step-36 plumbing set up, still **opt-in** (default unchanged). The one
   line `_ingest` used to run inline — `{path: upload_asset(path)}` — is now an injected
   `AssetRegistrar.register(directory, image_paths) -> {host path → asset id}`; everything downstream
@@ -268,8 +268,8 @@ bodies this log cites; keep entries tight (see
   earlier `poe check` failure was a stale testcontainers-ryuk container name conflict (a leftover
   from a manual run), cleared with `docker rm -f`, not a code issue.
 
-* **Step 36 — external-library (scan-in-place) ingest: plumbing** (`2279207`;
-  [external-library-ingestion.md](/build/archive/external-library-ingestion.md)). Foundation for a
+* **Step 36 — external-library (scan-in-place) ingest: plumbing** (`abf4779`;
+  [external-library-ingestion.md](build/archive/external-library-ingestion.md)). Foundation for a
   new **opt-in** ingest mode that references photos on disk instead of copying them into
   Immich — no behavior wired yet. Adds: `ImmichSettings.ingest_mode`/`external_host_root`/
   `external_container_root`; a pure `PathMapping` (`immich/paths.py`) translating a host
@@ -288,9 +288,9 @@ bodies this log cites; keep entries tight (see
   blockers/majors; nits applied (empty-scan-body assertion, machine-independent
   `from_settings` test, docstring closings, doc/anchor fixes).
 
-* **Step 35 — folder-structure-driven ingestion docs + genericity gate** (`38a3aee`;
-  [step-35-docs-verify.md](/build/archive/step-35-docs-verify.md)). Closes the
-  [folder-structure-driven ingestion playbook](/build/archive/folder-structure-ingestion.md)
+* **Step 35 — folder-structure-driven ingestion docs + genericity gate** (`63095ea`;
+  [step-35-docs-verify.md](build/archive/step-35-docs-verify.md)). Closes the
+  [folder-structure-driven ingestion playbook](build/archive/folder-structure-ingestion.md)
   (steps 32–35 all merged). User-facing docs landed (README "Multiple albums from one
   folder tree", `album-definition.md`'s "three sources, one shape" note,
   `folder-structure.md`'s `ingest.py` fan-out line, and a consolidated **As-built**
@@ -312,8 +312,8 @@ bodies this log cites; keep entries tight (see
   fan-out against a real Immich remains folded into the standing first-live-run gap; the
   fixture-tree e2e is the offline stand-in.
 
-* **Step 34 — manifest fan-out + `generate --manifest`** (`0e67990`;
-  [step-34-fanout-cli.md](/build/archive/step-34-fanout-cli.md)). `ingest_manifest` ingests
+* **Step 34 — manifest fan-out + `generate --manifest`** (`a2b5766`;
+  [step-34-fanout-cli.md](build/archive/step-34-fanout-cli.md)). `ingest_manifest` ingests
   every album a manifest declares under ONE shared `ImmichClient`, returning an
   `AlbumOutcome` per album (slug on success, error on an isolated failure); the loop
   lives in `_ingest_all` so it unit-tests with a fake client, mirroring
@@ -336,8 +336,8 @@ bodies this log cites; keep entries tight (see
   to the standing no-reachable-Immich gap. Steps 32–34 (the feature's code) are now
   complete; only step 35 (user docs + e2e genericity gate) remains.
 
-* **Step 33 — folder-derived segments in `ingest.py`** (`28c3ba0`;
-  [step-33-folder-segments.md](/build/archive/step-33-folder-segments.md)). New
+* **Step 33 — folder-derived segments in `ingest.py`** (`28aa809`;
+  [step-33-folder-segments.md](build/archive/step-33-folder-segments.md)). New
   `DirectoryIngestor.ingest_album(spec, root)` ingests one manifest album, deriving
   each declared subfolder's `[start_at, end_at]` window from the capture timestamps of
   the photos in it. The upload → create → readiness → segments → materialize spine was
@@ -360,8 +360,8 @@ bodies this log cites; keep entries tight (see
   album/segment path. `poe check` green (389 passed, 6 skipped); live multi-folder ingest
   still deferred to the standing no-reachable-Immich gap.
 
-* **Step 32 — ingest manifest schema + loader** (`445357f`;
-  [step-32-manifest-schema.md](/build/archive/step-32-manifest-schema.md)). New pure
+* **Step 32 — ingest manifest schema + loader** (`50c83ab`;
+  [step-32-manifest-schema.md](build/archive/step-32-manifest-schema.md)). New pure
   `src/album/manifest.py`: `Manifest`/`AlbumSpec`/`SegmentSpec` (`extra="forbid"`) +
   `load_manifest()`, parsing a root `ingest.yml` into validated album/segment boundary
   declarations. All shape/relationship validation, no filesystem or Immich I/O — the
@@ -385,7 +385,7 @@ bodies this log cites; keep entries tight (see
 ## 2026-07-18
 
 * **Plans — folder-structure-driven ingestion (steps 32–35)** (planning only, no code).
-  New [folder-structure-ingestion.md](/build/archive/folder-structure-ingestion.md) umbrella
+  New [folder-structure-ingestion.md](build/archive/folder-structure-ingestion.md) umbrella
   playbook + four step plans: a root `ingest.yml` **manifest** declares which subfolders
   are album vs segment boundaries, so `generate <root> --manifest` fans one tree into N
   independent Immich albums / `album.yml` files / pipeline runs / books. Folder-derived
@@ -399,10 +399,10 @@ bodies this log cites; keep entries tight (see
   path, staying decoupled from External Libraries. **Steps 32 → 33 → 34 → 35 are a strict
   sequential chain** (33 imports 32's models; 34 depends on 33's `ingest_album` seam and
   both edit `ingest.py`; 35 verifies) — no parallel build. Tracked in
-  [progress.md](/build/progress.md) Outstanding.
+  [progress.md](build/progress.md) Outstanding.
 
 * **Step 30 — repeatable `--lead-face` CLI flag + multi-photo lead resolution**
-  (`e50a54a`; [step-30-cli-lead-faces.md](/build/archive/step-30-cli-lead-faces.md)). `generate`/`run`
+  (`c695e09`; [step-30-cli-lead-faces.md](build/archive/step-30-cli-lead-faces.md)). `generate`/`run`
   take a repeatable `--lead-face IMAGE` that writes/patches the `lead_faces.reference_images`
   block, so priority subjects are named without hand-authoring `album.yml`. Two decisions
   changed the plan: (1) **verifying the plan first** showed dropping the scalar cache column
@@ -414,8 +414,8 @@ bodies this log cites; keep entries tight (see
   (re-upload each run; migration drops `Album.lead_reference_asset_id`). 3-agent review, all
   findings applied; `poe check` green (341/3); live multi-photo verify deferred.
 
-* **Step 31 — real LAION/open_clip aesthetic scorer wired** (`2446901`;
-  [step-31-laion-aesthetic-scorer.md](/build/archive/step-31-laion-aesthetic-scorer.md)). New
+* **Step 31 — real LAION/open_clip aesthetic scorer wired** (`0cafbdb`;
+  [step-31-laion-aesthetic-scorer.md](build/archive/step-31-laion-aesthetic-scorer.md)). New
   `album.analysis.aesthetic.ClipAestheticModel` (ViT-L/14 CLIP + LAION MLP head) backs
   both the `AestheticScorer` + `Embedder` protocols from one loaded model, with a
   one-entry feature memo so `score`+`embed` on a thumbnail forward once; torch/open_clip
@@ -454,7 +454,7 @@ bodies this log cites; keep entries tight (see
   adapter is fully type-checked. CI should still `uv sync --extra scoring` for full coverage.
 
 * **Convention added — commit body vs. `log.md` split + "Be concise" (user-directed).**
-  [working-agreement.md](/process/working-agreement.md): a "Be concise" principle
+  [working-agreement.md](process/working-agreement.md): a "Be concise" principle
   over all output, and a Git-workflow subsection dividing labour — commit bodies own
   the per-diff mechanical record, `log.md` owns the cross-commit narrative/decisions
   and points into git via SHAs rather than restating it. Decided **against** folding
@@ -466,7 +466,7 @@ bodies this log cites; keep entries tight (see
   `pipeline-execution.md`/`.html`, which still framed the DAG fan-out as *proposed*
   (it shipped in step 25); corrected stage count (11 → 10).
 
-* **Docs refactor + trim (user-directed; `e24bebd`).** Made top-level files thin
+* **Docs refactor + trim (user-directed; `ed8c7cb`).** Made top-level files thin
   pointers to the `knowledge/` bundle (source of truth); de-staled and de-duplicated.
   Deleted `HANDOVER.md` + `PROJECT_BRIEF.md`; added a 3-line `CLAUDE.md`. Assigned a
   canonical owner per repeated fact (TaskUnit → quality-practices; commit/fanout
@@ -475,8 +475,8 @@ bodies this log cites; keep entries tight (see
 
 ## 2026-07-17
 
-* **Step 29 — offline classical replacement for the Claude vision call** (`ba6c1bf`;
-  [local-analysis.md](/build/archive/local-analysis.md)). Split the fused per-photo vision
+* **Step 29 — offline classical replacement for the Claude vision call** (`92b020e`;
+  [local-analysis.md](build/archive/local-analysis.md)). Split the fused per-photo vision
   call into two injectable collaborators in a new `album.analysis` package — a
   `ClassicalToneEstimator` (tone now always classical) and a `Captioner` seam
   (`TemplateCaptioner` offline default + opt-in `ClaudeCaptioner`), composed by
@@ -485,39 +485,39 @@ bodies this log cites; keep entries tight (see
   the `--force --captioner claude` ~2× cost on clustered photos. Live-Claude
   spot-check deferred.
 
-* **Review panel widened to 4 (user-directed).** [implementation-workflow.md](/process/implementation-workflow.md)
+* **Review panel widened to 4 (user-directed).** [implementation-workflow.md](process/implementation-workflow.md)
   §6: up to 4 broad-scope review sub-agents — 2 adversarial correctness, 1
   style/reuse, 1 architecture — with "scale down for small diffs" (was a cap of 3).
 
 * **Ruff trailing commas + `SimilaritySearch` → `Sequence` (user-directed).**
-  Widened `db/similarity.py` read-only inputs to `Sequence` (`110c35a`). Enabled
-  `COM812` + a repo-wide trailing-comma reformat (`ae8f4dd`), then moved `COM812` to
-  `lint.ignore` (`de49b50`) after ruff warned it may conflict with the formatter —
+  Widened `db/similarity.py` read-only inputs to `Sequence` (`f946a3f`). Enabled
+  `COM812` + a repo-wide trailing-comma reformat (`1457ffb`), then moved `COM812` to
+  `lint.ignore` (`21bbab4`) after ruff warned it may conflict with the formatter —
   the reformat stays and the formatter's magic trailing comma keeps collections
   vertical, but trailing commas are no longer linter-enforced.
 
 * **Open question 7 resolved — shared `selected_photos` query hoisted** (new
-  `db/queries.py`; [open-questions.md](/build/open-questions.md) Q7). The
+  `db/queries.py`; [open-questions.md](build/open-questions.md) Q7). The
   "selected photos, ordered by id" read, copied across caption/enhance/render, is now
   one `selected_photos(album_id, session)` free function — chosen over a Repository
   (SQLAlchemy's Session already gives Unit of Work / Identity Map). Takes the caller's
   session, so it composes with fan-out session ownership. Fixed the latent drift Q7
   warned of — `caption` was missing `.order_by(Photo.id)` (determinism only).
 
-* **Proposal recorded — offline analysis** (new [local-analysis.md](/build/archive/local-analysis.md)).
+* **Proposal recorded — offline analysis** (new [local-analysis.md](build/archive/local-analysis.md)).
   Design proposal to drop the last external-API dependency by splitting the Claude
   call into classical tone (CV) + metadata-template caption, keeping a VLM injectable
   as an optional "rich caption" mode. Not cost-driven (~$1–$4/album) — offline /
   no-key / deterministic. Implemented as step 29 above.
 
 * **Open question 5 resolved — AI-pass cost estimate** (new
-  [ai-cost-estimate.md](/build/archive/ai-cost-estimate.md); Q5). The full Claude vision pass
+  [ai-cost-estimate.md](build/archive/ai-cost-estimate.md); Q5). The full Claude vision pass
   ≈ **$1–$4 per 300–500-photo album** (one idempotent call per selected photo).
   Verdict: acceptable, no cost control needed; caching not worth it (system prompt
   below Sonnet's cache floor). Metered re-check deferred to the first live run.
 
-* **TestContainers step 24 — offline Immich ML integration** (`ad86550`;
-  [testcontainers.md](/build/archive/testcontainers.md)). Verifies Immich's ML paths (faces,
+* **TestContainers step 24 — offline Immich ML integration** (`f990248`;
+  [testcontainers.md](build/archive/testcontainers.md)). Verifies Immich's ML paths (faces,
   smart search) against a real 4-service stack with **no model fetched from the
   internet at test time**: a build-time `snapshot_download` bakes CPU `.onnx` models
   into an image (`poe bake-immich-ml`, the one internet-touching step), driven via
@@ -526,8 +526,8 @@ bodies this log cites; keep entries tight (see
   (`IMMICH_ML_INTEGRATION=1`), skipped in `poe check`. Follow-up: baked image ~3.1 GB
   (dominated by the base image; little to reclaim in our layer).
 
-* **Enrichment step 20 — rating + geocoded place; OCR deferred** (`bb430d2`;
-  [enrichment.md](/build/archive/enrichment.md)). Two optional Immich signals read from data
+* **Enrichment step 20 — rating + geocoded place; OCR deferred** (`698757f`;
+  [enrichment.md](build/archive/enrichment.md)). Two optional Immich signals read from data
   `sync` already fetches (no extra call): manual star `rating` and reverse-geocoded
   place. New nullable `Photo` columns + one migration. `select` gains a soft per-star
   `rating_boost` (reorders comparable photos only; never drops a lead; inert for an
@@ -535,8 +535,8 @@ bodies this log cites; keep entries tight (see
   untouched. **OCR deferred** — a 2nd per-asset N+1 for a "minor" signal, absent from
   the pinned v3.0.2 API. **Completes the Immich-enrichment playbook.**
 
-* **Build step 28 — document-driven segments (`--source-document`)** (`1e2b0af`;
-  [single-command-ingestion.md](/build/archive/single-command-ingestion.md)). New
+* **Build step 28 — document-driven segments (`--source-document`)** (`e398662`;
+  [single-command-ingestion.md](build/archive/single-command-ingestion.md)). New
   `agents/segments.py`: a PydanticAI agent that turns a schedule PDF into the album's
   `segments` (text via `pypdf`, falling back to page images for a scanned PDF). Output
   reuses `SegmentYAML`; the `album.yml` loader stays the correctness authority (UTC
@@ -547,7 +547,7 @@ bodies this log cites; keep entries tight (see
   document kinds. Live-Claude accuracy spot-check deferred. **Completes the
   single-command-ingestion playbook (26–28).**
 
-* **Build step 27 — single-command `photobook-generator generate <dir>`** (`c1c5146`).
+* **Build step 27 — single-command `photobook-generator generate <dir>`** (`2b0bd56`).
   New `ingest.py`: `DirectoryIngestor` walks a photo dir, uploads via the existing
   content-deduped `upload_asset`, creates the Immich album, polls jobs until EXIF is
   idle (warn+continue on timeout), materializes a minimal `album.yml`, then calls the
@@ -560,13 +560,13 @@ bodies this log cites; keep entries tight (see
       album, hand-authored `segments`/`lead_faces` preserved). The first design
       (re-materialize + re-run) was caught in review as a data-loss footgun.
 
-* **Build step 26 — Immich album creation in the client** (`94fba06`). Adds
+* **Build step 26 — Immich album creation in the client** (`1e69505`). Adds
   `create_album` (`POST /albums`) and `get_jobs` (`GET /jobs`, the readiness signal
   step 27 polls) to `ImmichClient`. Boundary models stay lean (per the
   `ImmichAsset`/`ImmichFace` pattern). Modelled against the OpenAPI contract, not a
   live capture — re-verify on the first live ingestion.
 
-* **Plan added — [single-command ingestion](/build/archive/single-command-ingestion.md)**
+* **Plan added — [single-command ingestion](build/archive/single-command-ingestion.md)**
   (handover). Captures two user-requested UX features — `generate <dir>` and
   `--source-document=doc.pdf` — and how they fit the current architecture (additive:
   no stage logic, data-model, or DAG changes). Recommends the app-feature path over a
@@ -635,7 +635,7 @@ bodies this log cites; keep entries tight (see
   fixes applied). **Next: step 20.**
 
 * **Build step 25 — parallelize the flow (fan-out groups)** (`036fcc2`). Applies the
-  [`pipeline-execution.md`](/foundations/pipeline-execution.md) DAG: the four
+  [`pipeline-execution.md`](foundations/pipeline-execution.md) DAG: the four
   sequential stages keep the shared `Session`; the six grouped stages take a
   `session_factory` and open their own pooled connection. Two `submit()`/`result()`
   fences with commit-before-fanout / `expire_all()`-after-join at both.
@@ -648,7 +648,7 @@ bodies this log cites; keep entries tight (see
       New `test_flow_integration.py` guards exactly-one-vision-call-per-photo.
 
 * **Immich keep-or-replace decision recorded** — new
-  [`immich-dependency-decision.md`](/build/immich-dependency-decision.md). Maps what
+  [`immich-dependency-decision.md`](build/immich-dependency-decision.md). Maps what
   the pipeline consumes from Immich (managed library + faces/dedup ML, all behind the
   `sync` boundary) to open-source substitutes (filesystem+exiftool+pyvips;
   InsightFace+DBSCAN; pgvector/imagehash), flagging InsightFace's non-commercial
@@ -673,14 +673,14 @@ bodies this log cites; keep entries tight (see
       (`No module named 'imp'`), breaking docker-py's image build; the CLI resolves
       creds fine.
 
-* **Doc — [Pipeline execution shape](/foundations/pipeline-execution.md).** Documents
+* **Doc — [Pipeline execution shape](foundations/pipeline-execution.md).** Documents
   the stage DAG (two parallelisable fan-out groups), the critical path, and a sketch
   of the Prefect own-session-per-task change to parallelise it (with pool /
   read-after-write / test caveats). Ships a self-contained `.html` diagram.
   (Reference only then; implemented as step 25.)
 
 * **TestContainers step 21 — pgvector integration suite** (`ac2cd14`). First step of
-  the [playbook](/build/archive/testcontainers.md): promotes the DB boundary from in-memory
+  the [playbook](build/archive/testcontainers.md): promotes the DB boundary from in-memory
   SQLite + a numpy stub to a **real Postgres+pgvector migrated with alembic**. Covers
   migrations-reach-head + **no model↔migration drift** (`compare_metadata == []`,
   automating the by-hand autogenerate check), `select` over the real cosine query
@@ -718,7 +718,7 @@ bodies this log cites; keep entries tight (see
       the current config.
 
 * **Enrichment step 17 — faces/people in the client + `sync` (+schema)** (`c99d319`).
-  First step of the [enrichment playbook](/build/archive/enrichment.md); adopts Immich's
+  First step of the [enrichment playbook](build/archive/enrichment.md); adopts Immich's
   faces/people API with **no local face-detection dependency**.
     * `ImmichFace` flattens the nested `person` up to the boundary; `get_faces` via
       `GET /faces?id=`. New `Photo.face_count`/`person_ids` (nullable: NULL = not
@@ -732,7 +732,7 @@ bodies this log cites; keep entries tight (see
 ## 2026-07-14
 
 * **Decision: keep the local ML pipeline — do not offload to Immich or read its DB**
-  (user-directed; resolves [open question #6](/build/open-questions.md)). Web research
+  (user-directed; resolves [open question #6](build/open-questions.md)). Web research
   into what Immich stores concluded we can't drop `open_clip` (ViT-L/14) + the LAION
   aesthetic head:
     * Immich has **no aesthetic/quality score** (only a manual star rating) — best-of
@@ -746,7 +746,7 @@ bodies this log cites; keep entries tight (see
       unversioned, churning contract (vector extension + column widths + table layouts
       have all moved across releases); violates the architecture firewall.
     * A local-ML-free "minimal" variant is possible but trades away the core curation
-      value — **not taken**. [Open question #1](/build/open-questions.md) (no
+      value — **not taken**. [Open question #1](build/open-questions.md) (no
       embeddings on the API) re-confirmed.
 
 * **Review process: cap sub-agent review at ≤3 broad-scope agents** (user-directed,
@@ -756,7 +756,7 @@ bodies this log cites; keep entries tight (see
 
 * **Printer abstraction + HTML default output** (post-step-16, user-directed).
   Generalized `fulfill` from a Lulu-only submitter to a pluggable
-  [`Printer`](/stages/fulfill.md); a browsable self-contained HTML book is now the
+  [`Printer`](stages/fulfill.md); a browsable self-contained HTML book is now the
   **default** output (no external service/credentials). New `printers/` package
   (`base.py` protocol + shared `iter_book_pages`; `html.py` default; `lulu.py`
   opt-in). `Album.lulu_order_id` → `Album.output_ref` (medium-agnostic).
@@ -886,7 +886,7 @@ bodies this log cites; keep entries tight (see
   aware→zone→album→ambiguous-NULL).
     * **Open question #1 resolved:** the Immich REST API (v3.0.2) exposes **no CLIP
       embeddings** — `quality` computes its own. Recorded in
-      [immich-api.md](/reference/immich-api.md).
+      [immich-api.md](reference/immich-api.md).
     * **Live verification skipped** (per user): Immich unreachable, so fixtures derive
       from the OpenAPI contract; re-verify on the first real sync.
     * **Landmine (ruff 0.15.21 formatter bug):** under `target-version = "py314"`,
@@ -903,7 +903,7 @@ bodies this log cites; keep entries tight (see
   spring-forward gap was silently converted instead of raising.
 
 * **Build step 2 — ORM models + first migration** (`68ed96f`). `db/models.py`
-  (`Album`/`Segment`/`Photo`, mirroring [data-model.md](/reference/data-model.md)); the
+  (`Album`/`Segment`/`Photo`, mirroring [data-model.md](reference/data-model.md)); the
   first migration runs `CREATE EXTENSION IF NOT EXISTS vector` before the `pgvector`
   column. Verified upgrade/downgrade/upgrade against real Postgres. Review fixed: `poe
   migrate` never loaded `.env` outside Docker, so a custom `DATABASE_URL` silently fell
@@ -933,8 +933,8 @@ bodies this log cites; keep entries tight (see
 * **Decision:** all datetimes stored tz-aware in **UTC**; `album.yml` carries offsets
   or an album `timezone`; `definition.py`/`sync` normalize. Narrowed to determining a
   photo's source zone from EXIF (Open Question #3).
-* **Process:** added the per-step [implementation workflow](/process/implementation-workflow.md)
-  and a living [progress tracker](/build/progress.md); never commit to `main`.
+* **Process:** added the per-step [implementation workflow](process/implementation-workflow.md)
+  and a living [progress tracker](build/progress.md); never commit to `main`.
 * **Decision:** local `pre-commit` hooks at scaffold (`no-commit-to-branch`, ruff,
   basedpyright), full pytest left to `poe check` + CI.
 * **Build step 0 — scaffold** (`11d290f`). `uv` project (Python 3.14), ruff/basedpyright/

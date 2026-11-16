@@ -8,8 +8,8 @@ timestamp: 2026-07-12
 
 # Data model (SQLAlchemy ORM)
 
-The [Postgres datastore](/foundations/architecture.md) is the source of truth for everything
-the pipeline computes. See [Album definition](/reference/album-definition.md) for how these
+The [Postgres datastore](../foundations/architecture.md) is the source of truth for everything
+the pipeline computes. See [Album definition](album-definition.md) for how these
 rows are created from YAML.
 
 # Schema
@@ -183,7 +183,7 @@ class Person(Base):
   the photo fell outside all of them; distinguish in app logic and warn on the latter
   rather than dropping the photo.
 - **`clip_embedding` is a `pgvector` column** — similarity queries
-  ([`select`](/stages/select.md) MMR, [`cluster`](/stages/cluster.md) refinement) run
+  ([`select`](../stages/select.md) MMR, [`cluster`](../stages/cluster.md) refinement) run
   indexed in the DB, not brute-force numpy. *Testing caveat:* `pgvector` doesn't exist
   in SQLite, so similarity lives behind a substitutable `db/` interface — MMR logic is
   SQLite-testable with a stub, the real query is covered by a `testcontainers` Postgres
@@ -196,21 +196,21 @@ class Person(Base):
   means "not scored" (base install or a per-photo scoring failure), never "score of 0".
 - **Faces are Immich-provided + structured.** `Photo.person_ids` = JSON array of stable
   Immich person UUIDs (assigned faces only), reasoned about structurally by
-  [`select`](/stages/select.md), joined to `Person.name` by `caption`. `face_count`
+  [`select`](../stages/select.md), joined to `Person.name` by `caption`. `face_count`
   counts *all* detected faces (incl. unassigned) as a portrait signal. The album-scoped
   `Person` table is the id→name cache. Nullable (`NULL` = faces not synced yet); a
   face-free album leaves `person_ids=[]` and every people-aware stage reduces to
-  face-free behavior. See [enrichment](/build/archive/enrichment.md).
+  face-free behavior. See [enrichment](../build/archive/enrichment.md).
 - **`rating` + geocoded place** come off data `sync` already fetches (no extra call).
   `rating` (−1…5) is a *soft* `select` boost (never overrides a clearly better shot);
   `city`/`state`/`country` are `caption` grounding only — `cluster` keeps GPS/DBSCAN.
   All nullable ⇒ unrated/un-geocoded album is byte-for-byte as before. OCR deferred —
-  see [enrichment](/build/archive/enrichment.md) step 20.
+  see [enrichment](../build/archive/enrichment.md) step 20.
 - **`Album.meta` is deliberately dumb** — interpolated into prompts/templates only, no
   stage branches on it. Anything a stage *reasons* about belongs in a real column.
 - **All datetimes stored UTC-aware** (`DateTime(timezone=True)`); `definition.py` and
   `sync` normalize to UTC on load, so `cluster` compares in UTC unambiguously even
-  across zones. How a photo's source zone is determined: [Open questions](/build/open-questions.md) #3.
+  across zones. How a photo's source zone is determined: [Open questions](../build/open-questions.md) #3.
 - **Nullability is meaningful:** `NULL` = "that stage hasn't run for this photo yet" —
   what makes resumability work. Columns fill left-to-right through the pipeline.
 - **Alembic migrations from the start**, never `Base.metadata.create_all()`.

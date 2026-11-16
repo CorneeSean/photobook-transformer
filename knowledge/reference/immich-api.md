@@ -8,7 +8,7 @@ timestamp: 2026-07-13
 
 # Immich API notes
 
-Findings pinned down while building the [Immich client](/build/build-order.md) (step 4),
+Findings pinned down while building the [Immich client](../build/build-order.md) (step 4),
 against the Immich **OpenAPI spec v3.0.2** (the project's live Immich version at
 the time). The [`client.py`](../../src/album/immich/client.py) wrapper is modelled on
 these. The **faces/people** surface below was added later (enrichment step 17,
@@ -32,8 +32,8 @@ are in the same boat — internal only. What *is* exposed:
 - **Faces / people** (`GET /faces?id={assetId}`, `GET /people`) — see below;
   another ML-derived output we consume, no local model needed.
 
-**Consequence:** the [`quality`](/stages/quality.md) stage must compute the
-[`clip_embedding`](/reference/data-model.md) itself via `open_clip` (ViT-L/14, matching the
+**Consequence:** the [`quality`](../stages/quality.md) stage must compute the
+[`clip_embedding`](data-model.md) itself via `open_clip` (ViT-L/14, matching the
 768-dim column). Confirmed decision — this is no longer an open question.
 
 ## Endpoints the pipeline uses
@@ -54,11 +54,11 @@ Keys), base URL includes the `/api` prefix (e.g. `http://localhost:2283/api`).
 **OCR (`GET /assets/{id}/ocr`) is deliberately not consumed** — unlike
 `rating`/geocoded place (fields `sync` already fetches), it's a *separate per-asset
 endpoint* (a second N+1) for a "minor" signal whose contract isn't in this snapshot.
-Full tradeoff: [enrichment](/build/archive/enrichment.md) step 20.
+Full tradeoff: [enrichment](../build/archive/enrichment.md) step 20.
 
 ## Timezone (informs open question #3)
 
-Immich **does** surface per-photo zone info, so [`sync`](/stages/sync.md) needn't
+Immich **does** surface per-photo zone info, so [`sync`](../stages/sync.md) needn't
 blindly fall back to `Album.timezone`:
 
 - `exifInfo.dateTimeOriginal` — capture time; when it carries an offset it is an
@@ -75,7 +75,7 @@ NULL). Open question #3's remaining risk — an album that spans zones *mid-segm
 
 ## External libraries (scan-in-place ingest, build steps 36–38)
 
-Added while building [external-library ingestion](/build/archive/external-library-ingestion.md).
+Added while building [external-library ingestion](../build/archive/external-library-ingestion.md).
 An **External Library** points Immich at a directory that is bind-mounted into the
 server; Immich scans the files **in place** and creates assets that reference the
 on-disk originals — no copy into the upload store. The client surface (`client.py`):
@@ -108,6 +108,6 @@ These notes + the client's fixtures (`tests/fixtures/immich/`) derive from the O
 **contract**, not a live capture (deferred when steps 4–5 were built without a reachable
 stack). **Partly closed by step 24's offline ML stack:** the faces path and CLIP smart
 search are now exercised against a real, pre-baked Immich instance
-([testcontainers.md](/build/archive/testcontainers.md) step 24 / `poe test-immich-ml`). Still
+([testcontainers.md](../build/archive/testcontainers.md) step 24 / `poe test-immich-ml`). Still
 contract-only, re-verify on first live `sync`: album pagination, EXIF/`rating`/place on
 real photos, and duplicate detection.

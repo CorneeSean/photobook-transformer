@@ -8,8 +8,8 @@ timestamp: 2026-07-14
 
 # Immich enrichment — build order (steps 17+)
 
-Follow-on to the [build order](/build/build-order.md) (which ended at step 16). The
-Immich REST API has grown since the [client](/stages/sync.md) was pinned at steps
+Follow-on to the [build order](../build-order.md) (which ended at step 16). The
+Immich REST API has grown since the [client](../../stages/sync.md) was pinned at steps
 4–5 (OpenAPI **v3.0.2**; Immich is now ~v1.126+), exposing signals the pipeline can
 now consume **without any local ML dependency**.
 
@@ -26,13 +26,13 @@ now consume **without any local ML dependency**.
 **Still NOT exposed** (unchanged): CLIP embeddings and any asset-to-asset similarity
 endpoint — smart search takes only *text* and returns *assets*, the vector never
 crosses the wire. So `quality`'s `open_clip` and the `pgvector` behind
-`select`/`cluster` stay necessary ([Immich API notes](/reference/immich-api.md) Q1).
+`select`/`cluster` stay necessary ([Immich API notes](../../reference/immich-api.md) Q1).
 This effort adds signals; it removes no existing code.
 
 ## Design notes
 
 - **Faces at the boundary.** `get_faces` is one Pydantic model + one method on the
-  [client](/reference/immich-api.md), mirroring `get_duplicates`. The real
+  [client](../../reference/immich-api.md), mirroring `get_duplicates`. The real
   `AssetFaceResponseDto` carries bounding boxes + a nested `person`; flatten to just
   `person.id`/`person.name` + `sourceType`. `person: null` = a detected-but-unassigned
   face (counts toward `face_count`, no `person_id`).
@@ -49,7 +49,7 @@ This effort adds signals; it removes no existing code.
 The user supplies a **reference picture of the key people** (the couple, the baby);
 `select` recognizes them across the album and prioritizes their photos.
 
-- **Constraint:** Immich exposes no face-embedding vectors (like CLIP — [Q1](/reference/immich-api.md)),
+- **Constraint:** Immich exposes no face-embedding vectors (like CLIP — [Q1](../../reference/immich-api.md)),
   so matching a reference *ourselves* would mean adding a face-recognition model —
   exactly the reimplementation this project delegates to Immich. **Don't.**
 - **Instead, let Immich's recognition match.** Immich already clusters library faces
@@ -60,7 +60,7 @@ The user supplies a **reference picture of the key people** (the couple, the bab
   poll until Immich's async face-detection job runs, then read + union faces),
   `reference_asset_ids` (assets already in Immich, no upload), or `person_ids`
   (name the people directly). The repeatable `--lead-face IMAGE` CLI flag writes the
-  `reference_images` block (see [album definition](/reference/album-definition.md)).
+  `reference_images` block (see [album definition](../../reference/album-definition.md)).
   Uploads are re-run every time and idempotent via Immich's content-dedup (identical
   bytes → the existing asset id; a *changed* reference → a new one, so swapping a lead
   takes effect) — no DB cache; the resolver tolerates the async detection gap and
@@ -74,15 +74,15 @@ The user supplies a **reference picture of the key people** (the couple, the bab
 
 ## Schema
 
-Structured, reason-about-able columns (per the [data model](/reference/data-model.md)
+Structured, reason-about-able columns (per the [data model](../../reference/data-model.md)
 philosophy, not an opaque dict): two `Photo` columns (`face_count`, `person_ids`) plus
 an album-scoped `Person` cache (id→name for `caption`; `is_lead` marks priority
 subjects). All nullable for resumability. **Canonical schema:
-[data model](/reference/data-model.md).**
+[data model](../../reference/data-model.md).**
 
 ## The steps (all done)
 
-Each followed the [implementation workflow](/process/implementation-workflow.md).
+Each followed the [implementation workflow](../../process/implementation-workflow.md).
 
 - **17. Faces in client + `sync` (+ schema).** `ImmichFace` + `get_faces` (`?id=`
   contract); migration for `Photo.face_count`/`person_ids` + `people` table; `sync`

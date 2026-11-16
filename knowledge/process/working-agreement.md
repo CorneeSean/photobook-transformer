@@ -44,7 +44,7 @@ body. Don't fake a test just to have one; don't skip the verification either.
 The table above governs *what layer* each stage is tested at. How tests are
 *organized* — class-based groups, parametrization within them, and factory
 fixtures scoped to the tests that need them — is standardized in
-[quality practices](/process/quality-practices.md), alongside how the production code
+[quality practices](quality-practices.md), alongside how the production code
 those tests exercise is shaped (stage classes with constructor-injected
 dependencies).
 
@@ -72,14 +72,14 @@ gate, not an afterthought.
 ## Git workflow
 
 The *delivery* loop (branch per step, sub-agent then user review, squash, merge, push)
-is the [implementation workflow](/process/implementation-workflow.md). **Never commit to
+is the [implementation workflow](implementation-workflow.md). **Never commit to
 or work on `main`.** This section defines the *quality bar* a step clears before it's
 finalized — bundled into `uv run poe check`, the one command that gates a commit:
 
 - `ruff check .` + `ruff format --check .` (ruff includes mccabe `C90`, ceiling 5)
 - `basedpyright` — no errors
 - `xenon` — the complexity gate, **A across the board** (see
-  [quality practices](/process/quality-practices.md) §2.7)
+  [quality practices](quality-practices.md) §2.7)
 - `pytest` — *all* tests, no regressions
 - If the step has no automated test: the manual verification is performed + recorded.
 
@@ -103,12 +103,12 @@ Two records, deliberately kept separate; neither restates the other.
 | Record | Owns | Granularity |
 |---|---|---|
 | **Commit body** | The *mechanical* per-diff record — what changed and why in **that** commit, plus the verification (test count / manual check). | Exactly one per commit. |
-| [**`log.md`**](/log.md) | The *narrative/decision* layer git can't hold: records that span **several** commits or **none at all** — proposals, decisions, open-question resolutions, review outcomes, and the deferral list. Cross-links into the [`knowledge/`](/index.md) bundle. | One entry per meaningful *change of state*, not per commit. |
+| [**`log.md`**](../log.md) | The *narrative/decision* layer git can't hold: records that span **several** commits or **none at all** — proposals, decisions, open-question resolutions, review outcomes, and the deferral list. Cross-links into the [`knowledge/`](../index.md) bundle. | One entry per meaningful *change of state*, not per commit. |
 
 Consequences that keep the two from drifting into copies of each other:
 
 - **`log.md` points *into* git; it does not duplicate it.** Reference a commit by
-  its SHA (`commit ba6c1bf`) rather than re-listing file moves or exact test
+  its SHA (`commit 92b020e`) rather than re-listing file moves or exact test
   counts — those live in the commit and the diff. This also means the log survives
   a change of granularity: an entry may cite several SHAs, or none.
 - **Rationale that outlives one diff goes in the log**; rationale scoped to a
@@ -124,7 +124,7 @@ Consequences that keep the two from drifting into copies of each other:
 
 ### Pre-commit hooks (local enforcement)
 
-A `.pre-commit-config.yaml` (installed at [scaffold](/build/build-order.md) via
+A `.pre-commit-config.yaml` (installed at [scaffold](../build/build-order.md) via
 `uv run pre-commit install`) enforces the basics automatically on every commit —
 including subcommits on a step branch — so nothing slips through:
 
@@ -156,7 +156,7 @@ runs in `uv run poe check` before a step is finalized, and in CI.
 > **Landmine — ruff formatter under `py314`.** `ruff` 0.15.21's formatter with
 > `target-version = "py314"` rewrites a valid `except (A, B):` into the invalid
 > paren-less form. Use separate `except` clauses, or `# fmt: skip` on that line.
-> (Discovered 2026-07-13 — see [log.md](/log.md).)
+> (Discovered 2026-07-13 — see [log.md](../log.md).)
 
 ## Local workflow commands
 

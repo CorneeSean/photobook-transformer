@@ -5,9 +5,9 @@ captioned, print-ready photo book — with minimal manual work. It's
 **event-type agnostic**: a trip, a wedding, a baby's first year, a festival are
 all just *albums* (an `Album` with optional, named `Segment`s).
 
-The [`knowledge/`](./knowledge/index.md) bundle is this project's source of
+The [`knowledge/`](../knowledge/index.md) bundle is this project's source of
 truth — domain model, architecture, data model, and the step-by-step build
-order. [`AGENTS.md`](./AGENTS.md) orients coding agents working in this repo.
+order. [`AGENTS.md`](../AGENTS.md) orients coding agents working in this repo.
 
 ## Quick start path
 
@@ -44,7 +44,7 @@ claude` upgrade); the default run is fully offline. `build` also takes
 To hand-author `segments`/`lead_faces` instead, write `data/albums/<slug>/album.yml`
 yourself and run `uv run photobook-generator build --no-ingest --album <slug>`
 (skips the ingest phase and just runs the pipeline) — see
-[Album definition](./knowledge/reference/album-definition.md) and
+[Album definition](../knowledge/reference/album-definition.md) and
 [Single-command ingestion](./knowledge/build/single-command-ingestion.md).
 
 ### Multiple albums from one folder tree
@@ -194,7 +194,7 @@ uv run photobook-generator build --no-ingest --album honeymoon-2026
 ## Run in Docker
 
 The `app` image bundles the native tools the pipeline shells out to — notably
-`darktable-cli` for [`render`](./knowledge/stages/render.md) — so running inside
+`darktable-cli` for [`render`](../knowledge/stages/render.md) — so running inside
 it needs nothing installed on your host. This is the intended way to run the full
 pipeline, and the only option if your OS can't install darktable. Bring the stack
 up first:
@@ -243,41 +243,41 @@ bind-mounted into the container).
 Batch pipeline over Immich + Postgres, orchestrated by Prefect, PydanticAI for
 the (optional) LLM call — fully offline by default.
 
-→ [`knowledge/foundations/architecture.md`](./knowledge/foundations/architecture.md)
-→ [`knowledge/foundations/domain-model.md`](./knowledge/foundations/domain-model.md)
-→ [`knowledge/foundations/pipeline-execution.md`](./knowledge/foundations/pipeline-execution.md)
+→ [`knowledge/foundations/architecture.md`](../knowledge/foundations/architecture.md)
+→ [`knowledge/foundations/domain-model.md`](../knowledge/foundations/domain-model.md)
+→ [`knowledge/foundations/pipeline-execution.md`](../knowledge/foundations/pipeline-execution.md)
 (companion diagram: `pipeline-execution.html`)
 
 ## Pipeline stages
 
 Ten stages, `sync` → `fulfill`, one concept per stage.
 
-→ [`knowledge/stages/index.md`](./knowledge/stages/index.md)
+→ [`knowledge/stages/index.md`](../knowledge/stages/index.md)
 
 ## Reference
 
 Album definition, data model, tech stack, folder structure.
 
-→ [`knowledge/reference/album-definition.md`](./knowledge/reference/album-definition.md)
-→ [`knowledge/reference/data-model.md`](./knowledge/reference/data-model.md)
-→ [`knowledge/reference/tech-stack.md`](./knowledge/reference/tech-stack.md)
-→ [`knowledge/reference/folder-structure.md`](./knowledge/reference/folder-structure.md)
+→ [`knowledge/reference/album-definition.md`](../knowledge/reference/album-definition.md)
+→ [`knowledge/reference/data-model.md`](../knowledge/reference/data-model.md)
+→ [`knowledge/reference/tech-stack.md`](../knowledge/reference/tech-stack.md)
+→ [`knowledge/reference/folder-structure.md`](../knowledge/reference/folder-structure.md)
 
 ## Process & workflow commands
 
 TDD, typing, the git commit gate, the per-step implementation loop, and the
 full `poe` task table.
 
-→ [`knowledge/process/working-agreement.md`](./knowledge/process/working-agreement.md)
-→ [`knowledge/process/implementation-workflow.md`](./knowledge/process/implementation-workflow.md)
-→ [`knowledge/process/quality-practices.md`](./knowledge/process/quality-practices.md)
+→ [`knowledge/process/working-agreement.md`](../knowledge/process/working-agreement.md)
+→ [`knowledge/process/implementation-workflow.md`](../knowledge/process/implementation-workflow.md)
+→ [`knowledge/process/quality-practices.md`](../knowledge/process/quality-practices.md)
 
 ## Build status
 
 What's done, what's deferred, and why.
 
-→ [`knowledge/build/progress.md`](./knowledge/build/progress.md)
-→ [`knowledge/build/build-order.md`](./knowledge/build/build-order.md)
+→ [`knowledge/build/progress.md`](../knowledge/build/progress.md)
+→ [`knowledge/build/build-order.md`](../knowledge/build/build-order.md)
 
 ## Ordering a physical copy
 
@@ -286,12 +286,12 @@ To order a physical copy via [Lulu](https://api.lulu.com)'s Print API instead,
 inject `LuluPrinter` and set the `LULU__*` keys in
 [`.env.example`](./.env.example).
 
-→ [`knowledge/stages/fulfill.md`](./knowledge/stages/fulfill.md)
+→ [`knowledge/stages/fulfill.md`](../knowledge/stages/fulfill.md)
 
 ## Contributing
 
 `main` is protected by a `no-commit-to-branch` hook — work always happens on a
 `step-NN-<slug>` branch, TDD, reviewed, squashed, and merged.
 
-→ [`AGENTS.md`](./AGENTS.md)
-→ [`knowledge/process/implementation-workflow.md`](./knowledge/process/implementation-workflow.md)
+→ [`AGENTS.md`](../AGENTS.md)
+→ [`knowledge/process/implementation-workflow.md`](../knowledge/process/implementation-workflow.md)

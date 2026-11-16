@@ -16,7 +16,7 @@ server, and ML container — see [`docker-compose.immich.yml`](../../docker-comp
 Can we drop it and reimplement what we actually use with our own code + open-source
 models, without losing pipeline capability?
 
-This is the *inverse* of [open question #6](/build/open-questions.md), which asked whether we
+This is the *inverse* of [open question #6](open-questions.md), which asked whether we
 could offload *our* local ML **to** Immich and was resolved "no, keep local ML."
 That answer stands and is a load-bearing input here: because we already run
 `open_clip` + the LAION aesthetic head ourselves, Immich is **not** carrying the
@@ -27,7 +27,7 @@ pipeline's hard ML. This record asks the opposite — whether Immich is carrying
 
 Everything Immich-related is behind a deliberately narrow boundary: the only
 module that talks HTTP to Immich is [`client.py`](../../src/album/immich/client.py), and the only
-stage that reads from it is [`sync`](/stages/sync.md) — *"the boundary."* Everything
+stage that reads from it is [`sync`](../stages/sync.md) — *"the boundary."* Everything
 downstream reads our Postgres DB, never Immich. Immich fills **two roles** across
 **seven capabilities**:
 
@@ -36,13 +36,13 @@ downstream reads our Postgres DB, never Immich. Immich fills **two roles** acros
 | 1 | Photo **library / storage** — albums as the unit of work (`immich_album_id`) | `POST /search/metadata` (paginated) | Storage |
 | 2 | **EXIF** — capture time, IANA timezone, GPS, camera make/model | `exifInfo` on assets | Storage |
 | 3 | **Thumbnail** serving — downscaled JPEGs for AI analysis | `GET /assets/{id}/thumbnail` | Storage |
-| 4 | **Original** serving — full-res pixels for [`render`](/stages/render.md) (darktable) | `GET /assets/{id}/original` | Storage |
+| 4 | **Original** serving — full-res pixels for [`render`](../stages/render.md) (darktable) | `GET /assets/{id}/original` | Storage |
 | 5 | **Upload + content-dedup** — for `lead_faces.reference_images` | `POST /assets` | Storage |
 | 6 | **Duplicate detection** — ML-derived perceptual dup groups | `GET /duplicates`, `duplicateId` | **ML** |
 | 7 | **Faces + people/recognition** — clusters library faces into named `Person`s | `GET /faces?id=`, `GET /people` | **ML** |
 
 The pipeline **already computes the ML Immich does *not* expose** ([Immich API
-notes](/reference/immich-api.md)): CLIP embeddings ([`quality`](/stages/quality.md) → `open_clip`
+notes](../reference/immich-api.md)): CLIP embeddings ([`quality`](../stages/quality.md) → `open_clip`
 ViT-L/14), the LAION aesthetic score, and OpenCV blur. So the *only* ML we rent
 from Immich is **duplicate detection (6)** and **face recognition (7)**. Roles 1–5
 are plumbing.
@@ -56,7 +56,7 @@ already run OpenCLIP and pgvector ourselves.
 | Immich capability | Custom replacement | Difficulty |
 |---|---|---|
 | Library / assets (1) | Filesystem scan of a `photos/` dir → our existing `Photo` rows; `immich_album_id` becomes a directory path | Trivial |
-| EXIF (2) | `exiftool` / `Pillow` / `exifread` (Immich itself just shells to exiftool); the UTC/timezone logic in [`sync`](/stages/sync.md) is already ours | Trivial |
+| EXIF (2) | `exiftool` / `Pillow` / `exifread` (Immich itself just shells to exiftool); the UTC/timezone logic in [`sync`](../stages/sync.md) is already ours | Trivial |
 | Thumbnails (3) | `pyvips` / `Pillow`, cached to disk | Trivial |
 | Originals (4) | Read the file | Trivial |
 | Upload/dedup-on-import (5) | sha1 the file (only used for lead-face reference images) | Trivial |
@@ -80,19 +80,19 @@ conscious call. Cleaner-licensed but weaker alternatives: `face_recognition`/dli
 ## Assessment
 
 1. **The boundary is already built for this.** Replacing Immich touches *one class
-   and one stage* ([`client.py`](../../src/album/immich/client.py) + [`sync`](/stages/sync.md)). Nothing
+   and one stage* ([`client.py`](../../src/album/immich/client.py) + [`sync`](../stages/sync.md)). Nothing
    downstream changes — `select`, `cluster`, `caption`, `render` all read the DB.
-   This is the payoff of the [architecture](/foundations/architecture.md) firewall.
+   This is the payoff of the [architecture](../foundations/architecture.md) firewall.
 
 2. **We already pay for Immich but use little of it.** We run the full Immich stack
    yet consume only dup-detection + faces from its ML — both reproducible in a few
    hundred lines of InsightFace + our existing pgvector. The hard ML (CLIP,
-   aesthetics) is already ours per [open question #6](/build/open-questions.md).
+   aesthetics) is already ours per [open question #6](open-questions.md).
 
 3. **What Immich actually earns is the *library*, not the ML.** Immich is a managed
    library: import pipelines, and a **web UI for the human-in-the-loop** steps the
    design leans on — confirming a `Person` in the UI so cross-album matching works
-   ([enrichment](/build/archive/enrichment.md) step 17b), and picking `immich_album_id` from the UI.
+   ([enrichment](archive/enrichment.md) step 17b), and picking `immich_album_id` from the UI.
    If a human curating in a real app is part of the product, Immich earns its keep.
    If this stays a headless batch job over a folder, Immich is heavy for what it does.
 
@@ -103,8 +103,8 @@ conscious call. Cleaner-licensed but weaker alternatives: `face_recognition`/dli
 The switch is not worth making blind, but the pipeline should never *harden* around
 Immich. Concretely:
 
-- Keep the `AssetSource` / `ThumbnailSource` protocols ([`sync`](/stages/sync.md),
-  [`quality`](/stages/quality.md)) as the contract. They are what makes a local backend a
+- Keep the `AssetSource` / `ThumbnailSource` protocols ([`sync`](../stages/sync.md),
+  [`quality`](../stages/quality.md)) as the contract. They are what makes a local backend a
   drop-in.
 - When the cost of the second stack (or the loss of a UI-less deployment) actually
   bites, build a **`LocalPhotoSource`** satisfying those same protocols —
@@ -119,12 +119,12 @@ isolates.
 
 ## Build steps — `LocalPhotoSource` (gated on this decision flipping to "replace")
 
-**Not scheduled** — recorded so the path is concrete and the [boundary](/stages/sync.md) stays
-honest. Only enter the mainline [build order](/build/build-order.md) *if* the decision flips
+**Not scheduled** — recorded so the path is concrete and the [boundary](../stages/sync.md) stays
+honest. Only enter the mainline [build order](build-order.md) *if* the decision flips
 (see [Revisit when](#revisit-when)). North star: **the switch is a config choice; no
 downstream stage changes** (everything reads the DB behind the `AssetSource` /
 `ThumbnailSource` protocols). Each follows the usual
-[implementation workflow](/process/implementation-workflow.md).
+[implementation workflow](../process/implementation-workflow.md).
 
 - **L1. Filesystem library behind the existing protocols.** `LocalPhotoSource` satisfies
   `AssetSource` + `ThumbnailSource` (+ `get_original`) reading a `photos/<album>/` dir:
@@ -150,5 +150,5 @@ downstream stage changes** (everything reads the DB behind the `AssetSource` /
   real cost, **or**
 - We need a headless / no-UI deployment, **or**
 - Immich's face-recognition quality or API stability disappoints on a live run
-  (the [Immich API notes](/reference/immich-api.md) are still contract-derived, not yet
+  (the [Immich API notes](../reference/immich-api.md) are still contract-derived, not yet
   verified against a running instance).

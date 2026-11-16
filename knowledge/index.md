@@ -10,47 +10,47 @@ manual work. This bundle is the project's source of truth.
 
 ## Foundations
 
-* [Overview](/foundations/overview.md) - What the pipeline does and the ground rules for building it.
-* [Domain model](/foundations/domain-model.md) - The `Album` + `Segment` abstraction that keeps the pipeline generic.
-* [Architecture](/foundations/architecture.md) - Batch pipeline over Immich + Postgres, Prefect orchestration, PydanticAI, with rationale.
-* [Pipeline execution shape](/foundations/pipeline-execution.md) - The stage DAG: linear as run today, two parallelisable fan-out groups, and the Prefect change to unlock them (`.html` companion diagram alongside).
-* [Working agreement](/process/working-agreement.md) - TDD, static typing, the git commit gate, and local workflow commands.
-* [Quality practices](/process/quality-practices.md) - How code is shaped: classes with injected dependencies, encapsulation, and class-based tests with scoped fixtures.
+* [Overview](foundations/overview.md) - What the pipeline does and the ground rules for building it.
+* [Domain model](foundations/domain-model.md) - The `Album` + `Segment` abstraction that keeps the pipeline generic.
+* [Architecture](foundations/architecture.md) - Batch pipeline over Immich + Postgres, Prefect orchestration, PydanticAI, with rationale.
+* [Pipeline execution shape](foundations/pipeline-execution.md) - The stage DAG: linear as run today, two parallelisable fan-out groups, and the Prefect change to unlock them (`.html` companion diagram alongside).
+* [Working agreement](process/working-agreement.md) - TDD, static typing, the git commit gate, and local workflow commands.
+* [Quality practices](process/quality-practices.md) - How code is shaped: classes with injected dependencies, encapsulation, and class-based tests with scoped fixtures.
 
 ## Reference
 
-* [Data model](/reference/data-model.md) - The Album, Segment, and Photo SQLAlchemy ORM models and their invariants.
-* [Album definition](/reference/album-definition.md) - The single `album.yml` file that defines an album.
-* [Tech stack](/reference/tech-stack.md) - The chosen tool for each concern.
-* [Folder structure](/reference/folder-structure.md) - Target repository layout and structural rules.
+* [Data model](reference/data-model.md) - The Album, Segment, and Photo SQLAlchemy ORM models and their invariants.
+* [Album definition](reference/album-definition.md) - The single `album.yml` file that defines an album.
+* [Tech stack](reference/tech-stack.md) - The chosen tool for each concern.
+* [Folder structure](reference/folder-structure.md) - Target repository layout and structural rules.
 
 ## Execution
 
-* [Implementation workflow](/process/implementation-workflow.md) - The per-step handoff loop: branch, TDD, sub-agent review, user review, squash, merge.
-* [Build order](/build/build-order.md) - The ordered, one-step-at-a-time plan.
-* [Immich dependency decision](/build/immich-dependency-decision.md) - Keep-or-replace analysis for the Immich stack: what we actually consume, the open-source substitutes (InsightFace, pgvector dedup), and why replaceability is preserved rather than acted on.
-* [User-directed curation](/build/user-directed-curation.md) - Forward-looking, not-yet-planned feature brief: put the user in the loop over curation via an editable album document + `regenerate`.
-* [Progress tracker](/build/progress.md) - Living per-step status.
-* [Open questions](/build/open-questions.md) - Unresolved questions to settle early.
-* [Pipeline stages](/stages/) - One concept per stage, from `ingest` to `fulfill`.
+* [Implementation workflow](process/implementation-workflow.md) - The per-step handoff loop: branch, TDD, sub-agent review, user review, squash, merge.
+* [Build order](build/build-order.md) - The ordered, one-step-at-a-time plan.
+* [Immich dependency decision](build/immich-dependency-decision.md) - Keep-or-replace analysis for the Immich stack: what we actually consume, the open-source substitutes (InsightFace, pgvector dedup), and why replaceability is preserved rather than acted on.
+* [User-directed curation](build/user-directed-curation.md) - Forward-looking, not-yet-planned feature brief: put the user in the loop over curation via an editable album document + `regenerate`.
+* [Progress tracker](build/progress.md) - Living per-step status.
+* [Open questions](build/open-questions.md) - Unresolved questions to settle early.
+* [Pipeline stages](stages/) - One concept per stage, from `ingest` to `fulfill`.
 
 ## Archive
 
 Completed playbooks and step notes, kept for the rationale of record. All steps
-below are done and merged — see the [progress tracker](/build/progress.md) and
-[change log](/log.md).
+below are done and merged — see the [progress tracker](build/progress.md) and
+[change log](log.md).
 
-* [Immich enrichment](/build/archive/enrichment.md) - Steps 17–20: faces/people, rating, geocoding API surface (OCR deferred).
-* [Single-command ingestion](/build/archive/single-command-ingestion.md) - Steps 26–28: `photobook-generator generate <dir>` one-shot + `--source-document` segment extraction.
-* [Folder-structure ingestion](/build/archive/folder-structure-ingestion.md) - Steps 32–35: a root manifest fans one directory tree into N albums.
-* [Offline analysis](/build/archive/local-analysis.md) - Step 29: replaced the Claude vision call with a classical, ML-free approach.
-* [AI-pass cost estimate](/build/archive/ai-cost-estimate.md) - What the full Claude vision pass costs per album (answer to open question 5).
-* [CLI lead-face flag](/build/archive/step-30-cli-lead-faces.md) - Step 30: repeatable `--lead-face` flag on `generate`/`run`.
-* [LAION aesthetic scorer](/build/archive/step-31-laion-aesthetic-scorer.md) - Step 31: wired the real ViT-L/14 CLIP + LAION aesthetic head.
-* [TestContainers integration](/build/archive/testcontainers.md) - Steps 21–25: promoted the highest-value boundaries (pgvector, darktable-cli, Immich ML) to real containerized integration tests; step 23 closed as subsumed.
-* [External-library ingestion](/build/archive/external-library-ingestion.md) - Steps 36–38: opt-in scan-in-place ingest (plumbing + `AssetRegistrar` seam + `--ingest-mode` flag); upload stays the default.
-* [CLI package split](/build/archive/step-39-cli-package-split.md) - Step 39 follow-up: split `cli.py` into an `album/cli/` package (pure structural refactor).
+* [Immich enrichment](build/archive/enrichment.md) - Steps 17–20: faces/people, rating, geocoding API surface (OCR deferred).
+* [Single-command ingestion](build/archive/single-command-ingestion.md) - Steps 26–28: `photobook-generator generate <dir>` one-shot + `--source-document` segment extraction.
+* [Folder-structure ingestion](build/archive/folder-structure-ingestion.md) - Steps 32–35: a root manifest fans one directory tree into N albums.
+* [Offline analysis](build/archive/local-analysis.md) - Step 29: replaced the Claude vision call with a classical, ML-free approach.
+* [AI-pass cost estimate](build/archive/ai-cost-estimate.md) - What the full Claude vision pass costs per album (answer to open question 5).
+* [CLI lead-face flag](build/archive/step-30-cli-lead-faces.md) - Step 30: repeatable `--lead-face` flag on `generate`/`run`.
+* [LAION aesthetic scorer](build/archive/step-31-laion-aesthetic-scorer.md) - Step 31: wired the real ViT-L/14 CLIP + LAION aesthetic head.
+* [TestContainers integration](build/archive/testcontainers.md) - Steps 21–25: promoted the highest-value boundaries (pgvector, darktable-cli, Immich ML) to real containerized integration tests; step 23 closed as subsumed.
+* [External-library ingestion](build/archive/external-library-ingestion.md) - Steps 36–38: opt-in scan-in-place ingest (plumbing + `AssetRegistrar` seam + `--ingest-mode` flag); upload stays the default.
+* [CLI package split](build/archive/step-39-cli-package-split.md) - Step 39 follow-up: split `cli.py` into an `album/cli/` package (pure structural refactor).
 
 ## Log
 
-* [Change log](/log.md) - Chronological history of this bundle.
+* [Change log](log.md) - Chronological history of this bundle.

@@ -20,7 +20,7 @@ failure isolation, staged-original lifecycle) is unit-tested with an injected
 the real renderer **inside the shipped app Docker image** over a real source
 JPEG + a real [`write_xmp_sidecar`](./enhance.md) sidecar and asserts the output
 JPEG exists, decodes, and is **visibly brighter** than the source. This is the
-automated form of [build step 11](/build/build-order.md)'s deferred *"a rendered file
+automated form of [build step 11](../build/build-order.md)'s deferred *"a rendered file
 exists, opens, and is visibly corrected versus its original"* manual check.
 
 > **Sidecar-format landmine (found by step 22):** the darktable XMP history-stack format was tricky to get right — see [enhance.md](./enhance.md).

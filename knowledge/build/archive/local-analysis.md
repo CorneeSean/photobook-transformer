@@ -8,7 +8,7 @@ timestamp: 2026-07-17
 
 # Offline analysis — replace the Claude vision call with a classical approach
 
-**Status: implemented — build step 29 (see [progress.md](/build/progress.md)).** Delivered
+**Status: implemented — build step 29 (see [progress.md](../progress.md)).** Delivered
 as designed below: a `ClassicalToneEstimator` (CV tone) + a `Captioner` seam
 (`TemplateCaptioner` offline default, `ClaudeCaptioner` opt-in, selectable per run via
 `CAPTIONER`/`--captioner`), composed by `PhotoAnalyzer`; tone is now always classical.
@@ -27,7 +27,7 @@ possible with **zero external API and zero API key**, fully deterministic and
 offline.
 
 Cost is **not** the driver — the full pass is ~$1–$4/album
-([AI-pass cost estimate](/build/archive/ai-cost-estimate.md), open Q5). Offline operation,
+([AI-pass cost estimate](ai-cost-estimate.md), open Q5). Offline operation,
 no key, privacy, and determinism are.
 
 ## The idea: split one call into two classical jobs
@@ -79,6 +79,6 @@ injection seam, not the baseline.
 ## Scope note
 
 This is the per-photo vision call. The `--source-document` **segment-extraction**
-agent ([single-command-ingestion.md](/build/archive/single-command-ingestion.md) step 3 /
+agent ([single-command-ingestion.md](single-command-ingestion.md) step 3 /
 build step 28) is a separate Claude text/PDF call — one per *album*, also
 localizable but lower priority; out of scope for this proposal.

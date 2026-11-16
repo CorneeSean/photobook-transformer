@@ -10,7 +10,7 @@ timestamp: 2026-07-24
 
 > **Status: draft.** A design brief for a research spike + the repo restructure it
 > needs, not scheduled build work. Extends
-> [ML boundary & quality-signal exploration](/build/drafts/ml-and-quality-exploration.md).
+> [ML boundary & quality-signal exploration](ml-and-quality-exploration.md).
 > Promote items into `progress.md`'s Outstanding table if/when we pursue this for real.
 
 ## Context
