@@ -294,11 +294,3 @@ bundle (Open Knowledge Format) is the detail and the single source of truth: dom
 stages, data model, build order and process. Design brief for the spike:
 [`knowledge/build/drafts/rust-client.md`](./knowledge/build/drafts/rust-client.md).
 
-## Built with
-
-<!-- TODO(owner): state how this project was built (manual vs AI-assisted) and in what proportion.
-     Facts visible in the repo, for reference only: AGENTS.md and knowledge/process/ describe an
-     agent-driven per-step workflow (sub-agent review, test-first, squash merge), and some commits carry
-     Co-Authored-By trailers. This README does not claim a split. -->
-
-**TODO(owner):** manual-vs-AI attribution for this project goes here.
