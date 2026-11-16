@@ -1,0 +1,16 @@
+Copyright (c) 2026 CorneeSean. All rights reserved.
+
+This repository is published so that people can read and evaluate the code,
+for example as part of a hiring process. No other rights are granted.
+
+Without prior written permission from the copyright holder, you may not copy,
+modify, merge, publish, distribute, sublicense, sell, or use this software or
+any part of it, in source or compiled form, except for viewing it on GitHub.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE.
+
+The sample photos in pipeline/tests/data/cat-album/photos/ come from The Cat API
+(https://thecatapi.com) and stay the property of their owners. See that folder's
+README.

@@ -36,12 +36,13 @@ anything that reasons about structure.
 
 ## Current state
 
-The build order and every follow-on playbook through step 35 are done and merged to
-`main`: build order (0–16), Immich enrichment (17–20), TestContainers integration
-(21–25), single-command ingestion (26–28), offline analysis (29), and
-folder-structure ingestion (32–35). Outstanding work — the optional step 23 and the
-queued external-library ingestion (36–38) — lives in `progress.md`'s Outstanding
-table (see below), not here. The pipeline is **fully offline by default** (classical
+Every step through 43 is done and merged to `main`: build order (0–16), Immich
+enrichment (17–20), TestContainers integration (21–25; optional step 23 closed as
+subsumed), single-command ingestion (26–28), offline analysis (29), lead-face CLI
+(30), LAION scorer (31), folder-structure ingestion (32–35), external-library
+ingestion (36–38), CLI unification (39), curation tuning (40), failure escalation
+(41), caption summary + output language (42), and the on-demand print PDF (43).
+Nothing is queued; `progress.md`'s Outstanding table is the place for new work. The pipeline is **fully offline by default** (classical
 tone + template caption, no API key); Claude is an opt-in caption upgrade
 (`--captioner claude`). See
 [`progress.md`](./knowledge/build/progress.md) — its **Notes / blockers** section
@@ -122,7 +123,8 @@ Detail and rationale live in
    `flow/_flow.py` — never in `db/`, `immich/`, `lulu/`, `printers/`, `analysis/`,
    `agents/`, `config.py`, `definition.py`.
 5. **Enhancement estimates bounded numeric deltas, never generates pixels.** Tone
-   deltas are Pydantic `Field(ge=, le=)`; classical code applies them via XMP. Tone
+   deltas are clamped to the fixed bounds in `analysis/tone.py`; classical code
+   applies them via XMP. Tone
    is **classical/offline by default** (`ClassicalToneEstimator`); no invented
    detail.
 6. **`config.py` is the only place that reads env vars.**

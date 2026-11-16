@@ -4,6 +4,10 @@ A ready-made sample album: **30 cat photos** (from [The Cat API](https://thecata
 downscaled) organized into **5 time/place categories** — used to render a real
 book through the pipeline's back half, offline, with no Immich/Claude/darktable/Lulu.
 
+**Attribution:** the photos come from [The Cat API](https://thecatapi.com). They are
+included only as downscaled test fixtures, stay the property of their owners, and are
+not covered by the repository's licence notice.
+
 - `photos/NN.jpg` — the 30 images (stand in for `render`'s output).
 - `manifest.json` — the album title, the 5 `Segment`s (label + place + UTC
   time window), and per-photo `timestamp` / `caption` / `lat` / `lon`. Each

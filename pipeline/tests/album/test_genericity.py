@@ -8,7 +8,7 @@ knowledge/foundations/domain-model.md and knowledge/build/build-order.md step 16
 require *only* this YAML file — no code change. This test loads the real
 shipped file (not a copy under tests/fixtures/) through the same
 ``get_or_create_album`` bootstrap ``flow.pipeline`` uses, so drift between the
-shipped file and the expected shape fails CI.
+shipped file and the expected shape fails the test gate (`poe check`).
 
 The full live run (real Immich sync, real Postgres+Prefect) is covered by
 manual verification in this step's commit body, mirroring step 14 — no

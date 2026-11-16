@@ -44,3 +44,8 @@ rust-client/dist/
 # Rust build output + wasm-pack output (any crate under the monorepo).
 target/
 pkg/
+
+# Local-only state: agent settings, analysis cache, Immich/Postgres data.
+/.claude/
+/.ua/
+/data/
